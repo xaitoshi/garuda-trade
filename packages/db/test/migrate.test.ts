@@ -6,7 +6,7 @@ afterAll(() => stopEmbeddedPostgres());
 describe("migrations", () => {
   it("loads numbered .sql files in order and flags pg-only ones", () => {
     const ms = loadMigrations();
-    expect(ms.map((m) => m.id)).toEqual(["001_ledger", "002_auth", "003_account_idempotency", "004_append_only"]);
+    expect(ms.map((m) => m.id)).toEqual(["001_ledger", "002_auth", "003_account_idempotency", "004_append_only", "005_payment_orders"]);
     expect(ms.find((m) => m.id === "004_append_only")!.pgOnly).toBe(true);
     expect(ms.find((m) => m.id === "001_ledger")!.pgOnly).toBe(false);
   });
@@ -20,7 +20,7 @@ describe("migrations", () => {
       }
       expect(await migrate(t.db)).toEqual([]);
       const ids = (await t.db.query<{ id: string }>("SELECT id FROM schema_migrations ORDER BY id")).rows.map((r) => r.id);
-      expect(ids.length).toBe(t.db.kind === "postgres" ? 4 : 3);
+      expect(ids.length).toBe(t.db.kind === "postgres" ? 5 : 4);
     } finally {
       await t.close();
     }

@@ -9,11 +9,12 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@garuda/chain": "workspace:*",
+    "@garuda/db": "workspace:*",
     "@garuda/market-data": "workspace:*",
     "@garuda/risk-engine": "workspace:*",
     "@garuda/sim-engine": "workspace:*",
     "fastify": "^5.0.0",
-    "zod": "^3.23.8",
-    "@garuda/db": "workspace:*"
+    "zod": "^3.23.8"
   }
 }

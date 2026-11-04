@@ -1,4 +1,13 @@
 import { randomUUID } from "node:crypto";
+import {
+  deriveKnightState,
+  isLive,
+  levelIndex,
+  type KnightHistoryRow,
+  type KnightInfo,
+  type KnightLevel,
+  type KnightNft,
+} from "@garuda/chain";
 import type { MarketDataProvider, MarketSnapshot } from "@garuda/market-data";
 import {
   CIRCUIT_BREAKER,
@@ -42,7 +51,7 @@ import {
   type RestingFillGate,
 } from "@garuda/sim-engine";
 import { StubPaymentProvider, type PaymentProvider } from "./payments.js";
-import { InMemoryChallengeStore, type Challenge, type ChallengeStore, type ChallengeSummary } from "./store.js";
+import { InMemoryChallengeStore, summarize, type Challenge, type ChallengeStore, type ChallengeSummary } from "./store.js";
 
 export type { Challenge, ChallengeStore } from "./store.js";
 export { InMemoryChallengeStore } from "./store.js";
@@ -70,6 +79,24 @@ export interface ServiceDeps {
   payments?: PaymentProvider;
   /** Refuse an anonymous Demo (no wallet). Default false for library use; the HTTP server turns it on. */
   requireWalletForDemo?: boolean;
+  /**
+   * Knight NFTs (Metaplex Core, M3). When set: a paid Squire/Knight challenge mints a knight, Paladin/Ascended need a
+   * knight the wallet OWNS onchain (`knightAsset`, `nftLevels` is ignored), the knight is transfer-locked while it has a
+   * live challenge, and level/status/wins/revives are written back onchain.
+   */
+  knights?: KnightNft;
+  /**
+   * Real money mode (M4): paid tiers and revives can only be opened with a verified USDC payment (the PurchaseService
+   * passes `paid`). Without it, `create` of a paid tier is refused with 402 `payment_required`.
+   */
+  requirePayment?: boolean;
+}
+
+export interface CreateOpts {
+  /** Deterministic challenge id (purchases derive it from the order, so a retry cannot open a second account). */
+  id?: string;
+  /** Set by the PurchaseService after a verified payment. */
+  paid?: { orderId: string; ref: string; amountUsd?: number };
 }
 
 export interface CreateChallengeInput {
@@ -77,8 +104,10 @@ export interface CreateChallengeInput {
   stage?: Stage;
   knight?: string;
   wallet?: string;
-  /** Knight NFT levels held by the wallet. TRUSTED INPUT until on-chain Metaplex verification exists. */
+  /** Knight NFT levels held by the wallet. TRUSTED INPUT, honoured ONLY when no `knights` chain is configured (dev and legacy tests). */
   nftLevels?: TierId[];
+  /** Paladin/Ascended (and funded) accounts: the knight's asset address. Its owner, level and status are read onchain. */
+  knightAsset?: string;
 }
 
 export interface PlaceOrderInput {
@@ -189,6 +218,9 @@ const depthWithin = (levels: readonly (readonly [number, number])[], mid: number
 
 const TERMINAL_LIFECYCLE: Lifecycle = "archived";
 
+/** Challenge ids opened by a paid revive derive from the order id, so a retry can never open a second account. */
+export const reviveChallengeId = (orderId: string) => `ch_${orderId.replace(/^ord_/, "")}`;
+
 export class ChallengeService {
   readonly market: MarketDataProvider;
   readonly store: ChallengeStore;
@@ -197,6 +229,12 @@ export class ChallengeService {
   private readonly now: () => number;
   private readonly enforceGating: boolean;
   private readonly requireWalletForDemo: boolean;
+  private readonly requirePayment: boolean;
+  /** Knight NFT chain (undefined = no NFTs: legacy trusted `nftLevels` mode). */
+  readonly knights?: KnightNft;
+  private knightChains = new Map<string, Promise<unknown>>();
+  /** Knights whose onchain state failed to sync (RPC down). `reconcileKnights` retries them. */
+  private dirtyKnights = new Set<string>();
   /** symbol -> ids of live challenges holding a position or resting order in it (the worker's routing table). */
   private bySymbol = new Map<string, Set<string>>();
   private symbolsOf = new Map<string, Set<string>>();
@@ -212,28 +250,215 @@ export class ChallengeService {
     this.now = deps.now ?? Date.now;
     this.enforceGating = deps.enforceGating ?? true;
     this.requireWalletForDemo = deps.requireWalletForDemo ?? false;
+    this.knights = deps.knights;
+    this.requirePayment = deps.requirePayment ?? false;
   }
 
   // ------------------------------------------------------------------ create
 
-  async create(input: CreateChallengeInput): Promise<ChallengeState> {
+  async create(input: CreateChallengeInput, opts: CreateOpts = {}): Promise<ChallengeState> {
     const spec = TIERS[input.tier];
     if (!spec) throw new ServiceError(400, "unknown_tier");
     const stage = input.stage ?? "evaluation";
     const isDemo = input.tier === "demo";
     if (isDemo && stage !== "evaluation") throw new ServiceError(400, "demo_evaluation_only", "Demo has no funded stage");
     if (isDemo && this.requireWalletForDemo && !input.wallet) throw new ServiceError(400, "wallet_required", "Demo needs a signed-in wallet");
-    // Demo carries no NFT, so it never has a gating credit and nftLevels are ignored for it.
-    if (!isDemo && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
+    // Real money mode: a paid evaluation only opens through a verified payment (PurchaseService passes `paid`).
+    if (!isDemo && stage === "evaluation" && this.requirePayment && !opts.paid) {
+      throw new ServiceError(402, "payment_required", "Paid tiers are bought with USDC: POST /purchases/challenge, pay, then confirm", { quote: "/purchases/challenge" });
+    }
+    // Legacy gating from trusted client input. With a knight chain configured the knight is verified onchain instead.
+    if (!isDemo && !this.knights && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
       throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight NFT`);
     }
     return this.withCreateLock(input.wallet, async () => {
+      if (opts.id) {
+        const existing = await this.store.get(opts.id);
+        if (existing) return this.view(existing); // an order retry: the account is already open
+      }
       await this.assertCanOpen({ tier: input.tier, stage, wallet: input.wallet });
-      const ch = this.build({ tier: input.tier, stage, knight: input.knight, wallet: input.wallet, knightId: isDemo ? undefined : `kn_${randomUUID().slice(0, 8)}` });
+      const ch = this.build({
+        tier: input.tier,
+        stage,
+        knight: input.knight,
+        wallet: input.wallet,
+        knightId: isDemo || this.knights ? undefined : `kn_${randomUUID().slice(0, 8)}`,
+        id: opts.id,
+      });
+      if (!isDemo && this.knights) await this.attachKnight(ch, input, stage, opts);
+      if (opts.paid) ch.paymentRef = opts.paid.ref;
       await this.store.save(ch);
       this.reindex(ch);
+      if (ch.knightId && this.knights) await this.syncKnightSafe(ch.knightId);
       return this.view(ch);
     });
+  }
+
+  /** Everything `create` checks that does not change anything (caps, tier gating, knight ownership): lets a checkout fail BEFORE the user pays. */
+  async assertCanCreate(input: CreateChallengeInput): Promise<void> {
+    const spec = TIERS[input.tier];
+    if (!spec || input.tier === "demo") throw new ServiceError(400, "unknown_tier");
+    const stage = input.stage ?? "evaluation";
+    if (!this.knights && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
+      throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight NFT`);
+    }
+    await this.assertCanOpen({ tier: input.tier, stage, wallet: input.wallet });
+    if (this.knights && input.wallet && (stage === "funded" || (spec.requires && this.enforceGating))) await this.verifyKnight(input, stage);
+  }
+
+  // ----------------------------------------------------------------- knights
+
+  /**
+   * Read the knight behind a gated or funded account OFFCHAIN-trust-free: it must be a genuine asset of our collection,
+   * owned by the wallet right now, high enough, not Wounded and not already in a live evaluation.
+   */
+  private async verifyKnight(input: CreateChallengeInput, stage: Stage): Promise<KnightInfo> {
+    const knights = this.knights!;
+    const spec = TIERS[input.tier];
+    if (!input.wallet) throw new ServiceError(403, "wallet_required", "Sign in with the wallet that holds the knight");
+    if (!input.knightAsset) {
+      throw new ServiceError(403, "tier_locked", `${spec.name} needs a knight: pass knightAsset (the knight NFT address you hold)`);
+    }
+    const info = await knights.get(input.knightAsset);
+    if (!info || !info.genuine) throw new ServiceError(403, "knight_not_genuine", "That asset is not a Garuda knight");
+    if (info.owner !== input.wallet) throw new ServiceError(403, "not_knight_owner", "The signed-in wallet does not hold that knight");
+    const rows = await this.store.summaries({ knightId: info.asset });
+    if (stage === "funded") {
+      const passed = rows.some((r) => r.tier === input.tier && r.stage === "evaluation" && r.status === "passed");
+      if (!passed) throw new ServiceError(403, "evaluation_not_passed", "A funded account needs a passed evaluation of the same tier on this knight");
+      if (rows.some((r) => r.stage === "funded" && r.tier === input.tier && isLive(r))) throw new ServiceError(409, "funded_exists", "This knight already has a live funded account at that tier");
+      return info;
+    }
+    if (spec.requires && levelIndex(info.level) < levelIndex(spec.requires as KnightLevel)) {
+      throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight (this one is ${info.level})`);
+    }
+    if (info.status === "wounded" || deriveKnightState(rows.map((r) => this.toRow(r))).attrs.status === "wounded") {
+      throw new ServiceError(403, "knight_wounded", "A Wounded knight cannot enter a gated tier: revive it first");
+    }
+    if (rows.some((r) => r.stage === "evaluation" && isLive(r))) throw new ServiceError(409, "knight_busy", "This knight is already in a live challenge");
+    return info;
+  }
+
+  /** Bind a knight to a new challenge: mint a Squire-level knight, or verify and transfer-lock the one passed in. */
+  private async attachKnight(ch: Challenge, input: CreateChallengeInput, stage: Stage, opts: CreateOpts): Promise<void> {
+    const knights = this.knights!;
+    const spec = TIERS[input.tier];
+    if (stage === "funded" || (spec.requires && this.enforceGating)) {
+      const info = await this.verifyKnight(input, stage);
+      ch.knightId = info.asset;
+      await this.lockKnight(ch, info.owner);
+      return;
+    }
+    if (!input.wallet) throw new ServiceError(400, "wallet_required", "A knight is minted to a wallet: sign in first");
+    try {
+      const res = await knights.mint({
+        owner: input.wallet,
+        name: `Knight ${ch.knight}`.slice(0, 32),
+        orderId: opts.paid?.orderId ?? ch.id,
+        frozen: true,
+        attrs: { level: "squire", status: "active", tier: input.tier as KnightLevel, challengeId: ch.id, wins: 0, revives: 0 },
+      });
+      ch.knightId = res.asset;
+    } catch (e) {
+      throw new ServiceError(502, "mint_failed", `Knight mint failed: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Freeze the knight for `ch` BEFORE the challenge is saved, then re-read the owner: if the knight moved between the
+   * ownership check and the freeze, undo and refuse, so a live challenge never sits on a knight somebody else now holds.
+   */
+  private async lockKnight(ch: Challenge, expectedOwner: string): Promise<void> {
+    const id = ch.knightId!;
+    try {
+      await this.syncKnight(id, { extra: summarize(ch) });
+    } catch (e) {
+      this.dirtyKnights.add(id);
+      throw new ServiceError(502, "knight_lock_failed", `Could not lock the knight onchain: ${(e as Error).message}`);
+    }
+    const after = await this.knights!.get(id);
+    if (!after || after.owner !== expectedOwner) {
+      await this.syncKnightSafe(id);
+      throw new ServiceError(409, "knight_moved", "The knight changed hands while the challenge was opening");
+    }
+  }
+
+  private toRow(s: ChallengeSummary): KnightHistoryRow {
+    return { id: s.id, tier: s.tier, stage: s.stage, status: s.status, lifecycle: s.lifecycle, createdAt: s.createdAt, reviveOf: s.reviveOf };
+  }
+
+  private knightQueue<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.knightChains.get(id) ?? Promise.resolve();
+    const run = prev.then(fn, fn);
+    const tail = run.catch(() => undefined);
+    this.knightChains.set(id, tail);
+    void tail.then(() => {
+      if (this.knightChains.get(id) === tail) this.knightChains.delete(id);
+    });
+    return run;
+  }
+
+  /**
+   * Write the knight's derived state onchain: level, status, wins, revives, current tier and challenge, the per-level
+   * metadata URI, and the transfer lock (frozen while any challenge is live). Idempotent: nothing is sent when the chain
+   * already matches. `extra` is a challenge not saved yet (so a lock can land before the row exists).
+   */
+  async syncKnight(knightId: string, o: { extra?: ChallengeSummary } = {}): Promise<string | undefined> {
+    const knights = this.knights;
+    if (!knights) return undefined;
+    return this.knightQueue(knightId, async () => {
+      const rows = (await this.store.summaries({ knightId })).filter((r) => r.id !== o.extra?.id);
+      if (o.extra) rows.push(o.extra);
+      const want = deriveKnightState(rows.map((r) => this.toRow(r)));
+      const sig = await knights.update({ asset: knightId, attrs: want.attrs, frozen: want.frozen });
+      this.dirtyKnights.delete(knightId);
+      return sig;
+    });
+  }
+
+  /** `syncKnight` that never throws: a failure marks the knight dirty for `reconcileKnights`. */
+  private async syncKnightSafe(knightId: string | undefined): Promise<void> {
+    if (!knightId || !this.knights) return;
+    try {
+      await this.syncKnight(knightId);
+    } catch {
+      this.dirtyKnights.add(knightId);
+    }
+  }
+
+  /** Knights waiting for a retry (RPC failure on the last sync). */
+  dirtyKnightIds(): string[] {
+    return [...this.dirtyKnights];
+  }
+
+  /** Retry dirty knights; `all` re-syncs every knight that has ever fought. Returns how many were synced and how many still fail. */
+  async reconcileKnights(o: { all?: boolean } = {}): Promise<{ synced: number; failed: number }> {
+    if (!this.knights) return { synced: 0, failed: 0 };
+    const ids = new Set(this.dirtyKnights);
+    if (o.all) for (const s of await this.store.summaries()) if (s.knightId) ids.add(s.knightId);
+    let synced = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await this.syncKnight(id);
+        synced++;
+      } catch {
+        this.dirtyKnights.add(id);
+        failed++;
+      }
+    }
+    return { synced, failed };
+  }
+
+  /** May this wallet act on the challenge? The owner of record always; for a WOUNDED knight, whoever holds it onchain now (rights follow the knight). */
+  async canAct(id: string, wallet: string | undefined): Promise<boolean> {
+    const ch = await this.get(id);
+    if (!wallet) return false;
+    if (this.knights && ch.knightId && ch.risk.status === "wounded") {
+      const info = await this.knights.get(ch.knightId);
+      return Boolean(info?.genuine && info.owner === wallet);
+    }
+    return ch.wallet === wallet;
   }
 
   /** Construct a fresh challenge (not yet saved). */
@@ -245,9 +470,10 @@ export class ChallengeService {
     knightId?: string;
     reviveOf?: string;
     scars?: number;
+    id?: string;
   }): Challenge {
     const spec = TIERS[a.tier];
-    const id = `ch_${randomUUID().slice(0, 8)}`;
+    const id = a.id ?? `ch_${randomUUID().slice(0, 8)}`;
     const t = this.now();
     const ch: Challenge = {
       id,
@@ -327,11 +553,14 @@ export class ChallengeService {
   /** Serialise on the challenge, then persist and re-index it whatever happened (a rejected order may still have refreshed marks). */
   private mutate<T>(ch: Challenge, fn: () => Promise<T>): Promise<T> {
     return this.locked(ch, async () => {
+      const before = ch.risk.status;
       try {
         return await fn();
       } finally {
         await this.store.save(ch);
         this.reindex(ch);
+        // A breach or pass changes the knight (Wounded / level up) and releases the transfer lock.
+        if (ch.risk.status !== before) await this.syncKnightSafe(ch.knightId);
       }
     });
   }
@@ -727,13 +956,15 @@ export class ChallengeService {
   // ----------------------------------------------------------------- payouts
 
   /** Payout quote (rulebook section 11). Funded, non-demo, not breached; archived accounts may still claim profit. KYC is roadmap M7. */
-  async payoutQuote(id: string): Promise<PayoutQuote & { kycRequired: true }> {
+  async payoutQuote(id: string): Promise<PayoutQuote & { kycRequired: true; destination?: string }> {
     const ch = await this.get(id);
     if (ch.tier === "demo") throw new ServiceError(403, "payouts_unavailable", "Demo accounts have no payouts");
     if (ch.stage !== "funded") throw new ServiceError(403, "payouts_unavailable", "Payouts are only available on funded accounts");
     if (ch.risk.status === "wounded") throw new ServiceError(403, "payouts_unavailable", "Breached accounts have no payouts");
     const q = quotePayout({ startingBalance: ch.account.startingBalance, balance: ch.account.balance, hasOpenPositions: ch.account.positions.size > 0 });
-    return { ...q, kycRequired: true };
+    // Rulebook section 11: the payout goes to the wallet holding the knight at request time.
+    const holder = this.knights && ch.knightId ? (await this.knights.get(ch.knightId))?.owner : undefined;
+    return { ...q, kycRequired: true, destination: holder ?? ch.wallet };
   }
 
   // ------------------------------------------------------------------ revive
@@ -763,8 +994,22 @@ export class ChallengeService {
    * account is not restored. Payment goes through the stubbed PaymentProvider. With an idempotency key a retry
    * returns the original result instead of charging twice.
    */
-  async revive(id: string, opts: { idempotencyKey?: string } = {}): Promise<ReviveResult> {
+  async revive(
+    id: string,
+    opts: {
+      idempotencyKey?: string;
+      /** Signed-in wallet making the request. With a knight chain it must hold the knight now (rights follow the knight). */
+      actorWallet?: string;
+      /** A verified USDC payment from the PurchaseService: skips the PaymentProvider. */
+      prepaid?: { orderId: string; ref: string; amountUsd: number };
+    } = {},
+  ): Promise<ReviveResult> {
     const old = await this.get(id);
+    if (opts.prepaid) {
+      // Deterministic id per order: a retry returns the account the first call opened.
+      const existing = await this.store.get(reviveChallengeId(opts.prepaid.orderId));
+      if (existing) return { replayed: true, feeUsd: existing.reviveFeeUsd ?? 0, paymentRef: existing.paymentRef ?? "", state: this.view(existing), revive: await this.reviveCheck(old) };
+    }
     if (opts.idempotencyKey) {
       const prior = await this.store.findReviveRequest(opts.idempotencyKey);
       if (prior) {
@@ -780,18 +1025,44 @@ export class ChallengeService {
           const status = info.reason === "revive_cooldown" ? 429 : info.reason === "demo_no_revive" ? 403 : 409;
           throw new ServiceError(status, info.reason!, `Revive unavailable: ${info.reason}`, info);
         }
+        // Whoever holds the knight onchain NOW owns the revive and the new account (a Wounded knight may have been sold).
+        let owner = old.wallet;
+        if (this.knights && old.knightId) {
+          const k = await this.knights.get(old.knightId);
+          if (!k || !k.genuine) throw new ServiceError(409, "knight_not_genuine", "The knight NFT could not be verified onchain");
+          if (opts.actorWallet && k.owner !== opts.actorWallet) throw new ServiceError(403, "not_knight_owner", "The signed-in wallet does not hold this knight");
+          owner = k.owner;
+        }
         // Reviving closes the wounded account out of the caps, so check the cap for the replacement.
-        await this.assertCanOpen({ tier: old.tier, stage: "evaluation", wallet: old.wallet });
-        const receipt = await this.payments.charge({
-          wallet: old.wallet ?? "anonymous",
-          amountUsd: info.fee,
-          kind: "revive",
-          reference: old.id,
-          idempotencyKey: opts.idempotencyKey,
-        });
-        if (!receipt.ok) throw new ServiceError(402, "payment_failed", receipt.error ?? "payment failed");
+        await this.assertCanOpen({ tier: old.tier, stage: "evaluation", wallet: owner });
+        let receipt: { ok: boolean; ref?: string; error?: string };
+        if (opts.prepaid) {
+          if (Math.abs(opts.prepaid.amountUsd - info.fee) > 0.005) throw new ServiceError(409, "price_changed", `Revive price is now $${info.fee.toFixed(2)}`, { fee: info.fee });
+          receipt = { ok: true, ref: opts.prepaid.ref };
+        } else {
+          receipt = await this.payments.charge({
+            wallet: owner ?? "anonymous",
+            amountUsd: info.fee,
+            kind: "revive",
+            reference: old.id,
+            idempotencyKey: opts.idempotencyKey,
+          });
+        }
+        if (!receipt.ok) {
+          if (receipt.error === "payment_required") throw new ServiceError(402, "payment_required", "Revive is paid in USDC: POST /purchases/revive, pay, then confirm", { quote: "/purchases/revive" });
+          throw new ServiceError(402, "payment_failed", receipt.error ?? "payment failed");
+        }
 
-        const fresh = this.build({ tier: old.tier, stage: "evaluation", knight: old.knight, wallet: old.wallet, knightId: old.knightId, reviveOf: old.id, scars: old.scars + 1 });
+        const fresh = this.build({
+          tier: old.tier,
+          stage: "evaluation",
+          knight: old.knight,
+          wallet: owner,
+          knightId: old.knightId,
+          reviveOf: old.id,
+          scars: old.scars + 1,
+          id: opts.prepaid ? reviveChallengeId(opts.prepaid.orderId) : undefined,
+        });
         fresh.reviveFeeUsd = info.fee;
         fresh.paymentRef = receipt.ref;
         fresh.combatLog.push({
@@ -799,14 +1070,17 @@ export class ChallengeService {
           kind: "dawn",
           text: `${fresh.knight} is revived (scar ${fresh.scars}, ${REVIVE_RULES.maxPerKnight - (info.revivesUsed + 1)} revives left) for $${info.fee.toFixed(2)}`,
         });
+        // Transfer-lock the knight (and write revives + 1, status Active) before the new account exists.
+        if (this.knights && fresh.knightId && owner) await this.lockKnight(fresh, owner);
         old.revivedBy = fresh.id;
         await this.store.save(fresh);
         await this.store.save(old);
-        if (opts.idempotencyKey && old.wallet) {
-          await this.store.saveReviveRequest({ idempotencyKey: opts.idempotencyKey, wallet: old.wallet, sourceChallengeId: old.id, newChallengeId: fresh.id, createdAt: this.now() });
+        if (opts.idempotencyKey && owner) {
+          await this.store.saveReviveRequest({ idempotencyKey: opts.idempotencyKey, wallet: owner, sourceChallengeId: old.id, newChallengeId: fresh.id, createdAt: this.now() });
         }
         this.reindex(fresh);
         this.reindex(old);
+        await this.syncKnightSafe(fresh.knightId);
         return { replayed: false, feeUsd: info.fee, paymentRef: receipt.ref ?? "", state: this.view(fresh), revive: await this.reviveCheck(old) };
       }),
     );

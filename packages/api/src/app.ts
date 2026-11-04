@@ -16,6 +16,8 @@ import {
 import { PHOENIX_FEES } from "@garuda/sim-engine";
 import type { AuthService } from "./auth.js";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitConfig } from "./rate-limit.js";
+import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, readArt } from "@garuda/chain";
+import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
 
 const tierEnum = z.enum(TIER_IDS as [string, ...string[]]);
@@ -26,7 +28,13 @@ const createBody = z.object({
   knight: z.string().min(1).max(40).optional(),
   wallet: z.string().min(1).max(64).optional(),
   nftLevels: z.array(tierEnum).optional(),
+  /** Knight NFT address the wallet holds (gated tiers and funded accounts). */
+  knightAsset: z.string().min(32).max(44).optional(),
 });
+
+const purchaseChallengeBody = z.object({ tier: tierEnum, knightAsset: z.string().min(32).max(44).optional(), wallet: z.string().min(1).max(64).optional() });
+const purchaseReviveBody = z.object({ challengeId: z.string().min(1).max(64), wallet: z.string().min(1).max(64).optional() });
+const confirmBody = z.object({ signature: z.string().min(64).max(100) });
 
 const orderBody = z
   .object({
@@ -60,6 +68,10 @@ export interface AppOptions {
   trustProxy?: boolean;
   /** Extra fields merged into /health (storage kind, worker state...). */
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** USDC checkout (M4). Enables the /purchases routes. */
+  purchases?: PurchaseService;
+  /** Where the knight metadata JSON and PNGs are served from (the /nft routes). baseUrl must match what was written onchain. */
+  nft?: { baseUrl: string; artDir?: string };
   /** Served at GET /metrics (worker latency, feed health). */
   metrics?: () => unknown;
 }
@@ -102,7 +114,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.addHook("preHandler", async (req, reply) => {
     if (!auth) return;
     const path = req.url.split("?")[0]!;
-    const isAccountRoute = path === "/challenges" || path.startsWith("/challenges/") || path === "/auth/me" || path === "/auth/logout";
+    const isAccountRoute = path === "/challenges" || path.startsWith("/challenges/") || path === "/purchases" || path.startsWith("/purchases/") || path === "/knights" || path.startsWith("/knights/") || path === "/auth/me" || path === "/auth/logout";
     if (!isAccountRoute) return;
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
@@ -113,10 +125,29 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   });
 
   /** Ownership check on every :id route: 403 when the challenge belongs to another wallet. */
-  const authorize = async (req: FastifyRequest, id: string) => {
+  const authorize = async (req: FastifyRequest, id: string, o: { rightsFollowKnight?: boolean } = {}) => {
     if (!auth) return;
     const owner = await svc.ownerOf(id); // 404 for unknown ids
-    if (!owner || owner !== walletOf.get(req)) throw new ServiceError(403, "not_owner", "This challenge belongs to another wallet");
+    // Revive of a Wounded knight belongs to whoever holds the knight onchain now (the seller loses it).
+    if (o.rightsFollowKnight) {
+      if (await svc.canAct(id, walletOf.get(req))) return;
+    } else if (owner && owner === walletOf.get(req)) return;
+    throw new ServiceError(403, "not_owner", "This challenge belongs to another wallet");
+  };
+
+  /** Wallet for a purchase: the signed-in one, or the body's in open mode. */
+  const buyer = (req: FastifyRequest, bodyWallet?: string): string => {
+    if (auth) {
+      const me = walletOf.get(req)!;
+      if (bodyWallet && bodyWallet !== me) throw new ServiceError(403, "wallet_mismatch", "wallet does not match the signed-in wallet");
+      return me;
+    }
+    if (!bodyWallet) throw new ServiceError(400, "wallet_required", "wallet is required");
+    return bodyWallet;
+  };
+  const purchases = () => {
+    if (!opts.purchases) throw new ServiceError(404, "payments_disabled", "USDC checkout is not configured on this server");
+    return opts.purchases;
   };
 
   app.setErrorHandler((err, _req, reply) => {
@@ -215,14 +246,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   });
 
   app.get<{ Params: { id: string } }>("/challenges/:id/revive", async (req) => {
-    await authorize(req, req.params.id);
+    await authorize(req, req.params.id, { rightsFollowKnight: true });
     return svc.reviveInfo(req.params.id);
   });
 
   app.post<{ Params: { id: string } }>("/challenges/:id/revive", async (req, reply) => {
-    await authorize(req, req.params.id);
+    await authorize(req, req.params.id, { rightsFollowKnight: true });
     const key = req.headers["idempotency-key"];
-    const res = await svc.revive(req.params.id, { idempotencyKey: typeof key === "string" && key.length > 0 ? key.slice(0, 120) : undefined });
+    const res = await svc.revive(req.params.id, {
+      idempotencyKey: typeof key === "string" && key.length > 0 ? key.slice(0, 120) : undefined,
+      actorWallet: auth ? walletOf.get(req) : undefined,
+    });
     return reply.status(res.replayed ? 200 : 201).send(res);
   });
 
@@ -235,6 +269,60 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     await authorize(req, req.params.id);
     return svc.payoutQuote(req.params.id);
   });
+
+  // ------------------------------------------------------------ M4: USDC checkout
+
+  app.post("/purchases/challenge", async (req, reply) => {
+    const body = purchaseChallengeBody.parse(req.body);
+    return reply.status(201).send(await purchases().quoteChallenge({ wallet: buyer(req, body.wallet), tier: body.tier as TierId, knightAsset: body.knightAsset }));
+  });
+
+  app.post("/purchases/revive", async (req, reply) => {
+    const body = purchaseReviveBody.parse(req.body);
+    return reply.status(201).send(await purchases().quoteRevive({ wallet: buyer(req, body.wallet), challengeId: body.challengeId }));
+  });
+
+  app.get("/purchases", async (req) => ({ orders: await purchases().list(buyer(req, (req.query as { wallet?: string }).wallet)) }));
+
+  app.get<{ Params: { id: string } }>("/purchases/:id", async (req) => purchases().get(req.params.id, auth ? walletOf.get(req) : undefined));
+
+  /** 200 fulfilled (or replayed), 202 transfer not visible yet (retry), 200 refunded / refund_pending with the reason in order.failure. */
+  app.post<{ Params: { id: string } }>("/purchases/:id/confirm", async (req, reply) => {
+    const body = confirmBody.parse(req.body);
+    const out = await purchases().confirm(req.params.id, { signature: body.signature, wallet: auth ? walletOf.get(req) : undefined });
+    return reply.status(out.status === "pending" ? 202 : 200).send(out);
+  });
+
+  // --------------------------------------------------------------- M3: knights
+
+  app.get("/knights", async (req) => {
+    if (!svc.knights) throw new ServiceError(404, "nft_disabled", "Knight NFTs are not configured on this server");
+    return { knights: await svc.knights.listByOwner(buyer(req, (req.query as { wallet?: string }).wallet)) };
+  });
+
+  app.get<{ Params: { asset: string } }>("/knights/:asset", async (req) => {
+    if (!svc.knights) throw new ServiceError(404, "nft_disabled", "Knight NFTs are not configured on this server");
+    const k = await svc.knights.get(req.params.asset);
+    if (!k || !k.genuine) throw new ServiceError(404, "knight_not_found", "No Garuda knight at that address");
+    return k;
+  });
+
+  // Public, static: the metadata JSON and PNGs the onchain URIs point at. Devnet hosting; swap for a CDN later.
+  if (opts.nft) {
+    const nft = opts.nft;
+    const dir = nft.artDir ?? DEFAULT_ART_DIR;
+    app.get("/nft/collection.json", async () => collectionMetadata(nft.baseUrl));
+    app.get<{ Params: { file: string } }>("/nft/metadata/:file", async (req) => {
+      const level = req.params.file.replace(/\.json$/, "");
+      if (!isKnightLevel(level) || !req.params.file.endsWith(".json")) throw new ServiceError(404, "not_found");
+      return levelMetadata(nft.baseUrl, level);
+    });
+    app.get<{ Params: { file: string } }>("/nft/images/:file", async (req, reply) => {
+      const bytes = readArt(dir, req.params.file);
+      if (!bytes) throw new ServiceError(404, "not_found");
+      return reply.header("content-type", "image/png").header("cache-control", "public, max-age=3600").send(bytes);
+    });
+  }
 
   return app;
 }
