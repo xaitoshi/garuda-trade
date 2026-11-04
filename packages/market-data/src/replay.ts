@@ -1,5 +1,5 @@
 import type { L2Book, Level } from "@garuda/sim-engine";
-import type { MarketDataProvider, MarketInfo, MarketSnapshot } from "./types.js";
+import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot } from "./types.js";
 
 export interface RecordedMarket {
   symbol: string;
@@ -73,6 +73,31 @@ export class ReplayProvider implements MarketDataProvider {
 
   async listMarkets(): Promise<MarketInfo[]> {
     return [...this.markets.keys()].map((symbol) => ({ symbol, status: "active", tradable: !this.untradable.has(symbol) }));
+  }
+
+  /**
+   * Deterministic SYNTHETIC history (a seeded random walk ending at the current mark) so a chart has something to draw
+   * offline. Labelled `source: "synthetic"`; never presented as real prices.
+   */
+  async candles(symbol: string, timeframe: CandleTimeframe, limit: number) {
+    const m = this.markets.get(symbol);
+    if (!m) throw new Error(`replay: no recording for ${symbol}`);
+    const step = TIMEFRAME_MS[timeframe];
+    const end = Math.floor(this.clock() / step) * step;
+    let seed = 0;
+    for (const ch of `${symbol}:${timeframe}`) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    const last = m.markPrice * (this.shift.get(symbol) ?? 1);
+    const vol = 0.0035 * Math.sqrt(step / 3_600_000 + 0.25);
+    const closes: number[] = [last];
+    for (let i = 1; i < limit; i++) closes.unshift(closes[0]! / (1 + (rnd() - 0.5) * 2 * vol + 0.0004));
+    const candles: Candle[] = closes.map((close, i) => {
+      const open = i === 0 ? close / (1 + (rnd() - 0.5) * vol) : closes[i - 1]!;
+      const hi = Math.max(open, close) * (1 + rnd() * vol * 0.6);
+      const lo = Math.min(open, close) * (1 - rnd() * vol * 0.6);
+      return { time: end - (limit - 1 - i) * step, open, high: hi, low: lo, close, volume: 40 + rnd() * 160 + Math.abs(close - open) / close * 20000 };
+    });
+    return { candles, source: "synthetic" as const };
   }
 
   async ping(): Promise<boolean> {

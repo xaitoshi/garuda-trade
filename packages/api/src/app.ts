@@ -14,6 +14,7 @@ import {
   leverageCap,
 } from "@garuda/risk-engine";
 import { PHOENIX_FEES } from "@garuda/sim-engine";
+import { CANDLE_TIMEFRAMES, type CandleTimeframe, type MarketSnapshot } from "@garuda/market-data";
 import type { AuthService } from "./auth.js";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitConfig } from "./rate-limit.js";
 import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, readArt } from "@garuda/chain";
@@ -32,7 +33,13 @@ const createBody = z.object({
   knightAsset: z.string().min(32).max(44).optional(),
 });
 
-const purchaseChallengeBody = z.object({ tier: tierEnum, knightAsset: z.string().min(32).max(44).optional(), wallet: z.string().min(1).max(64).optional() });
+const purchaseChallengeBody = z.object({
+  tier: tierEnum,
+  knightAsset: z.string().min(32).max(44).optional(),
+  wallet: z.string().min(1).max(64).optional(),
+  /** Cosmetic name for the knight a paid challenge mints. */
+  knightName: z.string().trim().min(1).max(24).optional(),
+});
 const purchaseReviveBody = z.object({ challengeId: z.string().min(1).max(64), wallet: z.string().min(1).max(64).optional() });
 const confirmBody = z.object({ signature: z.string().min(64).max(100) });
 
@@ -74,6 +81,13 @@ export interface AppOptions {
   nft?: { baseUrl: string; artDir?: string };
   /** Served at GET /metrics (worker latency, feed health). */
   metrics?: () => unknown;
+  /**
+   * Browser origins allowed to call the API (CORS), e.g. ["https://app.garuda.example"]; "*" allows any origin
+   * (public read-only data and bearer-token auth only, no cookies). Default: none (same-origin or a dev proxy).
+   */
+  corsOrigins?: string[] | "*";
+  /** How long a public /markets/:symbol snapshot is shared between callers. Default 750 ms. */
+  marketCacheMs?: number;
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -103,9 +117,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     void req;
   };
 
+  const corsOk = (origin: string | undefined) => origin !== undefined && (opts.corsOrigins === "*" || (opts.corsOrigins ?? []).includes(origin));
+  app.addHook("onRequest", async (req, reply) => {
+    const origin = req.headers.origin;
+    if (corsOk(origin)) {
+      reply.header("Access-Control-Allow-Origin", opts.corsOrigins === "*" ? "*" : origin!);
+      reply.header("Vary", "Origin");
+      reply.header("Access-Control-Expose-Headers", "Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining");
+      if (req.method === "OPTIONS") {
+        reply.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key");
+        reply.header("Access-Control-Max-Age", 600);
+        return reply.status(204).send();
+      }
+    }
+  });
+
   app.addHook("onRequest", async (req, reply) => {
     const path = req.url.split("?")[0]!;
-    if (path === "/health") return;
+    if (path === "/health" || req.method === "OPTIONS") return;
     limit(req, reply, limiters?.ip, req.ip, "ip");
     if (path.startsWith("/auth/")) limit(req, reply, limiters?.auth, req.ip, "auth");
   });
@@ -184,6 +214,71 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     leverageCapByClass: LEVERAGE_CAP_BY_CLASS,
     markets: WHITELIST.map((symbol) => ({ symbol, class: assetClass(symbol), maxLeverage: leverageCap(symbol) })),
   }));
+
+  // ------------------------------------------------------------ public market data (read-only)
+
+  const marketCacheMs = opts.marketCacheMs ?? 750;
+  const snapCache = new Map<string, { at: number; p: Promise<MarketSnapshot> }>();
+  const marketSymbol = (raw: string): string => {
+    const symbol = raw.trim().toUpperCase().replace(/-?PERP$/, "");
+    if (!(WHITELIST as readonly string[]).includes(symbol)) throw new ServiceError(404, "unknown_market", `${raw} is not a Garuda market`);
+    return symbol;
+  };
+  const cachedSnapshot = (symbol: string): Promise<MarketSnapshot> => {
+    const t = now();
+    const hit = snapCache.get(symbol);
+    if (hit && t - hit.at < marketCacheMs) return hit.p;
+    const p = svc.market.snapshot(symbol);
+    snapCache.set(symbol, { at: t, p });
+    p.catch(() => snapCache.delete(symbol));
+    return p;
+  };
+
+  /** Live book (top levels), mark and funding for one market: what the terminal draws. Public. */
+  app.get<{ Params: { symbol: string }; Querystring: { depth?: string } }>("/markets/:symbol", async (req) => {
+    const symbol = marketSymbol(req.params.symbol);
+    const depth = Math.min(50, Math.max(1, Number(req.query.depth ?? 12) || 12));
+    let snap: MarketSnapshot;
+    try {
+      snap = await cachedSnapshot(symbol);
+    } catch (e) {
+      throw new ServiceError(502, "market_unavailable", `No market data for ${symbol}: ${(e as Error).message}`);
+    }
+    const bestBid = snap.book.bids[0]?.[0];
+    const bestAsk = snap.book.asks[0]?.[0];
+    return {
+      symbol,
+      display: `${symbol}-PERP`,
+      class: assetClassOf(symbol),
+      maxLeverage: leverageCap(symbol),
+      mark: snap.markPrice,
+      bestBid,
+      bestAsk,
+      mid: bestBid !== undefined && bestAsk !== undefined ? (bestBid + bestAsk) / 2 : snap.markPrice,
+      fundingRateHourly: snap.fundingRateHourly,
+      tradable: snap.tradable,
+      tradableReason: snap.tradableReason,
+      source: snap.source,
+      fetchedAt: snap.fetchedAt,
+      slot: snap.slot,
+      book: { bids: snap.book.bids.slice(0, depth), asks: snap.book.asks.slice(0, depth) },
+    };
+  });
+
+  /** OHLCV for the chart. `source` says whether it is real Phoenix history or a synthetic offline stand-in. Public. */
+  app.get<{ Params: { symbol: string }; Querystring: { tf?: string; limit?: string } }>("/markets/:symbol/candles", async (req) => {
+    const symbol = marketSymbol(req.params.symbol);
+    const tf = (req.query.tf ?? "1h") as CandleTimeframe;
+    if (!(CANDLE_TIMEFRAMES as readonly string[]).includes(tf)) throw new ServiceError(400, "invalid_timeframe", `tf must be one of ${CANDLE_TIMEFRAMES.join(", ")}`);
+    const limit = Math.min(500, Math.max(10, Number(req.query.limit ?? 120) || 120));
+    if (!svc.market.candles) return { symbol, timeframe: tf, source: "none", candles: [] };
+    try {
+      const r = await svc.market.candles(symbol, tf, limit);
+      return { symbol, timeframe: tf, source: r.source, candles: r.candles };
+    } catch (e) {
+      throw new ServiceError(502, "market_unavailable", `No candles for ${symbol}: ${(e as Error).message}`);
+    }
+  });
 
   app.post("/auth/nonce", async (req) => {
     if (!auth) throw new ServiceError(404, "auth_disabled");
@@ -274,7 +369,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.post("/purchases/challenge", async (req, reply) => {
     const body = purchaseChallengeBody.parse(req.body);
-    return reply.status(201).send(await purchases().quoteChallenge({ wallet: buyer(req, body.wallet), tier: body.tier as TierId, knightAsset: body.knightAsset }));
+    return reply.status(201).send(await purchases().quoteChallenge({ wallet: buyer(req, body.wallet), tier: body.tier as TierId, knightAsset: body.knightAsset, knightName: body.knightName }));
   });
 
   app.post("/purchases/revive", async (req, reply) => {

@@ -1,5 +1,5 @@
 import type { Level } from "@garuda/sim-engine";
-import type { MarketDataProvider, MarketInfo, MarketSnapshot } from "./types.js";
+import type { CandleTimeframe, MarketDataProvider, MarketInfo, MarketSnapshot } from "./types.js";
 
 /**
  * Wraps any provider and shifts books + marks by a scripted fractional move per symbol.
@@ -34,6 +34,12 @@ export class OverlayProvider implements MarketDataProvider {
 
   listMarkets(): Promise<MarketInfo[]> {
     return this.inner.listMarkets();
+  }
+  async candles(symbol: string, timeframe: CandleTimeframe, limit: number) {
+    if (!this.inner.candles) return { candles: [], source: "synthetic" as const };
+    const r = await this.inner.candles(symbol, timeframe, limit);
+    const k = this.shift.get(symbol) ?? 1;
+    return k === 1 ? r : { ...r, candles: r.candles.map((c) => ({ ...c, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k })) };
   }
   ping(): Promise<boolean> {
     return this.inner.ping();

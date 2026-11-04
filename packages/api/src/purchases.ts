@@ -23,6 +23,8 @@ export interface PaymentOrder {
   sourceChallengeId?: string;
   /** Challenge: the knight to level into a gated tier (omit to mint a new Squire-line knight). */
   knightAsset?: string;
+  /** Challenge: cosmetic name for the knight that is minted. */
+  knightName?: string;
   listUsd: number;
   discountPct: number;
   amountUsd: number;
@@ -203,7 +205,7 @@ export class PurchaseService {
     };
   }
 
-  private async newOrder(a: Pick<PaymentOrder, "kind" | "wallet" | "tier" | "sourceChallengeId" | "knightAsset" | "listUsd" | "discountPct" | "amountUsd">): Promise<PaymentOrder> {
+  private async newOrder(a: Pick<PaymentOrder, "kind" | "wallet" | "tier" | "sourceChallengeId" | "knightAsset" | "knightName" | "listUsd" | "discountPct" | "amountUsd">): Promise<PaymentOrder> {
     const t = this.now();
     const o: PaymentOrder = {
       ...a,
@@ -220,11 +222,11 @@ export class PurchaseService {
   }
 
   /** Quote a challenge purchase. Fails now (before anyone pays) when the account could not be opened: caps, tier gating, knight ownership. */
-  async quoteChallenge(a: { wallet: string; tier: TierId; knightAsset?: string }): Promise<PaymentInstructions> {
+  async quoteChallenge(a: { wallet: string; tier: TierId; knightAsset?: string; knightName?: string }): Promise<PaymentInstructions> {
     if (a.tier === "demo" || !(a.tier in CHALLENGE_FEES_USD)) throw new ServiceError(400, "unknown_tier", "Only paid tiers are bought");
     await this.svc.assertCanCreate({ tier: a.tier, wallet: a.wallet, knightAsset: a.knightAsset });
     const fee = CHALLENGE_FEES_USD[a.tier];
-    const o = await this.newOrder({ kind: "challenge", wallet: a.wallet, tier: a.tier, knightAsset: a.knightAsset, listUsd: fee, discountPct: 0, amountUsd: fee });
+    const o = await this.newOrder({ kind: "challenge", wallet: a.wallet, tier: a.tier, knightAsset: a.knightAsset, knightName: a.knightName?.trim().slice(0, 24) || undefined, listUsd: fee, discountPct: 0, amountUsd: fee });
     return this.instructions(o);
   }
 
@@ -305,7 +307,7 @@ export class PurchaseService {
     try {
       if (o.kind === "challenge") {
         const st = await this.svc.create(
-          { tier: o.tier, wallet: o.wallet, knightAsset: o.knightAsset, stage: "evaluation" },
+          { tier: o.tier, wallet: o.wallet, knightAsset: o.knightAsset, knight: o.knightName, stage: "evaluation" },
           { id: orderChallengeId(o.id), paid: { orderId: o.id, ref: o.signature!, amountUsd: o.amountUsd } },
         );
         o = await this.update(o, { status: "fulfilled", challengeId: st.id, knightId: st.knightId, failure: undefined });

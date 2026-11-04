@@ -1,6 +1,6 @@
 import { createPhoenixClient } from "@ellipsis-labs/rise";
 import type { L2Book, Level } from "@garuda/sim-engine";
-import type { MarketDataProvider, MarketInfo, MarketSnapshot } from "./types.js";
+import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot } from "./types.js";
 
 export interface PhoenixProviderOptions {
   apiUrl?: string;
@@ -112,6 +112,25 @@ export class PhoenixSdkProvider implements MarketDataProvider {
         tradable: st.tradable,
       };
     });
+  }
+
+  /** OHLCV from Phoenix's public candles endpoint (read-only). */
+  async candles(symbolIn: string, timeframe: CandleTimeframe, limit: number) {
+    const symbol = normalizeSymbol(symbolIn);
+    const raw = (await this.client.api.candles().getCandles(symbol, { timeframe, limit, startTime: this.now() - TIMEFRAME_MS[timeframe] * limit })) as unknown as {
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume?: number;
+    }[];
+    const candles: Candle[] = raw
+      .map((c) => ({ time: Number(c.time), open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: Number(c.volume ?? 0) }))
+      .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
+      .sort((a, b) => a.time - b.time)
+      .slice(-limit);
+    return { candles, source: "phoenix-live" as const };
   }
 
   async ping(): Promise<boolean> {

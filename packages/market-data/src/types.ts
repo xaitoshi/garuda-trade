@@ -27,11 +27,27 @@ export interface MarketInfo {
   tradable: boolean;
 }
 
+export interface Candle {
+  /** Bucket start, ms epoch. */
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export const CANDLE_TIMEFRAMES = ["5m", "15m", "1h", "4h", "1d"] as const;
+export type CandleTimeframe = (typeof CANDLE_TIMEFRAMES)[number];
+export const TIMEFRAME_MS: Record<CandleTimeframe, number> = { "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
+
 /** Read-only market data. Implementations: live Phoenix (Rise SDK), recorded replay, synthetic. */
 export interface MarketDataProvider {
   readonly name: string;
   snapshot(symbol: string): Promise<MarketSnapshot>;
   listMarkets(): Promise<MarketInfo[]>;
+  /** Price history for charts. Optional: providers without history return nothing and the UI draws from live marks. */
+  candles?(symbol: string, timeframe: CandleTimeframe, limit: number): Promise<{ candles: Candle[]; source: "phoenix-live" | "synthetic" }>;
   /** Returns true if the upstream is reachable. Never throws. */
   ping(): Promise<boolean>;
   close(): Promise<void>;
