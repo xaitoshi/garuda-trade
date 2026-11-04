@@ -94,6 +94,9 @@ importers:
       '@garuda/api':
         specifier: workspace:*
         version: link:../api
+      '@garuda/db':
+        specifier: workspace:*
+        version: link:../db
       '@garuda/market-data':
         specifier: workspace:*
         version: link:../market-data

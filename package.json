@@ -14,8 +14,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "demo": "tsx scripts/demo.ts",
     "demo:mock": "GARUDA_DEMO_MOCK=1 tsx scripts/demo.ts",
-    "api": "tsx packages/api/src/server.ts",
-    "fixtures:record": "tsx scripts/record-fixtures.ts"
+    "api": "tsx packages/worker/src/server.ts",
+    "fixtures:record": "tsx scripts/record-fixtures.ts",
+    "db:up": "docker compose up -d db",
+    "test:pg": "GARUDA_TEST_PG=embedded vitest run"
   },
   "devDependencies": {
     "@garuda/api": "workspace:*",

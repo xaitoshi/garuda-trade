@@ -5,11 +5,14 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@garuda/api": "workspace:*",
     "@garuda/market-data": "workspace:*",
     "@garuda/risk-engine": "workspace:*",
-    "@garuda/sim-engine": "workspace:*"
+    "@garuda/sim-engine": "workspace:*",
+    "@garuda/db": "workspace:*"
   }
 }
