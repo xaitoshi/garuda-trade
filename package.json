@@ -18,13 +18,16 @@
     "fixtures:record": "tsx scripts/record-fixtures.ts"
   },
   "devDependencies": {
-    "@types/node": "^20.17.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
     "@garuda/api": "workspace:*",
+    "@garuda/db": "workspace:*",
     "@garuda/market-data": "workspace:*",
     "@garuda/risk-engine": "workspace:*",
-    "@garuda/sim-engine": "workspace:*"
+    "@garuda/sim-engine": "workspace:*",
+    "@garuda/worker": "workspace:*",
+    "@types/node": "^20.17.0",
+    "embedded-postgres": "18.6.0-beta.19",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }
