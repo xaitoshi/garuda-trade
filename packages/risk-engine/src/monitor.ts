@@ -242,6 +242,18 @@ export class RiskMonitor {
     return out;
   }
 
+  /**
+   * A payout swept profit out of the balance (rulebook section 11: the balance resets to the starting balance). The
+   * sweep is not a trading loss, so the daily-loss baseline must not treat it as one: start-of-day balance drops to the
+   * post-payout balance when that is lower. The static drawdown floor never moves. Call after the day has rolled
+   * (evaluate first), on a flat book.
+   */
+  rebaseAfterPayout(balance: number, equity: number, now: number): void {
+    this.s.startOfDayBalance = Math.min(this.s.startOfDayBalance, balance);
+    this.s.warned = { daily_loss: 0, max_drawdown: 0 };
+    this.record(balance, equity, now);
+  }
+
   /** Record the latest balance/equity without evaluating rules (used after forced close-outs). Works in any state. */
   syncFinal(balance: number, equity: number, now: number): void {
     this.record(balance, equity, now);

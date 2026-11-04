@@ -34,3 +34,31 @@ export function quotePayout(args: {
   if (trader < min) return { ...quote, eligible: false, reason: "below_minimum", newBalance: args.balance };
   return quote;
 }
+
+/** Operator-tunable payout policy. Defaults are the rulebook numbers (section 11) plus the Phase 1 review threshold. */
+export interface PayoutPolicy {
+  /** Trader's share of profit, 0 < split <= 1. Rulebook: 0.8. */
+  split: number;
+  /** Minimum trader payout in USD. Rulebook: 20. */
+  minUsd: number;
+  /** A payout up to and including this many USD (trader share) is approved automatically; above it waits for an admin. */
+  autoMaxUsd: number;
+}
+
+export const DEFAULT_PAYOUT_POLICY: PayoutPolicy = { split: COMMON_RULES.profitSplit, minUsd: COMMON_RULES.minPayoutUsd, autoMaxUsd: 500 };
+
+/** Read GARUDA_PAYOUT_SPLIT and GARUDA_PAYOUT_AUTO_MAX. Throws on a value that is not a sane number so a typo cannot ship. */
+export function payoutPolicyFromEnv(env: Record<string, string | undefined>): PayoutPolicy {
+  const num = (key: string, fallback: number, ok: (n: number) => boolean, hint: string): number => {
+    const raw = env[key]?.trim();
+    if (!raw) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !ok(n)) throw new Error(`${key}=${raw} is invalid: ${hint}`);
+    return n;
+  };
+  return {
+    split: num("GARUDA_PAYOUT_SPLIT", DEFAULT_PAYOUT_POLICY.split, (n) => n > 0 && n <= 1, "must be a fraction above 0 and at most 1 (0.8 = 80%)"),
+    minUsd: DEFAULT_PAYOUT_POLICY.minUsd,
+    autoMaxUsd: num("GARUDA_PAYOUT_AUTO_MAX", DEFAULT_PAYOUT_POLICY.autoMaxUsd, (n) => n >= 0, "must be a USD amount of 0 or more (0 sends every payout to manual approval)"),
+  };
+}

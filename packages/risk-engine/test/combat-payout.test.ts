@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillToCombat, fillsToCombat, quotePayout, riskEventToCombat, usd, type FillLike } from "../src/index.js";
+import { DEFAULT_PAYOUT_POLICY, fillToCombat, fillsToCombat, payoutPolicyFromEnv, quotePayout, riskEventToCombat, usd, type FillLike } from "../src/index.js";
 
 const ctx = { knight: "Sir Pudding", startingBalance: 25_000 };
 const closeFill = (over: Partial<FillLike> = {}): FillLike => ({
@@ -79,5 +79,24 @@ describe("payout quote", () => {
     expect(quotePayout({ startingBalance: 25_000, balance: 25_025 }).eligible).toBe(true); // 80% = $20.00
     expect(quotePayout({ startingBalance: 25_000, balance: 24_000 })).toMatchObject({ eligible: false, reason: "no_profit" });
     expect(quotePayout({ startingBalance: 25_000, balance: 28_000, hasOpenPositions: true })).toMatchObject({ eligible: false, reason: "open_positions" });
+  });
+});
+
+describe("payout policy", () => {
+  it("defaults to the rulebook split and a $500 auto-approve ceiling", () => {
+    expect(payoutPolicyFromEnv({})).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500 });
+    expect(DEFAULT_PAYOUT_POLICY).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500 });
+  });
+  it("reads GARUDA_PAYOUT_SPLIT and GARUDA_PAYOUT_AUTO_MAX", () => {
+    expect(payoutPolicyFromEnv({ GARUDA_PAYOUT_SPLIT: "0.9", GARUDA_PAYOUT_AUTO_MAX: "1500" })).toMatchObject({ split: 0.9, autoMaxUsd: 1500 });
+    expect(payoutPolicyFromEnv({ GARUDA_PAYOUT_AUTO_MAX: "0" }).autoMaxUsd).toBe(0);
+    expect(payoutPolicyFromEnv({ GARUDA_PAYOUT_SPLIT: " ", GARUDA_PAYOUT_AUTO_MAX: "" })).toMatchObject({ split: 0.8, autoMaxUsd: 500 });
+  });
+  it("refuses nonsense instead of paying out wrong", () => {
+    for (const bad of ["0", "-0.1", "1.2", "80", "abc", "NaN"]) expect(() => payoutPolicyFromEnv({ GARUDA_PAYOUT_SPLIT: bad })).toThrow(/GARUDA_PAYOUT_SPLIT/);
+    for (const bad of ["-1", "x", "Infinity"]) expect(() => payoutPolicyFromEnv({ GARUDA_PAYOUT_AUTO_MAX: bad })).toThrow(/GARUDA_PAYOUT_AUTO_MAX/);
+  });
+  it("a custom split changes the quote", () => {
+    expect(quotePayout({ startingBalance: 10_000, balance: 11_000, split: 0.9 })).toMatchObject({ traderShare: 900, firmShare: 100 });
   });
 });

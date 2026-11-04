@@ -116,3 +116,21 @@ describe("resting-order fill gate", () => {
     expect(acct.openOrders()).toHaveLength(1);
   });
 });
+
+describe("balance adjustments (payout sweep and reversal)", () => {
+  it("move the balance, are idempotent by id, and replay through restore", () => {
+    const acct = session();
+    const before = acct.balance;
+    expect(acct.applyAdjustment({ id: "payout_sweep:p1", kind: "payout_sweep", amount: -1000, ref: "p1", ts: T0 })).toBe(true);
+    expect(acct.applyAdjustment({ id: "payout_sweep:p1", kind: "payout_sweep", amount: -1000, ref: "p1", ts: T0 + 1 })).toBe(false);
+    expect(acct.balance).toBeCloseTo(before - 1000, 9);
+    expect(acct.payoutsSwept()).toBe(1000);
+    acct.applyAdjustment({ id: "payout_reversal:p1", kind: "payout_reversal", amount: 1000, ref: "p1", ts: T0 + 2 });
+    expect(acct.payoutsSwept()).toBe(0);
+    acct.applyAdjustment({ id: "payout_sweep:p2", kind: "payout_sweep", amount: -250, ref: "p2", ts: T0 + 3 });
+    const back = SimAccount.restore({ id: "led", startingBalance: 25_000, orders: [...acct.orders.values()], fills: acct.fills, fundingPayments: acct.fundingPayments, adjustments: acct.adjustments });
+    expect(back.balance).toBeCloseTo(acct.balance, 9);
+    expect(back.adjustments).toHaveLength(3);
+    expect(back.payoutsSwept()).toBe(250);
+  });
+});

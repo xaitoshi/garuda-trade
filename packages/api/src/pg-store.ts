@@ -10,7 +10,7 @@ import {
   type Lifecycle,
   type ChallengeStatus,
 } from "@garuda/risk-engine";
-import { SimAccount, type Fill, type FundingPayment, type Order } from "@garuda/sim-engine";
+import { SimAccount, type BalanceAdjustment, type Fill, type FundingPayment, type Order } from "@garuda/sim-engine";
 import type { Challenge, ChallengeStore, ChallengeSummary, ReviveRequestRecord, SummaryFilter } from "./store.js";
 
 type Row = Record<string, any>;
@@ -33,6 +33,7 @@ interface PersistedState {
 interface Cursor {
   fills: number;
   funding: number;
+  adjustments: number;
   risk: number;
   combat: number;
   orders: Map<string, string>;
@@ -121,7 +122,7 @@ export class PgChallengeStore implements ChallengeStore {
 
   async save(c: Challenge): Promise<void> {
     const cur = this.cursors.get(c);
-    const prev: Cursor = cur ?? { fills: 0, funding: 0, risk: 0, combat: 0, orders: new Map(), row: "" };
+    const prev: Cursor = cur ?? { fills: 0, funding: 0, adjustments: 0, risk: 0, combat: 0, orders: new Map(), row: "" };
     const state: PersistedState = {
       risk: structuredClone(c.risk.state) as RiskMonitorState,
       marks: Object.fromEntries(c.account.marks),
@@ -157,10 +158,11 @@ export class PgChallengeStore implements ChallengeStore {
 
     const fills = c.account.fills.slice(prev.fills);
     const funding = c.account.fundingPayments.slice(prev.funding);
+    const adjustments = c.account.adjustments.slice(prev.adjustments);
     const risk = c.riskEvents.slice(prev.risk);
     const combat = c.combatLog.slice(prev.combat);
     const orders = [...c.account.orders.values()].filter((o) => prev.orders.get(o.id) !== orderPrint(o));
-    if (cur && rowKey === prev.row && !fills.length && !funding.length && !risk.length && !combat.length && !orders.length) return;
+    if (cur && rowKey === prev.row && !fills.length && !funding.length && !adjustments.length && !risk.length && !combat.length && !orders.length) return;
 
     const now = Date.now();
     await this.db.tx(async (q) => {
@@ -168,6 +170,7 @@ export class PgChallengeStore implements ChallengeStore {
       for (const o of orders) await upsertOrder(q, c.id, o);
       for (const [i, f] of fills.entries()) await insertFill(q, c.id, prev.fills + i, f);
       for (const [i, p] of funding.entries()) await insertFunding(q, c.id, prev.funding + i, p);
+      for (const [i, a] of adjustments.entries()) await insertAdjustment(q, c.id, prev.adjustments + i, a);
       for (const [i, e] of risk.entries()) {
         await q.query("INSERT INTO risk_events (challenge_id, seq, type, ts, data) VALUES ($1, $2, $3, $4, $5)", [c.id, prev.risk + i, e.type, e.ts, JSON.stringify(e)]);
       }
@@ -179,6 +182,7 @@ export class PgChallengeStore implements ChallengeStore {
     const next: Cursor = {
       fills: c.account.fills.length,
       funding: c.account.fundingPayments.length,
+      adjustments: c.account.adjustments.length,
       risk: c.riskEvents.length,
       combat: c.combatLog.length,
       orders: new Map([...prev.orders, ...orders.map((o) => [o.id, orderPrint(o)] as const)]),
@@ -191,10 +195,11 @@ export class PgChallengeStore implements ChallengeStore {
   // ------------------------------------------------------------------- load
 
   private async readLedger(q: Queryable, id: string) {
-    const [orders, fills, funding, risk, combat] = await Promise.all([
+    const [orders, fills, funding, adjustments, risk, combat] = await Promise.all([
       q.query<Row>("SELECT * FROM orders WHERE challenge_id = $1 ORDER BY created_at, id", [id]),
       q.query<Row>("SELECT * FROM fills WHERE challenge_id = $1 ORDER BY seq", [id]),
       q.query<Row>("SELECT * FROM funding_payments WHERE challenge_id = $1 ORDER BY seq", [id]),
+      q.query<Row>("SELECT * FROM balance_adjustments WHERE challenge_id = $1 ORDER BY seq", [id]),
       q.query<Row>("SELECT * FROM risk_events WHERE challenge_id = $1 ORDER BY seq", [id]),
       q.query<Row>("SELECT * FROM combat_log WHERE challenge_id = $1 ORDER BY seq", [id]),
     ]);
@@ -202,6 +207,7 @@ export class PgChallengeStore implements ChallengeStore {
       orders: orders.rows.map(rowToOrder),
       fills: fills.rows.map(rowToFill),
       funding: funding.rows.map(rowToFunding),
+      adjustments: adjustments.rows.map(rowToAdjustment),
       risk: risk.rows.map((r) => json<RiskEvent>(r.data)),
       combat: combat.rows.map((r) => ({ ts: num(r.ts), kind: r.kind, text: String(r.text), amount: optNum(r.amount) }) as CombatLogEntry),
     };
@@ -220,6 +226,7 @@ export class PgChallengeStore implements ChallengeStore {
       orders: ledger.orders,
       fills: ledger.fills,
       fundingPayments: ledger.funding,
+      adjustments: ledger.adjustments,
       marks: state.marks,
       fundingAccruedTo: state.fundingAccruedTo,
       seq: state.seq,
@@ -254,6 +261,7 @@ export class PgChallengeStore implements ChallengeStore {
     this.cursors.set(c, {
       fills: ledger.fills.length,
       funding: ledger.funding.length,
+      adjustments: ledger.adjustments.length,
       risk: ledger.risk.length,
       combat: ledger.combat.length,
       orders: new Map(ledger.orders.map((o) => [o.id, orderPrint(o)])),
@@ -276,7 +284,7 @@ export class PgChallengeStore implements ChallengeStore {
     const row = (await this.db.query<Row>("SELECT starting_balance, balance FROM challenges WHERE id = $1", [id])).rows[0];
     if (!row) return undefined;
     const ledger = await this.readLedger(this.db, id);
-    const acct = SimAccount.restore({ id, startingBalance: num(row.starting_balance), orders: ledger.orders, fills: ledger.fills, fundingPayments: ledger.funding });
+    const acct = SimAccount.restore({ id, startingBalance: num(row.starting_balance), orders: ledger.orders, fills: ledger.fills, fundingPayments: ledger.funding, adjustments: ledger.adjustments });
     const diff = Math.abs(acct.balance - num(row.balance));
     return { ok: diff <= tolerance, storedBalance: num(row.balance), replayedBalance: acct.balance, diff, fills: ledger.fills.length };
   }
@@ -319,6 +327,12 @@ async function insertFunding(q: Queryable, challengeId: string, seq: number, p: 
     [challengeId, seq, p.symbol, p.amount, p.rateHourly, p.markPrice, p.positionSize, p.ts],
   );
 }
+
+async function insertAdjustment(q: Queryable, challengeId: string, seq: number, a: BalanceAdjustment) {
+  await q.query("INSERT INTO balance_adjustments (challenge_id, seq, id, kind, amount, ref, ts) VALUES ($1, $2, $3, $4, $5, $6, $7)", [challengeId, seq, a.id, a.kind, a.amount, a.ref, a.ts]);
+}
+
+const rowToAdjustment = (r: Row): BalanceAdjustment => ({ id: String(r.id), kind: r.kind, amount: num(r.amount), ref: String(r.ref), ts: num(r.ts) });
 
 const rowToOrder = (r: Row): Order => ({
   id: String(r.id),

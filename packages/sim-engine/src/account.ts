@@ -1,4 +1,4 @@
-import type { Fill, FundingPayment, Order, Position } from "./types.js";
+import type { BalanceAdjustment, Fill, FundingPayment, Order, Position } from "./types.js";
 
 const EPS = 1e-12;
 
@@ -23,6 +23,8 @@ export class SimAccount {
   readonly orders = new Map<string, Order>();
   readonly fills: Fill[] = [];
   readonly fundingPayments: FundingPayment[] = [];
+  /** Payout sweeps and reversals: the only non-trading balance changes. Append-only. */
+  readonly adjustments: BalanceAdjustment[] = [];
   /** Latest mark price per symbol. */
   readonly marks = new Map<string, number>();
   /** Per-symbol ms epoch up to which funding has been accrued. */
@@ -46,6 +48,7 @@ export class SimAccount {
     orders: Order[];
     fills: Fill[];
     fundingPayments: FundingPayment[];
+    adjustments?: BalanceAdjustment[];
     marks?: Record<string, number>;
     fundingAccruedTo?: Record<string, number>;
     seq?: number;
@@ -58,6 +61,7 @@ export class SimAccount {
       a.fundingPaid += p.amount;
       a.fundingPayments.push({ ...p });
     }
+    for (const adj of input.adjustments ?? []) a.applyAdjustment(adj);
     for (const [k, v] of Object.entries(input.marks ?? {})) a.setMark(k, v);
     for (const [k, v] of Object.entries(input.fundingAccruedTo ?? {})) a.fundingAccruedTo.set(k, v);
     const maxFromIds = Math.max(0, ...[...a.orders.keys(), ...a.fills.map((f) => f.id)].map((id) => Number(id.split("_").pop()) || 0));
@@ -83,6 +87,25 @@ export class SimAccount {
     if (Math.abs(f.positionAfter) <= EPS) this.positions.delete(f.symbol);
     else this.positions.set(f.symbol, { symbol: f.symbol, size: f.positionAfter, entryPrice: newEntry });
     this.fills.push({ ...f });
+  }
+
+  /** Record a balance adjustment. Returns false (and changes nothing) when an adjustment with the same id is already recorded. */
+  applyAdjustment(adj: BalanceAdjustment): boolean {
+    if (this.adjustments.some((a) => a.id === adj.id)) return false;
+    this.balance += adj.amount;
+    this.adjustments.push({ ...adj });
+    return true;
+  }
+
+  hasAdjustment(id: string): boolean {
+    return this.adjustments.some((a) => a.id === id);
+  }
+
+  /** Net USD swept out of the account by payouts (sweeps minus reversals). */
+  payoutsSwept(): number {
+    let n = 0;
+    for (const a of this.adjustments) n -= a.amount;
+    return n;
   }
 
   nextId(prefix: string): string {

@@ -208,3 +208,32 @@ describe("snapshot (HP / armor / boss bars)", () => {
     expect(m.snapshot().targetProgressPct).toBeCloseTo(0.5, 8);
   });
 });
+
+describe("payout rebase (rulebook section 11: the balance resets after a payout)", () => {
+  it("a sweep is not a daily loss: the start-of-day balance drops to the post-payout balance", () => {
+    const m = new RiskMonitor({ limits: limitsForTier("knight", "funded"), createdAt: D1 });
+    // day 1 closes at a $28,000 balance, day 2 opens from it (floor 27,160)
+    m.evaluate({ balance: 28_000, equity: 28_000, now: D1 });
+    const day2 = D1 + 24 * 3_600_000;
+    expect(m.evaluate({ balance: 28_000, equity: 28_000, now: day2 }).map((e) => e.type)).toEqual(["day_reset"]);
+    expect(m.dailyFloor).toBeCloseTo(27_160, 6);
+    // WITHOUT a rebase the swept balance would breach on the next evaluation
+    const naive = new RiskMonitor({ limits: limitsForTier("knight", "funded"), createdAt: D1, restore: structuredClone(m.state) as never });
+    expect(naive.evaluate({ balance: 25_000, equity: 25_000, now: day2 + 1000 }).map((e) => e.type)).toContain("breach");
+    // with it, the account lives and its floors are the post-payout ones (static drawdown never moves)
+    m.rebaseAfterPayout(25_000, 25_000, day2 + 1000);
+    expect(m.state.startOfDayBalance).toBe(25_000);
+    expect(m.evaluate({ balance: 25_000, equity: 25_000, now: day2 + 2000 })).toEqual([]);
+    expect(m.status).toBe("active");
+    expect(m.dailyFloor).toBeCloseTo(24_250, 6);
+    expect(m.ddFloor).toBeCloseTo(23_500, 6);
+    // and a real loss after the payout still breaches
+    expect(m.evaluate({ balance: 24_000, equity: 24_000, now: day2 + 3000 }).map((e) => e.type)).toContain("breach");
+  });
+
+  it("never raises the start-of-day balance", () => {
+    const m = knight(); // SOD 25,000
+    m.rebaseAfterPayout(26_000, 26_000, D1 + 1000);
+    expect(m.state.startOfDayBalance).toBe(25_000);
+  });
+});

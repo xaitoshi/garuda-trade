@@ -102,3 +102,17 @@ export interface OrderResult {
   /** Adverse slippage vs the arrival mid, in bps (positive = worse). */
   slippageBps?: number;
 }
+
+/**
+ * A non-trading change to the cash balance, recorded in the account ledger so a replay reproduces it.
+ * `amount` is the SIGNED change to balance: a payout sweep is negative, its reversal (a rejected payout) is positive.
+ * `id` is unique per account: applying the same id twice is a no-op, which makes payout retries idempotent.
+ */
+export interface BalanceAdjustment {
+  id: string;
+  kind: "payout_sweep" | "payout_reversal";
+  amount: number;
+  /** What caused it (the payout id). */
+  ref: string;
+  ts: number;
+}
