@@ -104,3 +104,9 @@ export function drawdownFloor(startingBalance: number, maxDrawdownPct: number = 
 export function targetEquity(startingBalance: number, profitTargetPct: number = COMMON_RULES.profitTargetPct): number {
   return cents(startingBalance * (1 + profitTargetPct));
 }
+
+/** Funded-account inactivity (§18): Dormant after 90 days with no order and no payout request, archived 365 days after that. */
+export const DORMANCY = { dormantAfterDays: 90, archiveAfterDays: 365 } as const;
+
+/** Demo account (§2, §18): free, one active per wallet, restart 1 hour after a breach, resets after 30 idle days. */
+export const DEMO_RULES = { restartCooldownMs: 3_600_000, idleResetDays: 30 } as const;
