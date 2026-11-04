@@ -146,6 +146,14 @@ describe("knight NFT on challenge", () => {
     expect(await code(r.svc.create({ tier: "squire", stage: "funded", wallet: A, knightAsset: c.knightId }))).toBe("409:funded_exists");
   });
 
+  it("a knight keeps its name when it opens a funded account (unless the caller picks another)", async () => {
+    const r = nftRig();
+    const c = await r.svc.create({ tier: "squire", wallet: A, knight: "Sir Pudding" });
+    await pass(r, c.id);
+    const f = await r.svc.create({ tier: "squire", stage: "funded", wallet: A, knightAsset: c.knightId });
+    expect(f.knight).toBe("Sir Pudding");
+  });
+
   it("an owner re-check after the freeze catches a knight that moved mid-open", async () => {
     const r = nftRig();
     const c = await r.svc.create({ tier: "squire", wallet: A });

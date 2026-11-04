@@ -346,6 +346,8 @@ export class ChallengeService {
     if (stage === "funded" || (spec.requires && this.enforceGating)) {
       const info = await this.verifyKnight(input, stage);
       ch.knightId = info.asset;
+      // The knight keeps its name across accounts: reuse the onchain one unless the caller picked a name.
+      if (!input.knight?.trim()) ch.knight = info.name.replace(/^Knight /, "").trim() || ch.knight;
       await this.lockKnight(ch, info.owner);
       return;
     }
