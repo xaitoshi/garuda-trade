@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start (or restart) the Garuda test backend on this box: embedded Postgres + API/worker + a Cloudflare quick tunnel.
 # Usage: scripts/ops/backend.sh [start|stop|status]     Requires PRIVY_APP_ID / PRIVY_APP_SECRET in the environment.
-# Optional env: GARUDA_CORS_ORIGIN (default: Vercel project domains), CLOUDFLARED (default ~/bin/cloudflared).
+# Optional env: GARUDA_ADMIN_TOKEN (default .keys/admin-token, generated), GARUDA_PAYOUT_SPLIT, GARUDA_PAYOUT_AUTO_MAX, GARUDA_CORS_ORIGIN (default: Vercel project domains), CLOUDFLARED (default ~/bin/cloudflared).
 # The quick tunnel URL CHANGES on every start: after a restart, update VITE_API_URL in Vercel and redeploy the web app.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -37,6 +37,12 @@ start() {
     sleep 8
     grep -q "Registered tunnel connection" "$RUN/tunnel.log" || echo "WARNING: cloudflared could not register with the Cloudflare edge (egress blocked?), the tunnel URL will answer 530. See $RUN/tunnel.log"
   fi
+  # Admin API token: from the environment, else a gitignored file (generated on first start). Never printed.
+  if [ -z "${GARUDA_ADMIN_TOKEN:-}" ]; then
+    [ -s .keys/admin-token ] || { umask 077; openssl rand -hex 32 > .keys/admin-token; }
+    GARUDA_ADMIN_TOKEN="$(cat .keys/admin-token)"
+  fi
+  export GARUDA_ADMIN_TOKEN
   KC="$(node -p "require('./.keys/chain.json').collection")"; UM="$(node -p "require('./.keys/chain.json').usdcMint")"
   DATABASE_URL="postgres://garuda:garuda@127.0.0.1:${GARUDA_PG_PORT:-5433}/garuda" \
   GARUDA_CHAIN=devnet GARUDA_KNIGHT_COLLECTION="${GARUDA_KNIGHT_COLLECTION:-$KC}" GARUDA_USDC_MINT="${GARUDA_USDC_MINT:-$UM}" \
