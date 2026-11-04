@@ -464,22 +464,36 @@ export class ChallengeService {
    * Reduce-only orders always fill.
    */
   private fillGate(ch: Challenge, t: number): RestingFillGate {
-    return (order, size) => {
+    return (order, size, price) => {
       if (order.reduceOnly) return { size };
       const mark = ch.account.markOf(order.symbol);
       if (mark === undefined) return { size };
       const positions = this.legs(ch);
       const equity = ch.account.equity();
-      const chk = checkOrderLeverage({ equity, positions, order: { symbol: order.symbol, side: order.side, size, markPrice: mark } });
-      if (chk.allowed) return { size };
-      const max = chk.reason === "market_not_whitelisted" ? 0 : maxOrderSize({ equity, positions, symbol: order.symbol, side: order.side, markPrice: mark });
-      const allowed = Math.max(0, Math.min(size, max * (1 - 1e-9)));
+      const sign = order.side === "buy" ? 1 : -1;
+      // The fill happens at the limit price, not the mark, and pays a fee: equity right after the fill is lower than now.
+      const equityAfter = (s: number) => equity - sign * (price - mark) * s - s * price * this.engine.fees.makerFeeRate;
+      const fits = (s: number) =>
+        checkOrderLeverage({ equity: equityAfter(s), positions, order: { symbol: order.symbol, side: order.side, size: s, markPrice: mark } });
+      const full = fits(size);
+      if (full.allowed) return { size };
+      let allowed = 0;
+      if (full.reason !== "market_not_whitelisted") {
+        let lo = 0;
+        let hi = size;
+        for (let i = 0; i < 60; i++) {
+          const mid = (lo + hi) / 2;
+          if (fits(mid).allowed) lo = mid;
+          else hi = mid;
+        }
+        allowed = lo * (1 - 1e-9);
+      }
       ch.combatLog.push({
         ts: t,
         kind: "warning",
         text: `${ch.knight}'s resting ${order.side} for ${size} ${order.symbol} is ${allowed > 0 ? `trimmed to ${Number(allowed.toPrecision(6))}` : "cancelled"}: leverage cap`,
       });
-      return { size: allowed, reason: chk.reason ?? "leverage_cap_exceeded" };
+      return { size: allowed, reason: full.reason ?? "leverage_cap_exceeded" };
     };
   }
 
@@ -532,6 +546,9 @@ export class ChallengeService {
         if (!ch) return;
         await this.mutate(ch, async () => {
           if (!this.isLive(ch)) return;
+          // A snapshot older than the book we already hold (out-of-order delivery) must not roll marks backwards.
+          const held = ch.books.get(snap.symbol);
+          if (held && snap.book.ts < held.ts) return;
           const t = this.now();
           const fills = this.applySnapshot(ch, snap, t);
           this.logFills(ch, fills);
