@@ -17,7 +17,11 @@
     "api": "tsx packages/worker/src/server.ts",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
     "db:up": "docker compose up -d db",
-    "test:pg": "GARUDA_TEST_PG=embedded vitest run"
+    "test:pg": "GARUDA_TEST_PG=embedded vitest run",
+    "chain:setup": "tsx scripts/chain-setup.ts",
+    "chain:faucet": "tsx scripts/chain-mint-test-usdc.ts",
+    "test:chain:local": "LOCAL_VALIDATOR=1 vitest run packages/api/test/e2e-chain.test.ts",
+    "test:chain:devnet": "DEVNET=1 vitest run packages/api/test/e2e-chain.test.ts"
   },
   "devDependencies": {
     "@garuda/api": "workspace:*",
@@ -30,6 +34,7 @@
     "embedded-postgres": "18.6.0-beta.19",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "@garuda/chain": "workspace:*"
   }
 }

@@ -11,6 +11,9 @@ importers:
       '@garuda/api':
         specifier: workspace:*
         version: link:packages/api
+      '@garuda/chain':
+        specifier: workspace:*
+        version: link:packages/chain
       '@garuda/db':
         specifier: workspace:*
         version: link:packages/db
@@ -118,6 +121,9 @@ importers:
       '@garuda/api':
         specifier: workspace:*
         version: link:../api
+      '@garuda/chain':
+        specifier: workspace:*
+        version: link:../chain
       '@garuda/db':
         specifier: workspace:*
         version: link:../db

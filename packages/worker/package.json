@@ -13,6 +13,7 @@
     "@garuda/market-data": "workspace:*",
     "@garuda/risk-engine": "workspace:*",
     "@garuda/sim-engine": "workspace:*",
-    "@garuda/db": "workspace:*"
+    "@garuda/db": "workspace:*",
+    "@garuda/chain": "workspace:*"
   }
 }
