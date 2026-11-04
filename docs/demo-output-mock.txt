@@ -1,0 +1,69 @@
+
+=== Garuda core demo ===
+Market data: MOCK (forced): using RECORDED real Phoenix books
+Price MOVES after entry are SCRIPTED (scenario overlay on the real book); clock is simulated.
+
+SOL book: bid 93.08 / ask 93.09, mark 93.06, funding 0.00126%/h, 60x60 levels, source=replay, slot 465332517
+
+=== Challenge A: Knight $25k, Sir Pudding ===
+  [2026-11-04 09:00 UTC] ACTIVE | balance $25,000 equity $25,000 (P&L +$0.00)
+     HP (daily) 100%  armor (DD) 100%  boss 100% HP left  | floor $24,250 (daily $24,250, DD $23,500)
+
+[a] ETH short $100k, then ETH rips +0.30%
+  open: sell 43.126 ETH market, 7 fill(s) @ avg 2318.7390, slippage 4.36 bps, fee $35 (taker)
+     > Sir Pudding dives short: 43.126 ETH @ 2318.7 (fee $35)
+  [2026-11-04 09:10 UTC] ACTIVE | balance $24,965 equity $24,621 (P&L -$379)
+     HP (daily) 50%  armor (DD) 75%  boss 100% HP left  | floor $24,250 (daily $24,250, DD $23,500)
+     pos short 43.126000000000005 ETH @ 2318.7390 mark 2326.7092 uPnL -$344
+  close: buy 43.126 ETH market, 7 fill(s) @ avg 2327.9114, slippage 5.17 bps, fee $35 (taker)
+     > Sir Pudding is scorched for -$431 (ETH short closed)
+
+[b] SOL long $120k, SOL +1.2%, take profit
+  open: buy 1289.491 SOL market, 2 fill(s) @ avg 93.0971, slippage 1.30 bps, fee $42 (taker)
+     > Sir Pudding charges long: 1289.49 SOL @ 93.10 (fee $42)
+  close: sell 1289.491 SOL market, 5 fill(s) @ avg 94.1712, slippage 3.27 bps, fee $43 (taker)
+     > Sir Pudding unleashes a mighty blow for +$1,343 (SOL long closed)
+
+[c] BTC limit buy 0.4% below mid rests; dip fills it as maker; hold overnight (funding accrues)
+  limit: buy 0.51 BTC limit @ 78130 RESTING (order ord_ch_b71dc879_26)
+  fill: buy 0.51 BTC @ 78130 (maker), fee $1.99
+  after rollover: day 2026-11-05, start-of-day balance $25,833, daily floor $25,058, funding paid so far $7.98
+  [2026-11-05 02:00 UTC] ACTIVE | balance $25,825 equity $26,066 (P&L +$1,066)
+     HP (daily) 100%  armor (DD) 100%  boss 57% HP left  | floor $25,058 (daily $25,058, DD $23,500)
+     pos long 0.51 BTC @ 78130.0000 mark 78601.8900 uPnL +$241
+
+[d] Close BTC, then SOL long at max-ish size, +0.9%: reach the +10% target
+  close: sell 0.51 BTC market, 9 fill(s) @ avg 78591.0425, slippage 1.38 bps, fee $14 (taker)
+     > Sir Pudding strikes for +$221 (BTC long closed)
+  open: buy 2658.893 SOL market, 4 fill(s) @ avg 93.1098, slippage 2.67 bps, fee $87 (taker)
+     > Sir Pudding charges long: 2658.89 SOL @ 93.11 (fee $87)
+  [2026-11-05 02:35 UTC] PASSED | balance $28,357 equity $28,357 (P&L +$3,357)
+     HP (daily) 100%  armor (DD) 100%  boss 0% HP left  | floor $25,058 (daily $25,058, DD $23,500)
+  payout preview if funded: gross $3,357, trader 80% $2,686, eligible=true
+
+=== Combat log (Challenge A) ===
+  09:00  Sir Pudding rides out with 25,000 simulated USDC. Daily limit 3%, drawdown 6% static, boss at +10%
+  09:00  Sir Pudding dives short: 43.126 ETH @ 2318.7 (fee $35)
+  09:10  Sir Pudding's HP is at 50%: 50% of the Daily Loss buffer is gone, $371 left before the line
+  09:10  Sir Pudding is scorched for -$431 (ETH short closed)
+  09:30  Sir Pudding charges long: 1289.49 SOL @ 93.10 (fee $42)
+  09:45  Sir Pudding unleashes a mighty blow for +$1,343 (SOL long closed)
+  10:25  Sir Pudding charges long: 0.51 BTC @ 78130.0 (fee $1.99)
+  02:00  A new day dawns for Sir Pudding: HP restored, daily limit $775 (floor $25,058)
+  02:00  Sir Pudding strikes for +$221 (BTC long closed)
+  02:20  Sir Pudding charges long: 2658.89 SOL @ 93.11 (fee $87)
+  02:35  Sir Pudding slays the boss! Equity $28,563 reached the $27,500 target. Challenge PASSED
+  02:35  Sir Pudding unleashes a mighty blow for +$2,451 (SOL long closed, forced exit)
+
+=== Challenge B: free Demo ($5k), reckless 9x SOL long, then a -0.5% drop ===
+  open: buy 483.559 SOL market, 2 fill(s) @ avg 93.0923, slippage 0.79 bps, fee $16 (taker)
+     > Sir Reckless charges long: 483.559 SOL @ 93.09 (fee $16)
+  SOL -0.10% -> ACTIVE equity $4,936 (floor $4,850)
+  SOL -0.35% -> WOUNDED equity $4,801 (floor $4,850)
+  03:35  Sir Reckless rides out with 5,000 simulated USDC. Daily limit 3%, drawdown 6% static, boss at +10%
+  03:35  Sir Reckless charges long: 483.559 SOL @ 93.09 (fee $16)
+  03:45  Sir Reckless falls, Wounded! Daily Loss limit breached at equity $4,823 (limit $4,850). Revive to ride again
+  03:45  Sir Reckless is badly burned for -$184 (SOL long closed, forced exit)
+
+=== Done ===
+Data source for this run: MOCK (forced): using RECORDED real Phoenix books

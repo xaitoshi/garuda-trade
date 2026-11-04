@@ -1,0 +1,30 @@
+{
+  "name": "garuda-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Garuda core: simulated matching engine, risk engine and challenge API on Phoenix Perps market data",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "demo": "tsx scripts/demo.ts",
+    "demo:mock": "GARUDA_DEMO_MOCK=1 tsx scripts/demo.ts",
+    "api": "tsx packages/api/src/server.ts",
+    "fixtures:record": "tsx scripts/record-fixtures.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@garuda/api": "workspace:*",
+    "@garuda/market-data": "workspace:*",
+    "@garuda/risk-engine": "workspace:*",
+    "@garuda/sim-engine": "workspace:*"
+  }
+}
