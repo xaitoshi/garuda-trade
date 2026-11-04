@@ -138,5 +138,5 @@ section.s{padding:170px var(--pad) 0}
 main.pg-landing{padding:0;max-width:1440px}
 .pg-landing .phoenix{position:absolute;left:50%;top:50%;width:620px;height:620px;transform:translate(-50%,-46%)}
 .pg-landing .phoenix .glow{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,rgba(255,95,1,.28),rgba(255,95,1,.08) 55%,transparent 72%)}
-.pg-landing .phoenix .mark{position:absolute;left:50%;top:50%;width:520px;height:300px;transform:translate(-50%,-50%);background:url(/logo-mark.svg) center/contain no-repeat}
-.pg-landing .phoenix .glowmark{background:#ff5f01;-webkit-mask:url(/logo-mark.svg) center/contain no-repeat;mask:url(/logo-mark.svg) center/contain no-repeat;filter:blur(16px);opacity:.55}
+.pg-landing .phoenix .mark{position:absolute;left:50%;top:50%;width:300px;height:515px;transform:translate(-50%,-50%);background:#f2f0f0;-webkit-mask:url(/logo.svg) center/contain no-repeat;mask:url(/logo.svg) center/contain no-repeat}
+.pg-landing .phoenix .glowmark{background:#ff5f01;filter:blur(14px);opacity:.7}
