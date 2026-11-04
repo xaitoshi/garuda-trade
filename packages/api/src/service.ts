@@ -12,6 +12,7 @@ import type { MarketDataProvider, MarketSnapshot } from "@garuda/market-data";
 import {
   CIRCUIT_BREAKER,
   COMMON_RULES,
+  DEFAULT_PAYOUT_POLICY,
   DORMANCY,
   REVIVE_RULES,
   TIERS,
@@ -30,9 +31,11 @@ import {
   requiredMargin,
   riskEventToCombat,
   RiskMonitor,
+  usd,
   type CombatLogEntry,
   type HeldAccount,
   type Lifecycle,
+  type PayoutPolicy,
   type PayoutQuote,
   type ReviveCheck,
   type RiskEvent,
@@ -90,6 +93,8 @@ export interface ServiceDeps {
    * passes `paid`). Without it, `create` of a paid tier is refused with 402 `payment_required`.
    */
   requirePayment?: boolean;
+  /** Payout split, minimum and auto-approve ceiling (M8). Default: the rulebook numbers. */
+  payoutPolicy?: PayoutPolicy;
 }
 
 export interface CreateOpts {
@@ -162,6 +167,8 @@ export interface ChallengeState {
     equity: number;
     unrealizedPnl: number;
     realizedPnl: number;
+    /** Net USD swept out of the balance by payouts so far (sweeps minus reversals). */
+    paidOut: number;
     feesPaid: number;
     fundingPaid: number;
     grossNotional: number;
@@ -218,6 +225,16 @@ const depthWithin = (levels: readonly (readonly [number, number])[], mid: number
 
 const TERMINAL_LIFECYCLE: Lifecycle = "archived";
 
+/** USD rounded DOWN to whole cents: a payout never pays the trader a fraction of a cent more than the quote. */
+export const floorCents = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+
+const payoutReasonText = (reason: PayoutQuote["reason"], p: PayoutPolicy): string =>
+  reason === "open_positions"
+    ? "Close all open positions before requesting a payout"
+    : reason === "no_profit"
+      ? "No profit above the starting balance to pay out"
+      : `Your share of the profit is below the $${p.minUsd} minimum payout`;
+
 /** Challenge ids opened by a paid revive derive from the order id, so a retry can never open a second account. */
 export const reviveChallengeId = (orderId: string) => `ch_${orderId.replace(/^ord_/, "")}`;
 
@@ -230,6 +247,7 @@ export class ChallengeService {
   private readonly enforceGating: boolean;
   private readonly requireWalletForDemo: boolean;
   private readonly requirePayment: boolean;
+  readonly payoutPolicy: PayoutPolicy;
   /** Knight NFT chain (undefined = no NFTs: legacy trusted `nftLevels` mode). */
   readonly knights?: KnightNft;
   private knightChains = new Map<string, Promise<unknown>>();
@@ -252,6 +270,7 @@ export class ChallengeService {
     this.requireWalletForDemo = deps.requireWalletForDemo ?? false;
     this.knights = deps.knights;
     this.requirePayment = deps.requirePayment ?? false;
+    this.payoutPolicy = deps.payoutPolicy ?? DEFAULT_PAYOUT_POLICY;
   }
 
   // ------------------------------------------------------------------ create
@@ -963,14 +982,118 @@ export class ChallengeService {
    * Privy email login is the embedded Solana wallet). Without a signed-in wallet (open dev mode) it falls back to the
    * knight holder, then the account's wallet.
    */
-  async payoutQuote(id: string, actorWallet?: string): Promise<PayoutQuote & { destination?: string }> {
+  async payoutQuote(id: string, actorWallet?: string): Promise<PayoutQuote & { destination?: string; split: number; minUsd: number; autoMaxUsd: number; autoApprove: boolean }> {
     const ch = await this.get(id);
+    this.assertPayoutAccount(ch);
+    const q = this.quoteFor(ch);
+    const holder = this.knights && ch.knightId ? (await this.knights.get(ch.knightId))?.owner : undefined;
+    const { split, minUsd, autoMaxUsd } = this.payoutPolicy;
+    return { ...q, destination: actorWallet ?? holder ?? ch.wallet, split, minUsd, autoMaxUsd, autoApprove: q.eligible && floorCents(q.traderShare) <= autoMaxUsd };
+  }
+
+  private assertPayoutAccount(ch: Challenge): void {
     if (ch.tier === "demo") throw new ServiceError(403, "payouts_unavailable", "Demo accounts have no payouts");
     if (ch.stage !== "funded") throw new ServiceError(403, "payouts_unavailable", "Payouts are only available on funded accounts");
     if (ch.risk.status === "wounded") throw new ServiceError(403, "payouts_unavailable", "Breached accounts have no payouts");
-    const q = quotePayout({ startingBalance: ch.account.startingBalance, balance: ch.account.balance, hasOpenPositions: ch.account.positions.size > 0 });
-    const holder = this.knights && ch.knightId ? (await this.knights.get(ch.knightId))?.owner : undefined;
-    return { ...q, destination: actorWallet ?? holder ?? ch.wallet };
+  }
+
+  private quoteFor(ch: Challenge): PayoutQuote {
+    return quotePayout({
+      startingBalance: ch.account.startingBalance,
+      balance: ch.account.balance,
+      hasOpenPositions: ch.account.positions.size > 0,
+      split: this.payoutPolicy.split,
+      minPayout: this.payoutPolicy.minUsd,
+    });
+  }
+
+  /**
+   * Reserve a payout (M8), atomically with the challenge lock held:
+   *   1. refresh marks and run the risk rules (rolls the day, so the sweep below can never read as a daily loss),
+   *   2. re-check eligibility on the fresh numbers (funded, not breached, flat book, profit above the minimum),
+   *   3. `hooks.create` persists the payout record (it returns the existing one for an idempotent replay),
+   *   4. sweep the profit out of the balance (a ledger adjustment, rulebook section 11: the balance resets to the
+   *      starting balance), rebase the daily-loss baseline, save,
+   *   5. `hooks.debited` marks the payout as debited.
+   * A crash between 3 and 5 leaves a payout whose sweep is not applied; `payoutFinalizeDebit` finishes it.
+   */
+  async payoutReserve<T extends { id: string; replayed?: boolean }>(
+    id: string,
+    actorWallet: string | undefined,
+    hooks: {
+      create(q: PayoutQuote & { destination: string; sweepUsd: number }): Promise<T>;
+      debited(created: T): Promise<T>;
+    },
+  ): Promise<T> {
+    const ch = await this.get(id);
+    return this.mutate(ch, async () => {
+      this.assertPayoutAccount(ch);
+      await this.refresh(ch);
+      this.assertPayoutAccount(ch); // the refresh may just have breached it
+      const q = this.quoteFor(ch);
+      if (!q.eligible) {
+        throw new ServiceError(409, "payout_not_eligible", payoutReasonText(q.reason, this.payoutPolicy), { reason: q.reason, quote: q });
+      }
+      const holder = this.knights && ch.knightId ? (await this.knights.get(ch.knightId))?.owner : undefined;
+      if (this.knights && ch.knightId && actorWallet && holder !== actorWallet) throw new ServiceError(403, "not_knight_owner", "Only the wallet holding this knight can request a payout");
+      const destination = actorWallet ?? holder ?? ch.wallet;
+      if (!destination) throw new ServiceError(400, "no_destination", "No wallet to pay: sign in first");
+      const created = await hooks.create({ ...q, destination, sweepUsd: q.grossProfit });
+      if (created.replayed) return created;
+      const t = this.now();
+      this.applySweep(ch, created.id, q.grossProfit, t);
+      ch.lastActivityAt = t;
+      if (ch.lifecycle === "dormant") this.wake(ch, t);
+      await this.store.save(ch);
+      return hooks.debited(created);
+    });
+  }
+
+  private applySweep(ch: Challenge, payoutId: string, sweepUsd: number, t: number): boolean {
+    const applied = ch.account.applyAdjustment({ id: `payout_sweep:${payoutId}`, kind: "payout_sweep", amount: -sweepUsd, ref: payoutId, ts: t });
+    if (!applied) return false;
+    ch.risk.rebaseAfterPayout(ch.account.balance, ch.account.equity(), t);
+    ch.combatLog.push({ ts: t, kind: "tribute", text: `${ch.knight} pays tribute: ${usd(sweepUsd)} of profit swept, balance back to ${usd(ch.account.startingBalance)}` });
+    return true;
+  }
+
+  /**
+   * Finish the sweep of a payout whose record exists but whose debit was never confirmed (a crash in the window
+   * above). Idempotent. `impossible` means the profit is no longer there (the account traded in between), so the
+   * payout cannot be honoured and the caller rejects it; nothing was swept so nothing is reversed.
+   */
+  async payoutFinalizeDebit(id: string, payoutId: string, sweepUsd: number): Promise<"applied" | "already" | "impossible"> {
+    const ch = await this.get(id);
+    return this.mutate(ch, async () => {
+      if (ch.account.hasAdjustment(`payout_sweep:${payoutId}`)) return "already";
+      await this.refresh(ch);
+      const profit = ch.account.balance - ch.account.startingBalance;
+      if (ch.risk.status === "wounded" || ch.account.positions.size > 0 || profit < sweepUsd - 1e-6) return "impossible";
+      this.applySweep(ch, payoutId, sweepUsd, this.now());
+      return "applied";
+    });
+  }
+
+  /** Give a rejected payout's profit back (a positive ledger adjustment). Idempotent; a no-op when nothing was swept. */
+  async payoutReverse(id: string, payoutId: string, sweepUsd: number): Promise<boolean> {
+    const ch = await this.get(id);
+    return this.mutate(ch, async () => {
+      if (!ch.account.hasAdjustment(`payout_sweep:${payoutId}`)) return false;
+      const t = this.now();
+      const applied = ch.account.applyAdjustment({ id: `payout_reversal:${payoutId}`, kind: "payout_reversal", amount: sweepUsd, ref: payoutId, ts: t });
+      if (!applied) return false;
+      ch.risk.syncFinal(ch.account.balance, ch.account.equity(), t);
+      ch.combatLog.push({ ts: t, kind: "tribute", text: `${ch.knight}'s payout is declined: ${usd(sweepUsd)} returns to the balance` });
+      return true;
+    });
+  }
+
+  /** Put a line in the account's combat log (payout paid, and so on). */
+  async payoutNote(id: string, text: string): Promise<void> {
+    const ch = await this.get(id);
+    await this.mutate(ch, async () => {
+      ch.combatLog.push({ ts: this.now(), kind: "tribute", text });
+    });
   }
 
   // ------------------------------------------------------------------ revive
@@ -1127,6 +1250,7 @@ export class ChallengeService {
         equity,
         unrealizedPnl: a.unrealizedPnl(),
         realizedPnl: a.realizedPnl,
+        paidOut: a.payoutsSwept(),
         feesPaid: a.feesPaid,
         fundingPaid: a.fundingPaid,
         grossNotional: gross,

@@ -3,6 +3,7 @@ export * from "./store.js";
 export * from "./pg-store.js";
 export * from "./payments.js";
 export * from "./purchases.js";
+export * from "./payouts.js";
 export * from "./auth.js";
 export * from "./base58.js";
 export * from "./rate-limit.js";
