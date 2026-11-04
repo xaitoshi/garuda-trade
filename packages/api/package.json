@@ -15,6 +15,7 @@
     "@garuda/risk-engine": "workspace:*",
     "@garuda/sim-engine": "workspace:*",
     "fastify": "^5.0.0",
+    "jose": "^6.2.15",
     "zod": "^3.23.8"
   }
 }
