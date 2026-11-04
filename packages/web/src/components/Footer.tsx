@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <footer className="foot mono">
       <span>
-        Garuda runs simulated accounts against the live Phoenix orderbook. Nothing here is financial advice. Not available in restricted regions.
+        Garuda runs simulated accounts against the live Phoenix orderbook. Nothing here is financial advice.
       </span>
       <span className="foot-r">
         {offline ? "API offline" : health ? `data: ${health.marketData}${health.marketDataReachable ? "" : " (unreachable)"}` : "connecting..."}

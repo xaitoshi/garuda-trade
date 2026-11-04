@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
 import { errorText } from "./api";
 import { confirmPayment, payQuote } from "./pay";
 import { useSession } from "./session";
@@ -19,9 +19,8 @@ export const STEP_TEXT: Record<PurchaseStep, string> = {
 
 /** Quote -> pay USDC -> confirm. Resolves with the fulfilled order; throws a readable Error when it fails or is refunded. */
 export function usePurchase() {
-  const wallet = useWallet();
   const { connection } = useConnection();
-  const { health } = useSession();
+  const { health, paySigner } = useSession();
   const [step, setStep] = useState<PurchaseStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [quote, setQuote] = useState<PaymentInstructions | null>(null);
@@ -33,7 +32,7 @@ export function usePurchase() {
       try {
         const q = await getQuote();
         setQuote(q);
-        const sig = await payQuote(q, { wallet, connection, stub: health?.chain === "stub" }, (s) => setStep(s));
+        const sig = await payQuote(q, { signer: paySigner, connection, stub: health?.chain === "stub" }, (s) => setStep(s));
         setStep("confirming");
         const out = await confirmPayment(q.orderId, sig);
         if (out.status === "refunded" || out.status === "refund_pending") {
@@ -48,7 +47,7 @@ export function usePurchase() {
         throw new Error(msg);
       }
     },
-    [wallet, connection, health?.chain],
+    [paySigner, connection, health?.chain],
   );
   const reset = useCallback(() => {
     setStep("idle");

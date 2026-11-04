@@ -161,7 +161,7 @@ export function Ascension({ c }: { c: ChallengeState }) {
               {busy ? "Claiming..." : "Claim funded account"}
             </button>
           )}
-          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Payouts open with KYC (coming in a later release).</div>}
+          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Payouts open with the payout rail (coming in a later release) and are sent to your signed-in wallet.</div>}
           {err && <div className="dn note">{err}</div>}
         </div>
       </div>

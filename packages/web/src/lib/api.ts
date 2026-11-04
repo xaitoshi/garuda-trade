@@ -50,6 +50,8 @@ export const api = {
 
   nonce: (wallet: string) => post<{ nonce: string; message: string }>("/auth/nonce", { wallet }),
   verify: (wallet: string, nonce: string, signature: string) => post<{ token: string; wallet: string; expiresAt: number }>("/auth/verify", { wallet, nonce, signature }),
+  /** Privy sign-in: trade a Privy access token for a Garuda session on one of the user's Solana wallets. */
+  privyLogin: (accessToken: string, wallet?: string) => post<{ token: string; wallet: string; expiresAt: number; embedded: boolean }>("/auth/privy", { accessToken, wallet }),
   logout: () => post<{ ok: true }>("/auth/logout"),
 
   challenges: () => call<{ challenges: ChallengeState[] }>("/challenges").then((r) => r.challenges),

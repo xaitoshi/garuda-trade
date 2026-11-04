@@ -5,6 +5,7 @@ import type { Adapter } from "@solana/wallet-adapter-base";
 import { SOLANA_RPC, DEV_WALLET } from "./lib/config";
 import { DevWalletAdapter } from "./lib/devWallet";
 import { SessionProvider } from "./lib/session";
+import { PrivyApp } from "./lib/PrivyApp";
 import { TopBar } from "./components/TopBar";
 import { Landing } from "./pages/Landing";
 import { Challenges } from "./pages/Challenges";
@@ -18,14 +19,18 @@ import { Footer } from "./components/Footer";
 export function App() {
   // Phantom, Solflare, Backpack... register themselves through the Wallet Standard, so no explicit list is needed.
   const wallets = useMemo<Adapter[]>(() => (DEV_WALLET ? [new DevWalletAdapter()] : []), []);
+  // PrivyApp is a pass-through unless VITE_PRIVY_APP_ID is set. The browser-wallet provider stays mounted either way:
+  // it is the sign-message fallback and what the dev wallet and the screenshots use.
   return (
-    <ConnectionProvider endpoint={SOLANA_RPC}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <SessionProvider>
-          <Shell />
-        </SessionProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <PrivyApp>
+      <ConnectionProvider endpoint={SOLANA_RPC}>
+        <WalletProvider wallets={wallets} autoConnect>
+          <SessionProvider>
+            <Shell />
+          </SessionProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </PrivyApp>
   );
 }
 

@@ -54,7 +54,7 @@ const post = (path: string, body: unknown) =>
   });
 
 run("npx", ["tsx", "scripts/web-stub-server.ts"], { PORT: String(apiPort) });
-run("npx", ["vite", "--port", String(webPort), "--strictPort"], { VITE_DEV_WALLET: "1", GARUDA_API_PROXY: api, WEB_PORT: String(webPort) }, `${root}/packages/web`);
+run("npx", ["vite", "--port", String(webPort), "--strictPort"], { VITE_DEV_WALLET: "1", VITE_PRIVY_PREVIEW: "1", GARUDA_API_PROXY: api, WEB_PORT: String(webPort) }, `${root}/packages/web`);
 await waitFor(`${api}/health`);
 await waitFor(`${base}/api/health`);
 
@@ -94,7 +94,17 @@ try {
   await page.getByTestId("landing").waitFor();
   await shot("00-landing", { full: true, settle: 1200 });
 
-  // ---- connect the dev wallet and sign in (real nonce + signMessage + verify)
+  // ---- sign-in screen: Privy (email or wallet) first, the wallet signature as the fallback. VITE_PRIVY_PREVIEW=1 renders
+  // the Privy UI without an app id (inert buttons), so the screenshots need no keys.
+  await go("/terminal");
+  await page.getByTestId("privy-login").waitFor();
+  ok("sign-in offers email or wallet through Privy", (await page.getByTestId("privy-login").innerText()).includes("email or wallet"));
+  await shot("08-signin", { full: true });
+  await page.getByTestId("connect").first().click();
+  await page.getByTestId("privy-login-menu").waitFor();
+  await shot("08b-signin-menu");
+
+  // ---- connect the dev wallet and sign in through the fallback (real nonce + signMessage + verify)
   await go("/challenges");
   await page.getByTestId("connect").first().click();
   await page.locator('[data-testid^="wallet-"]').first().click();
@@ -102,6 +112,7 @@ try {
   await page.waitForFunction(() => sessionStorage.getItem("garuda.session") !== null, undefined, { timeout: 15_000 });
   const session = JSON.parse(await page.evaluate(() => sessionStorage.getItem("garuda.session")!)) as { token: string; wallet: string };
   ok("signed in with wallet signature", session.token && session.wallet);
+  ok("session records the wallet-signature path", (JSON.parse(await page.evaluate(() => sessionStorage.getItem("garuda.session")!)) as { via?: string }).via === "wallet");
   const wallet = session.wallet;
 
   // ---- 02 challenges: Demo + 4 tiers, Ascended locked
@@ -176,6 +187,7 @@ try {
   await page.getByTestId("owed").waitFor();
   await shot("07-payouts", { full: true });
   ok("payout request is disabled (M8 not built)", await page.getByTestId("request-payout").isDisabled());
+  ok("payouts go to the signed-in wallet", (await page.getByTestId("payout-destination").getAttribute("title")) === wallet);
 
   // ---- mobile
   await page.setViewportSize({ width: 390, height: 844 });

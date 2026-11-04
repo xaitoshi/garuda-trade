@@ -54,9 +54,9 @@ export function TopBar({ landing }: { landing: boolean }) {
   );
 }
 
-export function WalletButton() {
-  const { wallet, publicKey, connected, connecting, wallets, select, disconnect } = useWallet();
-  const { signedIn, signingIn, signIn, signOut, error } = useSession();
+export function WalletButton({ label, ghost }: { label?: string; ghost?: boolean } = {}) {
+  const { connecting, wallets, select, disconnect } = useWallet();
+  const { wallet: address, connected, browserWallet, signedIn, signingIn, signIn, signOut, error, walletLabel, via, privyEnabled, privyLogin } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -71,28 +71,32 @@ export function WalletButton() {
     if (connected) setOpen(false);
   }, [connected]);
 
-  if (connected && publicKey) {
+  if (connected && address) {
     return (
       <div className="wallet-wrap" ref={ref}>
         <button className="wallet" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} data-testid="wallet-pill">
           <i className="chain" style={signedIn ? undefined : { background: "var(--gold)", boxShadow: "0 0 8px var(--gold)" }} />
-          {shortAddr(publicKey.toBase58())}
+          {shortAddr(address)}
         </button>
         {open && (
           <div className="menu" role="menu">
-            <div className="lbl">{wallet?.adapter.name ?? "Wallet"}</div>
-            {!signedIn && (
+            <div className="lbl">{walletLabel ?? "Wallet"}</div>
+            {via === "privy" && <div className="mute mono" style={{ fontSize: 11, wordBreak: "break-all" }}>{address}</div>}
+            {!signedIn && browserWallet && (
               <button className="btn btn-fire btn-sm" onClick={() => void signIn()} disabled={signingIn}>
                 {signingIn ? "Waiting for signature..." : "Sign in"}
               </button>
             )}
+            {!signedIn && !browserWallet && privyEnabled && signingIn && <div className="mute" style={{ fontSize: 13 }}>Signing you in...</div>}
             {error && <div className="dn" style={{ fontSize: 12 }}>{error}</div>}
             <button className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
               Sign out
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => void disconnect()}>
-              Disconnect
-            </button>
+            {browserWallet && via !== "privy" && (
+              <button className="btn btn-ghost btn-sm" onClick={() => void disconnect()}>
+                Disconnect
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -102,12 +106,20 @@ export function WalletButton() {
   const usable = wallets.filter((w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable);
   return (
     <div className="wallet-wrap" ref={ref}>
-      <button className="btn btn-fire btn-sm" onClick={() => setOpen((o) => !o)} disabled={connecting} data-testid="connect">
-        {connecting ? "Connecting..." : "Connect wallet"}
+      <button className={`btn ${ghost ? "btn-ghost" : "btn-fire"} btn-sm`} onClick={() => setOpen((o) => !o)} disabled={connecting} data-testid="connect">
+        {connecting ? "Connecting..." : (label ?? (privyEnabled ? "Sign in" : "Connect wallet"))}
       </button>
       {open && (
         <div className="menu" role="menu">
-          <div className="lbl">Choose a wallet</div>
+          {privyEnabled && (
+            <>
+              <button className="btn btn-fire btn-sm" onClick={() => { setOpen(false); privyLogin(); }} data-testid="privy-login-menu">
+                Email or wallet
+              </button>
+              <div className="mute" style={{ fontSize: 12 }}>Email creates a Solana wallet for you. No identity checks.</div>
+            </>
+          )}
+          <div className="lbl">{privyEnabled ? "Or sign a message with a browser wallet" : "Choose a wallet"}</div>
           {usable.length === 0 && (
             <div className="mute" style={{ fontSize: 13, maxWidth: 220 }}>
               No Solana wallet found. Install Phantom or Solflare, then reload.

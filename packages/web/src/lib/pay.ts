@@ -1,7 +1,7 @@
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { api, ApiError } from "./api";
+import type { PaySigner } from "./session";
 import type { ConfirmOutcome, PaymentInstructions } from "./types";
 
 /**
@@ -19,7 +19,8 @@ export function buildPaymentTx(q: PaymentInstructions, payer: PublicKey): Transa
 }
 
 export interface PayContext {
-  wallet: WalletContextState;
+  /** The signed-in wallet: a Privy embedded wallet or a browser wallet. Both pay the same transferChecked. */
+  signer: PaySigner;
   connection: Connection;
   /** The stub server has no chain: it registers a simulated transfer instead of the wallet sending one. */
   stub: boolean;
@@ -33,8 +34,8 @@ export async function payQuote(q: PaymentInstructions, ctx: PayContext, onStep?:
     onStep?.("sending");
     return (await api.stubPay(q.orderId)).signature;
   }
-  const payer = ctx.wallet.publicKey;
-  if (!payer || !ctx.wallet.sendTransaction) throw new Error("Connect a wallet to pay");
+  const payer = ctx.signer.publicKey;
+  if (!payer || !ctx.signer.send) throw new Error("Connect a wallet to pay");
   const mint = new PublicKey(q.mint);
   const from = getAssociatedTokenAddressSync(mint, payer);
   const need = BigInt(q.amountBaseUnits);
@@ -43,14 +44,14 @@ export async function payQuote(q: PaymentInstructions, ctx: PayContext, onStep?:
     if (BigInt(bal.value.amount) < need) throw new Error(`Not enough USDC: this needs $${q.amountUsd.toFixed(2)} on ${q.cluster}`);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("Not enough")) throw e;
-    throw new Error(`This wallet has no ${q.cluster} USDC token account yet. Fund it with USDC (mint ${q.mint.slice(0, 6)}...) first`);
+    throw new Error(`Your wallet ${payer.toBase58()} has no ${q.cluster} USDC yet. Send USDC (mint ${q.mint.slice(0, 6)}...) and a little SOL for fees to that address, then pay again.`);
   }
   const tx = buildPaymentTx(q, payer);
   const { blockhash, lastValidBlockHeight } = await ctx.connection.getLatestBlockhash("confirmed");
   tx.recentBlockhash = blockhash;
   tx.feePayer = payer;
   onStep?.("wallet");
-  const signature = await ctx.wallet.sendTransaction(tx, ctx.connection);
+  const signature = await ctx.signer.send(tx, ctx.connection, q.cluster);
   onStep?.("confirming");
   await ctx.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
   return signature;

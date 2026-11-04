@@ -8,3 +8,12 @@ export const SOLANA_RPC: string = (import.meta.env.VITE_SOLANA_RPC as string | u
 export const DEV_WALLET: boolean = import.meta.env.VITE_DEV_WALLET === "1";
 
 export const POLL = { stateMs: 2000, marketMs: 1500, chartMs: 30_000 } as const;
+
+/**
+ * Privy app id (public, it ships in the bundle). Set VITE_PRIVY_APP_ID to turn on "Sign in with email or wallet":
+ * Privy then creates an embedded Solana wallet for email users. Empty: the app runs on plain wallet sign-in only.
+ */
+export const PRIVY_APP_ID: string = ((import.meta.env.VITE_PRIVY_APP_ID as string | undefined) ?? "").trim();
+
+/** Screenshots only: render the Privy sign-in UI without an app id (the buttons are inert). Never set in a deployment. */
+export const PRIVY_PREVIEW: boolean = import.meta.env.VITE_PRIVY_PREVIEW === "1";

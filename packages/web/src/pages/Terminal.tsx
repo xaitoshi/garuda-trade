@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { api, ApiError, errorText } from "../lib/api";
 import { POLL } from "../lib/config";
 import { usePoll } from "../lib/hooks";

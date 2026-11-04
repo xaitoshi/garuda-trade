@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { api, errorText } from "../lib/api";
 import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
@@ -17,8 +16,7 @@ const PAID: TierId[] = ["squire", "knight", "paladin", "ascended"];
 const lvl = (t: TierId): KnightLevel => (LEVELS.findIndex((l) => l.tier === t) + 1) as KnightLevel;
 
 export function Challenges() {
-  const { rules, signedIn, health } = useSession();
-  const { connected, wallet } = useWallet();
+  const { rules, signedIn, health, connected, wallet: address, walletLabel } = useSession();
   const [params] = useSearchParams();
   const nav = useNavigate();
   const [tab, setTab] = useState<"challenges" | "demo" | "revive">("challenges");
@@ -50,7 +48,7 @@ export function Challenges() {
     setDemoBusy(true);
     setDemoErr(null);
     try {
-      const c = await api.createDemo(undefined, wallet?.adapter.publicKey?.toBase58());
+      const c = await api.createDemo(undefined, address ?? undefined);
       nav(`/terminal/${c.id}`);
     } catch (e) {
       setDemoErr(errorText(e));
@@ -95,7 +93,7 @@ export function Challenges() {
       {tab === "revive" ? (
         <div className="panel" style={{ padding: 24 }}>
           <div className="lbl">Wounded knights</div>
-          {wounded.length === 0 ? <p className="mute" style={{ marginTop: 10 }}>{connectedOk ? "None of your knights are wounded." : "Connect your wallet to see knights that can be revived."}</p> : (
+          {wounded.length === 0 ? <p className="mute" style={{ marginTop: 10 }}>{connectedOk ? "None of your knights are wounded." : "Sign in to see knights that can be revived."}</p> : (
             <div className="revive-list">
               {wounded.map((c) => (
                 <Link key={c.id} to={`/revive/${c.id}`} className="rl-row">
@@ -163,8 +161,8 @@ export function Challenges() {
               onPay={() => void pay()}
               buy={buy}
               done={Boolean(minted)}
-              walletName={wallet?.adapter.name}
-              address={wallet?.adapter.publicKey?.toBase58()}
+              walletName={walletLabel ?? undefined}
+              address={address ?? undefined}
               signedIn={connectedOk}
               chain={health?.chain}
             />
@@ -266,7 +264,7 @@ function PayPanel({ chosen, name, setName, agree, setAgree, onPay, buy, done, wa
         {buy.busy ? STEP_TEXT[buy.step] : done ? "Paid" : chosen ? `Pay ${usd(fee, fee % 1 ? 2 : 0)} USDC` : "Choose a trial"}
       </button>
       {net && <div className="dim note mono" style={{ marginTop: 10 }}>{net === "stub" ? "Stub server: the payment is simulated, no wallet transfer happens." : `Solana ${net}: test USDC only. Real-money checkout is not open.`}</div>}
-      {!signedIn && <div className="mute note" style={{ marginTop: 10 }}>Connect and sign in with your wallet to pay.</div>}
+      {!signedIn && <div className="mute note" style={{ marginTop: 10 }}>Sign in (email or wallet) to pay.</div>}
       {buy.error && <div className="dn note" style={{ marginTop: 10 }} role="alert" data-testid="pay-error">{buy.error}</div>}
     </div>
   );
