@@ -2,6 +2,7 @@ import { createHash, createPublicKey, randomBytes, verify as edVerify } from "no
 import type { Db } from "@garuda/db";
 import { base58Decode } from "./base58.js";
 import { ServiceError } from "./service.js";
+import type { PrivyVerifier } from "./privy.js";
 
 /** DER prefix of an Ed25519 SubjectPublicKeyInfo; append the 32-byte key to get a key Node can import. */
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -125,6 +126,8 @@ export interface AuthOptions {
   domain?: string;
   nonceTtlMs?: number;
   sessionTtlMs?: number;
+  /** Privy sign-in (email with an embedded wallet, or an external wallet connected through Privy). Off when omitted. */
+  privy?: PrivyVerifier;
 }
 
 export interface NonceChallenge {
@@ -158,6 +161,7 @@ export class AuthService {
   readonly domain: string;
   private readonly nonceTtlMs: number;
   private readonly sessionTtlMs: number;
+  readonly privy?: PrivyVerifier;
 
   constructor(opts: AuthOptions = {}) {
     this.store = opts.store ?? new InMemoryAuthStore();
@@ -165,6 +169,28 @@ export class AuthService {
     this.domain = opts.domain ?? "garuda";
     this.nonceTtlMs = opts.nonceTtlMs ?? 5 * 60_000;
     this.sessionTtlMs = opts.sessionTtlMs ?? 24 * 3_600_000;
+    this.privy = opts.privy;
+  }
+
+  /**
+   * Sign in with Privy. The browser sends its Privy access token; the server verifies it (signature, issuer, audience,
+   * expiry), reads the user's linked Solana wallets, and opens an ordinary Garuda session on one of them:
+   *   - `wallet` given: it must be one of the user's linked Solana wallets (403 wallet_not_linked otherwise)
+   *   - `wallet` omitted: the user's embedded wallet, else their first external one
+   * No wallet yet (embedded wallet still being created) is 409 no_solana_wallet: the client retries.
+   */
+  async privySignIn(input: { accessToken: string; wallet?: string }): Promise<Session & { userId: string; embedded: boolean }> {
+    if (!this.privy) throw new ServiceError(404, "privy_disabled", "Privy sign-in is not configured on this server");
+    const { userId } = await this.privy.verifyAccessToken(input.accessToken);
+    const wallets = await this.privy.solanaWallets(userId);
+    if (wallets.length === 0) throw new ServiceError(409, "no_solana_wallet", "This account has no Solana wallet yet. Wait for the embedded wallet to be created, or connect one.");
+    const chosen = input.wallet ? wallets.find((w) => w.address === input.wallet) : wallets[0];
+    if (!chosen) throw new ServiceError(403, "wallet_not_linked", "That wallet is not linked to this Privy account");
+    const now = this.now();
+    const token = `gr_${randomBytes(32).toString("base64url")}`;
+    const expiresAt = now + this.sessionTtlMs;
+    await this.store.saveSession({ tokenHash: sha256(token), wallet: chosen.address, createdAt: now, expiresAt });
+    return { token, wallet: chosen.address, expiresAt, userId, embedded: chosen.embedded };
   }
 
   async issueNonce(wallet: string): Promise<NonceChallenge> {

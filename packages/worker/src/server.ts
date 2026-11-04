@@ -4,6 +4,7 @@
  */
 import {
   AuthService,
+  PrivyServerVerifier,
   ChallengeService,
   InMemoryAuthStore,
   InMemoryChallengeStore,
@@ -26,6 +27,16 @@ import { RiskWorker } from "./worker.js";
 const env = process.env;
 const port = Number(env.PORT ?? 3000);
 const authOff = env.GARUDA_AUTH === "off";
+
+// Privy sign-in (email -> embedded Solana wallet, or an external wallet through Privy). Off unless PRIVY_APP_ID is set.
+// The owner supplies PRIVY_APP_ID and PRIVY_APP_SECRET from the Privy dashboard; nothing here has a default.
+const privyAppId = env.PRIVY_APP_ID?.trim();
+const privySecret = env.PRIVY_APP_SECRET?.trim();
+if (Boolean(privyAppId) !== Boolean(privySecret)) {
+  console.error("[garuda] set BOTH PRIVY_APP_ID and PRIVY_APP_SECRET (or neither, to run on wallet sign-in only)");
+  process.exit(1);
+}
+const privy = privyAppId && privySecret ? new PrivyServerVerifier({ appId: privyAppId, appSecret: privySecret }) : undefined;
 
 let market: MarketDataProvider = new PhoenixSdkProvider();
 if (!(await market.ping())) {
@@ -106,7 +117,7 @@ const app = buildApp({
   nft: knights ? { baseUrl: publicUrl, artDir: env.GARUDA_ART_DIR ?? DEFAULT_ART_DIR } : undefined,
   logger: true,
   builderCodeConfigured: Boolean(env.PHOENIX_BUILDER_CODE),
-  auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda" }),
+  auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", privy }),
   trustProxy: env.GARUDA_TRUST_PROXY === "1",
   corsOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : env.GARUDA_CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean),
   health: () => ({
@@ -130,5 +141,5 @@ process.on("SIGTERM", () => void shutdown());
 
 await app.listen({ port, host: "0.0.0.0" });
 console.log(
-  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : "wallet sign-in"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | SIMULATED accounts`,
+  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | SIMULATED accounts`,
 );

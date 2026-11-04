@@ -7,3 +7,4 @@ export * from "./auth.js";
 export * from "./base58.js";
 export * from "./rate-limit.js";
 export * from "./app.js";
+export * from "./privy.js";

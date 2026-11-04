@@ -238,7 +238,6 @@ export interface PayoutQuote {
   eligible: boolean;
   reason?: "no_profit" | "below_minimum" | "open_positions";
   newBalance: number;
-  kycRequired: true;
   destination?: string;
 }
 

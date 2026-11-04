@@ -56,6 +56,7 @@ const orderBody = z
   .refine((b) => b.type !== "limit" || b.limitPrice !== undefined, { message: "limitPrice is required for limit orders", path: ["limitPrice"] });
 
 const nonceBody = z.object({ wallet: z.string().min(32).max(44) });
+const privyBody = z.object({ accessToken: z.string().min(20).max(8192), wallet: z.string().min(32).max(44).optional() });
 const verifyBody = z.object({ wallet: z.string().min(32).max(44), nonce: z.string().min(8).max(64), signature: z.string().min(64).max(128) });
 
 export interface AppOptions {
@@ -149,7 +150,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
     const session = await auth.authenticate(token);
-    if (!session) throw new ServiceError(401, "unauthorized", "Sign in with your wallet first (POST /auth/nonce, then /auth/verify)");
+    if (!session) throw new ServiceError(401, "unauthorized", "Sign in first: Privy (POST /auth/privy) or wallet signature (POST /auth/nonce, then /auth/verify)");
     walletOf.set(req, session.wallet);
     limit(req, reply, limiters?.wallet, session.wallet, "wallet");
   });
@@ -197,6 +198,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     ...(await opts.health?.()),
     ok: true,
     authRequired: Boolean(auth),
+    privyAuth: Boolean(auth?.privy),
     simulated: true,
     marketData: svc.market.name,
     marketDataReachable: await svc.market.ping(),
@@ -290,6 +292,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     return auth.verify(verifyBody.parse(req.body));
   });
 
+  app.post("/auth/privy", async (req) => {
+    if (!auth) throw new ServiceError(404, "auth_disabled");
+    return auth.privySignIn(privyBody.parse(req.body));
+  });
+
   app.post("/auth/logout", async (req) => {
     await auth!.logout(req.headers.authorization!.slice(7).trim());
     return { ok: true };
@@ -362,7 +369,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get<{ Params: { id: string } }>("/challenges/:id/payout-quote", async (req) => {
     await authorize(req, req.params.id);
-    return svc.payoutQuote(req.params.id);
+    return svc.payoutQuote(req.params.id, auth ? walletOf.get(req) : undefined);
   });
 
   // ------------------------------------------------------------ M4: USDC checkout

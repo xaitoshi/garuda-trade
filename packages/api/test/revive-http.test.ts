@@ -9,13 +9,16 @@ describe("revive, reactivate and payout routes", () => {
   let rig: ReturnType<typeof makeRig>;
   let payments: StubPaymentProvider;
   let token: string;
+  let wallet: string;
   let id: string;
 
   beforeEach(async () => {
     payments = new StubPaymentProvider();
     rig = makeRig({ payments });
     app = buildApp({ service: rig.svc, auth: new AuthService({ now: () => rig.clock.t, sessionTtlMs: 7 * 24 * HOUR }), rateLimits: false });
-    token = await signIn(app, newWallet());
+    const w = newWallet();
+    wallet = w.address;
+    token = await signIn(app, w);
     id = (await app.inject({ method: "POST", url: "/challenges", headers: bearer(token), payload: { tier: "knight", knight: "Sir Lance" } })).json().id;
     await breach(rig, id);
   });
@@ -65,7 +68,8 @@ describe("revive, reactivate and payout routes", () => {
     const f = (await app.inject({ method: "POST", url: "/challenges", headers: bearer(token), payload: { tier: "knight", stage: "funded" } })).json();
     const q = await app.inject({ method: "GET", url: `/challenges/${f.id}/payout-quote`, headers: bearer(token) });
     expect(q.statusCode).toBe(200);
-    expect(q.json().kycRequired).toBe(true);
+    expect(q.json().destination).toBe(wallet); // paid to the authenticated wallet, no identity gate
+    expect(q.json().kycRequired).toBeUndefined();
     const re = await app.inject({ method: "POST", url: `/challenges/${f.id}/reactivate`, headers: bearer(token) });
     expect(re.json().lifecycle).toBe("active");
   });

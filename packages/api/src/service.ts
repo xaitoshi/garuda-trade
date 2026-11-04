@@ -957,16 +957,20 @@ export class ChallengeService {
 
   // ----------------------------------------------------------------- payouts
 
-  /** Payout quote (rulebook section 11). Funded, non-demo, not breached; archived accounts may still claim profit. KYC is roadmap M7. */
-  async payoutQuote(id: string): Promise<PayoutQuote & { kycRequired: true; destination?: string }> {
+  /**
+   * Payout quote (rulebook section 11). Funded, non-demo, not breached; archived accounts may still claim profit.
+   * There is no identity gate: the payout destination is the authenticated wallet (the signed-in wallet, which for a
+   * Privy email login is the embedded Solana wallet). Without a signed-in wallet (open dev mode) it falls back to the
+   * knight holder, then the account's wallet.
+   */
+  async payoutQuote(id: string, actorWallet?: string): Promise<PayoutQuote & { destination?: string }> {
     const ch = await this.get(id);
     if (ch.tier === "demo") throw new ServiceError(403, "payouts_unavailable", "Demo accounts have no payouts");
     if (ch.stage !== "funded") throw new ServiceError(403, "payouts_unavailable", "Payouts are only available on funded accounts");
     if (ch.risk.status === "wounded") throw new ServiceError(403, "payouts_unavailable", "Breached accounts have no payouts");
     const q = quotePayout({ startingBalance: ch.account.startingBalance, balance: ch.account.balance, hasOpenPositions: ch.account.positions.size > 0 });
-    // Rulebook section 11: the payout goes to the wallet holding the knight at request time.
     const holder = this.knights && ch.knightId ? (await this.knights.get(ch.knightId))?.owner : undefined;
-    return { ...q, kycRequired: true, destination: holder ?? ch.wallet };
+    return { ...q, destination: actorWallet ?? holder ?? ch.wallet };
   }
 
   // ------------------------------------------------------------------ revive

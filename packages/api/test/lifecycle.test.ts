@@ -325,6 +325,6 @@ describe("payouts and the funded stage", () => {
     const e = await svc.create({ tier: "knight", wallet: W });
     await failsWith(svc.payoutQuote(e.id), "payouts_unavailable");
     const f = await svc.create({ tier: "knight", stage: "funded", wallet: W });
-    expect((await svc.payoutQuote(f.id)).kycRequired).toBe(true);
+    expect((await svc.payoutQuote(f.id)).destination).toBe(W);
   });
 });
