@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * Screenshots of every web page, driven through the REAL UI against the stub server (scripts/web-stub-server.ts) and
  * the Vite dev server with the dev wallet. Nothing is mocked in the browser: connect, sign in, buy, trade, revive.
@@ -24,13 +25,14 @@ const { chromium } = createRequire(`${root}/packages/web/package.json`)("playwri
 
 const procs: ChildProcess[] = [];
 const run = (cmd: string, args: string[], env: Record<string, string>, cwd = root) => {
-  const p = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+  const p = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], detached: true });
   p.stdout?.on("data", (d: Buffer) => process.env.SCREENS_VERBOSE && process.stdout.write(d));
   p.stderr?.on("data", (d: Buffer) => process.stderr.write(d));
   procs.push(p);
   return p;
 };
-const stop = () => procs.forEach((p) => p.kill());
+// detached = own process group, so the npx wrapper AND the server it started are both killed
+const stop = () => procs.forEach((p) => { try { process.kill(-p.pid!, "SIGTERM"); } catch {} });
 process.on("exit", stop);
 
 async function waitFor(url: string, ms = 60_000) {
@@ -67,8 +69,9 @@ try {
 
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
 const page = await ctx.newPage();
-page.on("pageerror", (e) => console.error("[page error]", e.message));
-page.on("console", (m) => m.type() === "error" && !/favicon|Failed to load resource/.test(m.text()) && console.error("[console]", m.text()));
+page.setDefaultTimeout(15_000);
+page.on("pageerror", (e: Error) => console.error("[page error]", e.message));
+page.on("console", (m: { type(): string; text(): string }) => m.type() === "error" && !/favicon|Failed to load resource/.test(m.text()) && console.error("[console]", m.text()));
 
 async function shot(name: string, o: { full?: boolean; settle?: number } = {}) {
   await page.evaluate(() => document.fonts.ready);
@@ -111,7 +114,7 @@ try {
   await page.getByTestId("pick-squire").click();
   await page.getByTestId("pay-panel").waitFor();
   await page.getByTestId("knight-name").fill("Sir Pudding");
-  await page.getByTestId("agree").check();
+  await page.getByTestId("agree").check({ force: true });
   await shot("02b-checkout", { full: true });
   await page.getByTestId("pay-btn").click();
   await page.getByTestId("enter-battle").waitFor({ timeout: 30_000 });
@@ -157,9 +160,12 @@ try {
   // ---- funded account for payouts: claim on the passed knight, add a winning trade
   await go(`/terminal/${passed.id}`);
   await page.getByTestId("claim-funded").click();
-  await page.getByTestId("open-funded").waitFor();
-  const fundedHref = (await page.getByTestId("open-funded").getAttribute("href"))!;
-  await post("/dev/seed", { challengeId: fundedHref.split("/").pop(), scenario: "history" });
+  await page.waitForURL((u: URL) => !u.pathname.endsWith(String(passed.id)), { timeout: 15_000 });
+  await page.getByTestId("terminal").waitFor();
+  const fundedId = page.url().split("/").pop()!;
+  await post("/dev/seed", { challengeId: fundedId, scenario: "history" });
+  await page.waitForTimeout(1500);
+  await shot("04b-funded-terminal", { full: true });
 
   await go("/leaderboard");
   await page.getByTestId("leaderboard").waitFor();

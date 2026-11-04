@@ -25,12 +25,15 @@ import { PollingFeed, ReplayProvider, loadRecordedMarkets } from "@garuda/market
 import { RiskWorker } from "@garuda/worker";
 
 const port = Number(process.env.PORT ?? 3000);
+/** Stub clock: a wounded seed jumps it forward a day so the revive cooldown has passed (lets the screens revive for real). */
+let skewMs = 0;
 const market = new ReplayProvider(loadRecordedMarkets());
 const knights = new FakeKnights();
 const usdc = new FakeUsdc();
 const service = new ChallengeService({
   market,
   store: new InMemoryChallengeStore(),
+  now: () => Date.now() + skewMs,
   requireWalletForDemo: true,
   knights,
   requirePayment: true,
@@ -109,6 +112,7 @@ app.post<{ Body: { wallet?: string; challengeId?: string; scenario?: string } }>
     setLevel("SOL", -0.1);
     const st = await service.tick(c.id);
     setLevel("SOL", 0);
+    skewMs += 25 * 3_600_000; // revive has a 24h cooldown after the breach
     return reply.send({ id: c.id, status: st.status });
   }
   if (scenario === "passed" || scenario === "funded") {
