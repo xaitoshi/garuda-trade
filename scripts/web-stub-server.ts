@@ -16,11 +16,12 @@ import {
   ChallengeService,
   InMemoryAuthStore,
   InMemoryChallengeStore,
+  PayoutService,
   PaymentRequiredProvider,
   PurchaseService,
   buildApp,
 } from "@garuda/api";
-import { FakeKnights, FakeUsdc } from "@garuda/chain";
+import { FakeKnights, FakePayoutExecutor, FakeUsdc } from "@garuda/chain";
 import { PollingFeed, ReplayProvider, loadRecordedMarkets } from "@garuda/market-data";
 import { RiskWorker } from "@garuda/worker";
 
@@ -40,6 +41,8 @@ const service = new ChallengeService({
   payments: new PaymentRequiredProvider(),
 });
 const purchases = new PurchaseService({ service, usdc });
+// Payouts run for real through the service and ledger; only the USDC transfer is a fake (instant, no chain).
+const payouts = new PayoutService({ service, executor: new FakePayoutExecutor({ name: "stub-treasury" }) });
 
 const feed = new PollingFeed({ provider: market, intervalMs: 1000 });
 const worker = new RiskWorker({ service, feed, onError: (e, ctx) => console.error(`[stub-worker] ${ctx}:`, e instanceof Error ? e.message : e) });
@@ -48,6 +51,7 @@ await worker.start();
 const app = buildApp({
   service,
   purchases,
+  payouts,
   logger: false,
   corsOrigins: process.env.GARUDA_CORS_ORIGIN ? process.env.GARUDA_CORS_ORIGIN.split(",") : undefined,
   auth: new AuthService({ store: new InMemoryAuthStore(), domain: "garuda" }),

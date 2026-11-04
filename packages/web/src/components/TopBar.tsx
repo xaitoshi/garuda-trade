@@ -8,7 +8,7 @@ import { Logo } from "./Art";
 
 export function SimBadge() {
   return (
-    <span className="simbadge" title="Challenge accounts are simulated. Fees are paid in USDC. Payouts are not live yet.">
+    <span className="simbadge" title="Challenge accounts are simulated. Fees and payouts are in USDC on Solana devnet.">
       <i />
       SIMULATED ACCOUNT
     </span>

@@ -186,8 +186,14 @@ try {
   await page.getByTestId("payouts").waitFor();
   await page.getByTestId("owed").waitFor();
   await shot("07-payouts", { full: true });
-  ok("payout request is disabled (M8 not built)", await page.getByTestId("request-payout").isDisabled());
   ok("payouts go to the signed-in wallet", (await page.getByTestId("payout-destination").getAttribute("title")) === wallet);
+  ok("payout request is enabled for a funded account with profit", await page.getByTestId("request-payout").isEnabled());
+  await page.getByTestId("request-payout").click();
+  await page.getByTestId("payout-row").first().waitFor({ timeout: 15_000 });
+  await page.getByText("Paid", { exact: true }).first().waitFor({ timeout: 15_000 });
+  ok("payout request lands in the history as Paid", (await page.getByTestId("payout-row").count()) === 1);
+  ok("a second request is not possible while profit is zero", await page.getByTestId("request-payout").isDisabled());
+  await shot("07b-payout-paid", { full: true });
 
   // ---- mobile
   await page.setViewportSize({ width: 390, height: 844 });

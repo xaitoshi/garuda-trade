@@ -147,6 +147,8 @@ export interface Rules {
   fees: { takerFeeRate: number; makerFeeRate: number };
   markets: { symbol: string; class: string; maxLeverage: number }[];
   revive: { discount: number; maxPerKnight: number; cooldownHours: number };
+  /** The configured payout policy (absent on older servers). */
+  payouts?: { split: number; minUsd: number; autoApproveUpToUsd: number; enabled: boolean };
 }
 
 export interface Health {
@@ -239,6 +241,32 @@ export interface PayoutQuote {
   reason?: "no_profit" | "below_minimum" | "open_positions";
   newBalance: number;
   destination?: string;
+  split?: number;
+  minUsd?: number;
+  /** The share is at or under the auto-approve ceiling: it is sent without a review. */
+  autoApprove?: boolean;
+}
+
+export type PayoutStatus = "pending_approval" | "approved" | "sending" | "submitted" | "paid" | "rejected" | "failed";
+
+/** A payout as the trader sees it (GET /payouts). Internals (attempts, errors) are not exposed. */
+export interface PayoutView {
+  id: string;
+  challengeId: string;
+  status: PayoutStatus;
+  destination: string;
+  amountUsd: number;
+  grossProfitUsd: number;
+  firmShareUsd: number;
+  split: number;
+  needsApproval: boolean;
+  delayed: boolean;
+  signature?: string;
+  rejectedReason?: string;
+  createdAt: number;
+  updatedAt: number;
+  paidAt?: number;
+  replayed?: boolean;
 }
 
 /** A knight NFT the signed-in wallet holds (GET /knights; absent when the server has no chain). */

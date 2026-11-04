@@ -1,5 +1,5 @@
 import { API_URL } from "./config";
-import type { KnightInfo, Candle, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
+import type { KnightInfo, Candle, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PayoutView, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -66,6 +66,9 @@ export const api = {
   knights: () => call<{ knights: KnightInfo[] }>("/knights").then((r) => r.knights, () => null),
   reviveInfo: (id: string) => call<ReviveInfo>(`/challenges/${id}/revive`),
   payoutQuote: (id: string) => call<PayoutQuote>(`/challenges/${id}/payout-quote`),
+  /** Request the account's full profit as USDC to the signed-in wallet. Re-sending the same key never pays twice. */
+  requestPayout: (id: string, idempotencyKey: string) => post<PayoutView>(`/challenges/${id}/payouts`, undefined, { "idempotency-key": idempotencyKey }),
+  payouts: () => call<{ payouts: PayoutView[] }>("/payouts").then((r) => r.payouts),
 
   quoteChallenge: (tier: TierId, knightName?: string, knightAsset?: string) => post<PaymentInstructions>("/purchases/challenge", { tier, knightName, knightAsset }),
   quoteRevive: (challengeId: string) => post<PaymentInstructions>("/purchases/revive", { challengeId }),

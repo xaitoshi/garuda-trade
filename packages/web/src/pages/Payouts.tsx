@@ -1,9 +1,11 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, errorText } from "../lib/api";
+import { ApiError, api, errorText } from "../lib/api";
 import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { knightView, artState } from "../lib/knight";
-import { num, pct, shortAddr, usd, usdSigned } from "../lib/format";
+import { pct, shortAddr, usd, usdSigned } from "../lib/format";
+import { explorerTxUrl, notEligibleText, openPayout, payoutStatusText, totalPaid } from "../lib/payout";
 import { Gate } from "../components/Gate";
 import { KnightImg } from "../components/Art";
 
@@ -15,21 +17,54 @@ export function Payouts() {
   );
 }
 
-const SAMPLE_BARS = [41, 55, 38, 62, 70, 52, 80, 66, 90, 74, 100, 86];
+const newKey = (): string => `web-payout-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
 function PayoutsView() {
   const { rules, wallet } = useSession();
   const list = usePoll(() => api.challenges(), 10_000, "payouts-list");
   const funded = (list.data ?? []).filter((c) => c.stage === "funded").sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0];
   const quote = usePoll(() => (funded ? api.payoutQuote(funded.id) : Promise.resolve(null)), 10_000, funded?.id ?? "none");
+  const history = usePoll(() => api.payouts(), 5_000, "payouts-history");
   const q = quote.data;
-  const split = rules?.common.profitSplit ?? 0.8;
-  const min = rules?.common.minPayoutUsd ?? 20;
+  const all = history.data ?? [];
+  const live = funded ? openPayout(all, funded.id) : undefined;
+  const split = q?.split ?? rules?.payouts?.split ?? rules?.common.profitSplit ?? 0.8;
+  const min = q?.minUsd ?? rules?.payouts?.minUsd ?? rules?.common.minPayoutUsd ?? 20;
+  const payoutsOff = rules?.payouts ? !rules.payouts.enabled : false;
+  const keys = useRef(new Map<string, string>());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+
+  const request = async () => {
+    if (!funded || busy) return;
+    setBusy(true);
+    setErr(undefined);
+    // One key per account until a request succeeds: a double click or a retry after a dropped response cannot pay twice.
+    const key = keys.current.get(funded.id) ?? newKey();
+    keys.current.set(funded.id, key);
+    try {
+      await api.requestPayout(funded.id, key);
+      keys.current.delete(funded.id);
+      await Promise.all([history.reload(), quote.reload(), list.reload()]);
+    } catch (e) {
+      // A definite answer from the server (not a dropped connection) ends this attempt: the next click is a new request.
+      if (e instanceof ApiError && e.status > 0) keys.current.delete(funded.id);
+      setErr(errorText(e));
+      void history.reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reason = notEligibleText(q, min);
+  const canRequest = Boolean(funded && q?.eligible && !live && !busy && !payoutsOff);
+  const st = live ? payoutStatusText(live) : undefined;
 
   return (
     <main className="pg-payouts" data-testid="payouts">
       <div className="banner" role="note">
-        <b>Payouts are not live yet.</b> The payout rail (M8) is not built. There are no identity checks: when payouts open they are sent in USDC to the wallet you are signed in with. This page is read-only: it shows what you would be owed under the rules, nothing moves.
+        <b>Devnet payouts.</b> Payouts are paid in test USDC on Solana devnet to the wallet you are signed in with. There are no identity checks, and no real money moves on this network.
       </div>
       <div className="hdr">
         <div>
@@ -63,45 +98,68 @@ function PayoutsView() {
           )}
         </div>
         <div className="panel pay">
-          <div className="lbl">Would be owed (read-only)</div>
-          <div className="big" data-testid="owed">{q ? usd(q.traderShare) : "$0"}<span>USDC</span></div>
+          <div className="lbl">{live ? "Payout in progress" : "Available to withdraw"}</div>
+          <div className="big" data-testid="owed">{live ? usd(live.amountUsd) : q ? usd(q.traderShare) : "$0"}<span>USDC</span></div>
           <div className="split"><i style={{ width: `${split * 100}%` }} /><i style={{ width: `${(1 - split) * 100}%` }} /></div>
           <div className="sl"><span><b className="fire">{pct(split, 0)}</b> You</span><span>Garuda <b>{pct(1 - split, 0)}</b></span></div>
           <div className="brk">
-            <div><span>Profit this cycle</span><b>{q ? usd(q.grossProfit, 2) : "$0.00"}</b></div>
-            <div><span>Your {pct(split, 0)} share</span><b className="up">{q ? usd(q.traderShare, 2) : "$0.00"}</b></div>
-            <div><span>Garuda {pct(1 - split, 0)}</span><b>{q ? usd(q.firmShare, 2) : "$0.00"}</b></div>
-            <div><span>Paid to</span><b className="mono" data-testid="payout-destination" title={q?.destination ?? wallet ?? undefined}>{q?.destination ?? wallet ? shortAddr((q?.destination ?? wallet)!) : "-"}</b></div>
+            <div><span>Profit this cycle</span><b>{live ? usd(live.grossProfitUsd, 2) : q ? usd(q.grossProfit, 2) : "$0.00"}</b></div>
+            <div><span>Your {pct(split, 0)} share</span><b className="up">{live ? usd(live.amountUsd, 2) : q ? usd(q.traderShare, 2) : "$0.00"}</b></div>
+            <div><span>Garuda {pct(1 - split, 0)}</span><b>{live ? usd(live.firmShareUsd, 2) : q ? usd(q.firmShare, 2) : "$0.00"}</b></div>
+            <div><span>Paid to</span><b className="mono" data-testid="payout-destination" title={live?.destination ?? q?.destination ?? wallet ?? undefined}>{live?.destination ?? q?.destination ?? wallet ? shortAddr((live?.destination ?? q?.destination ?? wallet)!) : "-"}</b></div>
           </div>
           <div className="req">
-            <div className="inp off"><span>{q ? num(q.traderShare, 2) : "0.00"}</span><small>MAX</small></div>
-            <button className="btn btn-fire" style={{ padding: "0 34px", fontSize: 16 }} disabled data-testid="request-payout">Request payout</button>
+            <div className="inp off"><span>{live ? usd(live.amountUsd, 2) : q ? usd(q.traderShare, 2) : "$0.00"}</span><small>ALL</small></div>
+            <button className="btn btn-fire" style={{ padding: "0 34px", fontSize: 16 }} disabled={!canRequest} onClick={() => void request()} data-testid="request-payout">
+              {busy ? "Requesting..." : live ? "In progress" : "Request payout"}
+            </button>
           </div>
+          {st && live && (
+            <div style={{ marginTop: 12 }} data-testid="payout-status">
+              <span className={`st ${st.tone === "up" ? "funded" : "dormant"}`}>{st.label}</span>
+              <span className="dim note" style={{ marginLeft: 10 }}>{st.hint}</span>
+            </div>
+          )}
           <div className="dim" style={{ fontSize: 12, marginTop: 12, fontFamily: "GM, monospace" }}>
-            {q && !q.eligible ? `Not eligible: ${q.reason ?? "no profit yet"}.` : `Minimum payout ${usd(min)}. Disabled until the payout rail (M8) ships.`}
+            {payoutsOff
+              ? "Payouts are not enabled on this server."
+              : live
+                ? "Requesting a payout takes your whole profit and resets the account balance to its starting size."
+                : reason || `Minimum payout ${usd(min)}.${q?.autoApprove === false ? " This one is above the auto-approve limit, so Garuda reviews it first." : ""} Requesting takes your whole profit and resets the balance to the starting size.`}
           </div>
+          {err && <div className="dn note" style={{ marginTop: 6 }} data-testid="payout-error">{err}</div>}
           {Boolean(quote.error) && funded && <div className="dn note" style={{ marginTop: 6 }}>{errorText(quote.error)}</div>}
         </div>
         <div className="panel tre">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div className="lbl">Garuda treasury</div>
-            <span className="tg">Placeholder</span>
-          </div>
-          <div className="v">-</div>
-          <div className="bars" aria-hidden style={{ opacity: 0.35 }}>{SAMPLE_BARS.map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}</div>
-          <div className="sl" style={{ marginBottom: 18 }}><span>Weekly payouts</span><span>sample shape</span></div>
-          <div className="kr"><span>Total paid out</span><b>$0</b></div>
-          <div className="kr"><span>Payouts</span><b>0</b></div>
-          <div className="kr"><span>Median time</span><b>n/a</b></div>
-          <p className="dim note" style={{ marginTop: 10 }}>No verified treasury figure exists yet, so none is shown.</p>
+          <div className="lbl">Your payouts</div>
+          <div className="v" data-testid="paid-total">{usd(totalPaid(all), 2)}</div>
+          <div className="sl" style={{ marginBottom: 18 }}><span>Total paid to you</span><span>USDC (devnet)</span></div>
+          <div className="kr"><span>Paid</span><b>{all.filter((p) => p.status === "paid").length}</b></div>
+          <div className="kr"><span>In progress</span><b>{all.filter((p) => p.status !== "paid" && p.status !== "rejected").length}</b></div>
+          <div className="kr"><span>Rejected</span><b>{all.filter((p) => p.status === "rejected").length}</b></div>
+          <p className="dim note" style={{ marginTop: 10 }}>Sent from the Garuda treasury on Solana devnet. Click a transaction in the history to see it on the explorer.</p>
         </div>
       </div>
       <div className="panel">
         <div className="ph"><b>Payout history</b><span className="mute" style={{ fontSize: 13 }}>USDC</span></div>
         <div className="tbl-scroll">
-          <table className="tbl">
-            <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Transaction</th><th className="r">Knight</th></tr></thead>
-            <tbody><tr><td colSpan={5} className="mute" style={{ textAlign: "center", padding: 28 }}>No payouts yet. Nothing has been paid out on this network.</td></tr></tbody>
+          <table className="tbl" data-testid="payout-history">
+            <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Transaction</th><th className="r">Account</th></tr></thead>
+            <tbody>
+              {all.length === 0 && <tr><td colSpan={5} className="mute" style={{ textAlign: "center", padding: 28 }}>No payouts yet.</td></tr>}
+              {all.map((p) => {
+                const s = payoutStatusText(p);
+                return (
+                  <tr key={p.id} data-testid="payout-row">
+                    <td className="mono">{when(p.createdAt)}</td>
+                    <td className="mono">{usd(p.amountUsd, 2)}</td>
+                    <td><span className={s.tone === "up" ? "up" : s.tone === "dn" ? "dn" : "dim"} title={p.rejectedReason ?? s.hint}>{s.label}</span></td>
+                    <td className="mono">{p.signature ? <a href={explorerTxUrl(p.signature)} target="_blank" rel="noreferrer">{p.signature.slice(0, 8)}...</a> : "-"}</td>
+                    <td className="r mono">#{p.challengeId.slice(-4).toUpperCase()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
         </div>
       </div>

@@ -5,7 +5,8 @@ import { artState, displayName, knightView, tierOfLevel, uiStatus } from "../src
 import { buildBreachSeries } from "../src/lib/breach";
 import { groupKnights, matches, summary } from "../src/lib/barracks";
 import { bestKnight, eligibilityFor } from "../src/lib/eligibility";
-import type { ChallengeState, KnightInfo, MarketView, Position } from "../src/lib/types";
+import { explorerTxUrl, isOpenPayout, notEligibleText, openPayout, payoutStatusText, totalPaid } from "../src/lib/payout";
+import type { ChallengeState, KnightInfo, MarketView, PayoutView, Position } from "../src/lib/types";
 
 const ch = (o: Record<string, unknown> = {}): ChallengeState =>
   ({
@@ -171,5 +172,38 @@ describe("tier eligibility", () => {
     const open = eligibilityFor("paladin", "knight", { level: 2, asset: "A1" });
     expect(open).toMatchObject({ locked: false, asset: "A1" });
     expect(eligibilityFor("squire", undefined, { level: 0 }).pill.text).toBe("Open to all");
+  });
+});
+
+describe("payout helpers", () => {
+  const v = (o: Record<string, unknown> = {}) => ({ id: "po_1", challengeId: "ch_1", status: "approved", needsApproval: false, delayed: false, amountUsd: 36, createdAt: 1, ...o }) as unknown as PayoutView;
+
+  it("links devnet transactions on the explorer", () => {
+    expect(explorerTxUrl("abc")).toBe("https://explorer.solana.com/tx/abc?cluster=devnet");
+  });
+
+  it("labels each status in plain words and tells delayed from sending", () => {
+    expect(payoutStatusText(v({ status: "paid" })).label).toBe("Paid");
+    expect(payoutStatusText(v({ status: "pending_approval", needsApproval: true })).label).toBe("Awaiting approval");
+    expect(payoutStatusText(v({ status: "approved" })).label).toBe("Sending");
+    expect(payoutStatusText(v({ status: "approved", delayed: true })).label).toBe("Delayed");
+    expect(payoutStatusText(v({ status: "rejected" })).tone).toBe("dn");
+    expect(payoutStatusText(v({ status: "failed" })).hint).toMatch(/held, not lost/);
+  });
+
+  it("finds the open payout for an account and totals only settled ones", () => {
+    const list = [v({ id: "a", status: "paid", amountUsd: 40 }), v({ id: "b", status: "rejected", amountUsd: 99 }), v({ id: "c", status: "pending_approval", createdAt: 5 }), v({ id: "d", status: "paid", amountUsd: 2.5, challengeId: "ch_2" })];
+    expect(openPayout(list, "ch_1")?.id).toBe("c");
+    expect(openPayout(list, "ch_2")).toBeUndefined();
+    expect(isOpenPayout(list[0]!)).toBe(false);
+    expect(totalPaid(list)).toBeCloseTo(42.5);
+  });
+
+  it("explains why a payout is not available", () => {
+    expect(notEligibleText({ eligible: true }, 20)).toBe("");
+    expect(notEligibleText(undefined, 20)).toBe("");
+    expect(notEligibleText({ eligible: false, reason: "open_positions" }, 20)).toMatch(/Close all open positions/);
+    expect(notEligibleText({ eligible: false, reason: "below_minimum" }, 20)).toMatch(/\$20 minimum/);
+    expect(notEligibleText({ eligible: false, reason: "no_profit" }, 20)).toMatch(/No profit/);
   });
 });
