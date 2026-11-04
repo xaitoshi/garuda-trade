@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import "./styles.css";
 import "./app.css";
 import "./landing.css";
+import "./pilot-theme.css";
 import { App } from "./App";
 
 createRoot(document.getElementById("root")!).render(

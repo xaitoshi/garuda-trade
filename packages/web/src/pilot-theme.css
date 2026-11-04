@@ -1,0 +1,111 @@
+/* Pilot visual system, layered last over the screen styles: black canvas, quiet filled charcoal panels
+   without outlines, Inter text, pixel numerals for headline figures, capsule controls, a white pill nav
+   and dotted selection markers. Semantic trade colors stay distinct; game art keeps its own palette. */
+@font-face{font-family:Inter;src:url(/fonts/Inter-400.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:Inter;src:url(/fonts/Inter-500.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:Inter;src:url(/fonts/Inter-600.woff2) format("woff2");font-weight:600;font-display:swap}
+@font-face{font-family:Inter;src:url(/fonts/Inter-700.woff2) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"Geist Pixel Circle";src:url(/fonts/GeistPixel-Circle.woff2) format("woff2");font-weight:400;font-display:swap}
+
+:root{
+  --neutral-canvas:#000;--neutral-panel:#111112;--neutral-inset:#1a1b1e;--neutral-raised:#1a1b1e;
+  --neutral-dropdown:#1d1f21;--neutral-emphasized:#2a2c32;--neutral-hover:#393c44;--neutral-muted:#979899;
+  --positive:#3ce362;--negative:#ff4953;--on-positive:#071009;
+  --display:"Geist Pixel Circle",ui-monospace,monospace;
+  --pilot-radius:26px;--pilot-radius-sm:22px;--field-radius:16px;
+  /* the original tokens, remapped so every screen inherits the system */
+  --ink:var(--neutral-canvas);--ink2:var(--neutral-panel);--panel:var(--neutral-raised);--panel2:var(--neutral-emphasized);
+  --line:#ffffff0e;--line2:#ffffff1a;--bone:#f4f4f5;--mute:var(--neutral-muted);--dim:#6b6d72;
+  --fire:#efeff2;--green:var(--positive);--red:var(--negative);--violet:#c7cbd5;--violet2:#9a9ca6;
+  color-scheme:dark;
+}
+html,body{background:var(--neutral-canvas)}
+body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;letter-spacing:-.005em}
+svg text{font-family:Inter,sans-serif}
+.mono,.lbl,th,.chip,.tag,.st,.pill,.tg,.ohlc,.note{font-family:Inter,sans-serif;letter-spacing:0}
+.lbl,th,table.tbl th{text-transform:none;font-size:12px;letter-spacing:0;color:var(--mute);font-weight:400}
+
+/* header: brand left, white sliding-pill nav centered, capsule actions right */
+.top{background:transparent;border-bottom:0;height:72px}
+.brand{letter-spacing:.08em}
+.tabs{background:#fff;border-radius:999px;padding:4px 6px;gap:0;box-shadow:0 4px 18px #0003}
+.tabs a,.tabs a.on{position:relative;padding:8px 15px;border:0;border-radius:999px;color:#939393;font-size:13px;font-weight:500;background:transparent}
+.tabs a.on{background:#eeeeef;color:#2e2e2e}
+.tabs a.on::after{content:"";position:absolute;left:50%;bottom:3px;width:2px;height:2px;border-radius:50%;background:currentColor;box-shadow:-4px 0 currentColor,4px 0 currentColor;transform:translateX(-50%)}
+.tabs a:hover{color:#333}
+.wallet,.simbadge,.avatar{border:0;border-radius:999px;background:var(--neutral-raised);color:#eee;height:40px;padding:0 16px}
+.avatar{width:40px;padding:0;border-radius:50%}
+.simbadge{white-space:nowrap;color:var(--mute);font-size:12px;letter-spacing:0;font-family:Inter,sans-serif}
+.simbadge i{background:var(--positive);box-shadow:none;width:4px;height:4px}
+.chain{width:4px;height:4px;box-shadow:none}
+.menu{border:0;border-radius:22px;background:var(--neutral-dropdown);box-shadow:0 16px 48px #0008}
+.wopt{border:0;border-radius:999px;background:var(--neutral-raised)}
+.wopt:hover{background:var(--neutral-hover)}
+
+/* surfaces: filled, borderless, large radii */
+.panel,.hud,.kc,.tr,.det,.sum div,.stats div,.trait,.fstats div,.cd,.pc,.promo{border-color:transparent!important;border-radius:var(--pilot-radius);background:var(--neutral-panel);box-shadow:none}
+.panel .panel,.stats div,.trait,.sum div,.wl,.inp,.seg,.seg2,.pcts span,.fstats div{border-radius:var(--field-radius)}
+.ph{border-bottom-color:var(--line);color:var(--mute)}
+.ph b{font-weight:500;letter-spacing:-.2px}
+td,th,table.tbl td,table.tbl th,.tb,.tabs2,.lg,.est,.line,.rw,.kr,.brk div,.bh div,.evo,.hr,.hr2{border-color:#ffffff07!important}
+tr:hover td{background:#ffffff03}
+
+/* pixel numerals for headline figures; dense tables keep readable type */
+.hud-big,.px b,.cp b,.tr .sz,.tr .fee b,.price b,.big,.tre .v,.pc .rt,.pc .rk b,.sum b,.stats b,.fstats b,.line.tot b,.broke b,h1.pt{font-family:var(--display);font-weight:400;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.hud-big small,.big span,.price span{font-family:Inter,sans-serif}
+h2.pt{font-family:var(--display);font-weight:400;letter-spacing:-.8px}
+.eyebrow{color:var(--mute);font-family:Inter,sans-serif;letter-spacing:0;text-transform:none}
+.eyebrow::before{display:none}
+
+/* controls: capsules, white primary, quiet secondary */
+.btn,.btn-sm,.cbtn,.wbtn{border-radius:999px;font-family:Inter,sans-serif;font-weight:500}
+.btn-fire,.cbtn,.wbtn{background:#efeff2;color:#151619;box-shadow:none}
+.btn-fire:hover:not(:disabled),.cbtn:hover,.wbtn:hover{background:#fff}
+.btn-ghost,.cbtn.dis{background:var(--neutral-raised);border:0;color:var(--bone)}
+.btn-ghost:hover:not(:disabled){background:var(--neutral-hover)}
+.chip,.pill,.tag,.tg,.pcts span{border:0!important;border-radius:999px;background:#ffffff06;color:var(--mute);font-size:12px}
+.chip.on,.pcts span.on{background:#ffffff12;color:#f1f1f4}
+.st{border:0;border-radius:999px;font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;font-size:12px;background:#ffffff06}
+.st::before{width:4px;height:4px}
+.pill.ok,.st.funded{color:var(--positive);background:color-mix(in srgb,var(--positive) 6%,transparent)}
+.st.wounded{color:var(--negative);background:color-mix(in srgb,var(--negative) 8%,transparent)}
+.st.active,.st.ascended,.pill.lock{color:#e4e5ea;background:#ffffff0a}
+.inp,.wl,.seg,.seg2,input,select{border:0!important;background:var(--neutral-inset)}
+.seg span,.seg2 span{border-radius:999px}
+.seg2 span.on{background:var(--neutral-emphasized)}
+.seg .long.on,.pg-terminal .seg .long.on{background:var(--positive);color:var(--on-positive)}
+.seg .short.on{background:var(--negative);color:#fff}
+.slider{background:var(--neutral-emphasized)}
+.slider i{background:#efeff2}
+.slider u{border-color:var(--neutral-panel);box-shadow:none}
+.tog u{background:var(--neutral-raised)}
+
+/* tab rows: dotted marker instead of an underline */
+.tabs2 span.on,.tb span.on{position:relative;border-bottom:0;color:#f1f1f4}
+.tabs2 span.on::after,.tb span.on::after{content:"";position:absolute;left:50%;bottom:3px;width:2px;height:2px;border-radius:50%;background:currentColor;box-shadow:-4px 0 currentColor,4px 0 currentColor;transform:translateX(-50%)}
+
+/* accent fills that were orange become neutral; trade semantics stay green/red */
+.bars i{background:linear-gradient(180deg,#efeff2,#efeff222)}
+.split i{background:#efeff2}.split i+i{background:var(--neutral-emphasized)}
+.daysdots i{background:var(--neutral-emphasized)}.daysdots i.on{background:#efeff2}
+.stepper .s.on b{background:#efeff2;border-color:#efeff2;color:#151619}
+.tr.sel,.kc.sel,.cd.sel{box-shadow:inset 0 0 0 1px #ffffff40!important;background:var(--neutral-panel)}
+.tr.sel .chk,.cb u{background:#efeff2;border-color:#efeff2}
+.me td{background:#ffffff08;border-color:transparent}
+.banner{border:0;border-radius:var(--field-radius);background:#ffffff08}
+.sample-banner{border:0;border-radius:var(--field-radius);background:var(--neutral-panel)}
+.sample-banner a,.foot-r a:hover{color:#fff}
+.dots{background-image:radial-gradient(#ffffff14 1px,transparent 1.2px)}
+
+:is(button,input,select,a,[tabindex]):focus-visible{outline:2px solid #c7cbd5;outline-offset:3px}
+
+@media(max-width:1023px){
+  .panel,.hud,.kc,.tr,.det,.cd,.pc{border-radius:var(--pilot-radius-sm)}
+}
+@media(forced-colors:active){
+  .panel,.hud,.tabs,.btn{border:1px solid CanvasText!important}
+}
+.wallet{font-family:Inter,sans-serif;font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
+.pill,.tg,.st{text-transform:none;letter-spacing:0}
+.hud .note,.fld .sub,.slot-tag,.lg .lt,.cap,.sub,.ticks,.ohlc{font-family:Inter,sans-serif;letter-spacing:0}
+.slot-tag{border:0;border-radius:999px;background:#000a;color:var(--mute)}
