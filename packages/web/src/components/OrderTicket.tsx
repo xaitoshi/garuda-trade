@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, errorText } from "../lib/api";
 import { breachPrice, estSlippagePct, roundSize, sizeForPct } from "../lib/trade";
 import { num, px, usd } from "../lib/format";
@@ -15,8 +15,17 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
   const [limitStr, setLimitStr] = useState("");
   const [tpStr, setTpStr] = useState("");
   const [reduceOnly, setReduceOnly] = useState(false);
+  const [tpOn, setTpOn] = useState(false);
+  const [levOpen, setLevOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!levOpen) return;
+    const close = (e: MouseEvent) => !(e.target as HTMLElement).closest(".lev-wrap") && setLevOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [levOpen]);
 
   const cap = m?.maxLeverage ?? 10;
   const leverage = Math.min(lev, cap);
@@ -83,129 +92,146 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
     }
   }
 
-  const label = long ? "Long" : "Short";
+  const label = long ? "Buy / Long" : "Sell / Short";
+  const pos = c.positions.find((p) => p.symbol === symbol);
+  const pctNow = pct ?? 0;
+  const margin = leverage > 0 ? notional / leverage : notional;
   return (
     <div className="panel tk" data-testid="order-ticket">
-      <div className="ph">
-        <b>Order ticket</b>
-        <span className="tag">{symbol}-PERP</span>
-      </div>
       <div className="tk-b">
         <div className="seg">
           <button type="button" className={`long ${long ? "on" : ""}`} onClick={() => setSide("buy")} data-testid="side-long">
-            Long
+            Buy / Long
           </button>
           <button type="button" className={`short ${!long ? "on" : ""}`} onClick={() => setSide("sell")} data-testid="side-short">
-            Short
+            Sell / Short
           </button>
         </div>
         <div className="tabs2">
-          {(["market", "limit", "stop"] as const).map((k) => (
+          {(["limit", "market", "stop"] as const).map((k) => (
             <button type="button" key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
               {k[0]!.toUpperCase() + k.slice(1)}
             </button>
           ))}
+        </div>
+        <div className="tk-head">
+          <div className="tk-row">
+            <span>
+              Cross margin
+              <i className="tk-info" title="One margin pool per challenge account: every position shares the account's buffers.">i</i>
+            </span>
+            <span className="lev-wrap">
+              <button type="button" className="lev-btn" aria-expanded={levOpen} onClick={() => setLevOpen((o) => !o)} data-testid="leverage">
+                {leverage}×
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </button>
+              {levOpen && (
+                <div className="lev-pop" role="dialog" aria-label="Leverage">
+                  <div className="tk-row">
+                    <span>Leverage</span>
+                    <b className="rail-val">
+                      {leverage}
+                      <small>×</small>
+                    </b>
+                  </div>
+                  <div className="rail" style={{ ["--p" as string]: `${cap > 1 ? ((leverage - 1) / (cap - 1)) * 100 : 0}%` }}>
+                    <div className="rail-dots" aria-hidden="true">
+                      <span />
+                    </div>
+                    <input className="range" type="range" min={1} max={cap} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} aria-label="Leverage" />
+                  </div>
+                  <div className="ticks">
+                    <span>1×</span>
+                    <span>{cap}×</span>
+                  </div>
+                </div>
+              )}
+            </span>
+          </div>
+          <div className="tk-row">
+            <span>Available balance</span>
+            <b>{usd(c.risk.bufferRemaining, 2)}</b>
+          </div>
+          <div className="tk-row">
+            <span>Current position</span>
+            <b className={pos ? (pos.side === "long" ? "up" : "dn") : ""}>
+              {pos ? `${pos.side === "long" ? "" : "-"}${num(pos.size, 4)}` : "—"} {symbol}
+            </b>
+          </div>
         </div>
         {tab === "stop" ? (
           <p className="mute note">Stop orders are not in the simulator yet. Close a position by hand, or rely on the risk engine: it force-closes everything at the daily loss and drawdown limits.</p>
         ) : (
           <>
             {tab === "limit" && (
-              <div className="fld">
-                <div className="lbl">Limit price</div>
-                <label className="inp">
-                  <input inputMode="decimal" value={limitStr} placeholder={px(mark)} onChange={(e) => setLimitStr(e.target.value)} data-testid="limit-price" />
-                  <span>$</span>
-                </label>
-              </div>
-            )}
-            <div className="fld">
-              <div className="lbl">Size</div>
               <label className="inp">
-                <input
-                  inputMode="decimal"
-                  value={sizeStr}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    setSizeStr(e.target.value.replace(/[^0-9.]/g, ""));
-                    setPct(null);
-                  }}
-                  data-testid="size"
-                />
-                <span>{symbol}</span>
-              </label>
-              <div className="sub">= {usd(notional, 2)} notional</div>
-            </div>
-            <div className="pcts">
-              {[0.25, 0.5, 0.75, 1].map((p) => (
-                <button type="button" key={p} className={pct === p ? "on" : ""} onClick={() => setSizeByPct(p)} data-testid={`pct-${p * 100}`}>
-                  {p * 100}%
+                <input inputMode="decimal" value={limitStr} placeholder="Price" onChange={(e) => setLimitStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="limit-price" aria-label="Limit price" />
+                <button type="button" className="inp-btn" onClick={() => m && setLimitStr(String(m.mid))}>
+                  Mid
                 </button>
-              ))}
-            </div>
-            <div className="fld">
-              <div className="lbl">Leverage</div>
-              <div className="rail-row">
-                <div className="rail" style={{ ["--p" as string]: `${cap > 1 ? ((leverage - 1) / (cap - 1)) * 100 : 0}%` }}>
-                  <div className="rail-dots" aria-hidden="true">
-                    <span />
-                  </div>
-                  <input className="range" type="range" min={1} max={cap} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} aria-label="Leverage" />
+              </label>
+            )}
+            <label className="inp">
+              <input
+                inputMode="decimal"
+                value={sizeStr}
+                placeholder="Size"
+                aria-label="Size"
+                onChange={(e) => {
+                  setSizeStr(e.target.value.replace(/[^0-9.]/g, ""));
+                  setPct(null);
+                }}
+                data-testid="size"
+              />
+              <span>{symbol}</span>
+            </label>
+            <div className="rail-row">
+              <div className="rail" style={{ ["--p" as string]: `${pctNow * 100}%` }}>
+                <div className="rail-dots" aria-hidden="true">
+                  <span />
                 </div>
-                <b className="rail-val">
-                  {leverage}
-                  <small>x</small>
-                </b>
+                <input className="range" type="range" min={0} max={100} step={1} value={Math.round(pctNow * 100)} onChange={(e) => setSizeByPct(Number(e.target.value) / 100)} aria-label="Size as a share of buying power" data-testid="size-pct" />
               </div>
-              <div className="ticks mono">
-                <span>1x</span>
-                <span>{Math.round(cap / 2)}x</span>
-                <span>{cap}x</span>
-              </div>
+              <b className="rail-val">
+                {Math.round(pctNow * 100)}
+                <small>%</small>
+              </b>
             </div>
-            <div className="two">
-              <div className="fld">
-                <div className="lbl">Take profit</div>
-                <label className="inp">
-                  <input inputMode="decimal" value={tpStr} placeholder="none" onChange={(e) => setTpStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="tp" />
-                  <span>$</span>
-                </label>
-              </div>
-              <div className="fld" title="Stop-loss orders are not supported by the simulator yet">
-                <div className="lbl">Stop loss</div>
-                <label className="inp off">
-                  <input disabled placeholder="soon" />
-                  <span>$</span>
-                </label>
-              </div>
-            </div>
-            {tpBad && <div className="dn note">Take profit must be {long ? "above" : "below"} your entry.</div>}
             <label className="check">
               <input type="checkbox" checked={reduceOnly} onChange={(e) => setReduceOnly(e.target.checked)} />
               <span>Reduce only</span>
             </label>
-            <div className="est">
-              <div>
-                <span>Margin</span>
-                <b>{usd(leverage > 0 ? notional / leverage : notional, 2)}</b>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={tpOn}
+                onChange={(e) => {
+                  setTpOn(e.target.checked);
+                  if (!e.target.checked) setTpStr("");
+                }}
+                data-testid="tp-toggle"
+              />
+              <span>Take profit / Stop loss</span>
+            </label>
+            {tpOn && (
+              <div className="two">
+                <label className="inp">
+                  <input inputMode="decimal" value={tpStr} placeholder="TP price" onChange={(e) => setTpStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="tp" aria-label="Take profit price" />
+                  <span>$</span>
+                </label>
+                <label className="inp off" title="Stop-loss orders are not supported by the simulator yet">
+                  <input disabled placeholder="SL soon" aria-label="Stop loss price" />
+                  <span>$</span>
+                </label>
               </div>
-              <div>
-                <span>Est. fee ({tab === "limit" ? "maker" : "taker"})</span>
-                <b>{usd(fee, 2)}</b>
-              </div>
-              <div>
-                <span>Est. slippage</span>
-                <b>{num(slip, 2)}%</b>
-              </div>
-              <div title="Mark price where this position alone would end the challenge (equity reaches the breach floor)">
-                <span>Breach price</span>
-                <b>{breach ? px(breach) : "-"}</b>
-              </div>
-            </div>
+            )}
+            {tpBad && <div className="dn note">Take profit must be {long ? "above" : "below"} your entry.</div>}
           </>
         )}
-        <button type="button" className={`btn btn-fire ${long ? "" : "btn-short"}`} style={{ width: "100%", marginTop: 6 }} disabled={!canSubmit} onClick={() => void submit()} data-testid="submit-order">
-          {busy ? "Placing..." : dead ? "Challenge is not live" : untradable ? "Market closed" : `${label} ${symbol}-PERP`}
+        <button type="button" className="btn btn-fire tk-submit" disabled={!canSubmit} onClick={() => void submit()} data-testid="submit-order">
+          {busy ? "Placing..." : dead ? "Challenge is not live" : untradable ? "Market closed" : `${label} ${symbol}`}
         </button>
         {untradable && m?.tradableReason && <div className="mute note">{m.tradableReason}</div>}
         {msg && (
@@ -213,6 +239,34 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
             {msg.text}
           </div>
         )}
+        <div className="est">
+          <div title="Mark price where this position alone would end the challenge (equity reaches the breach floor)">
+            <span>Breach price ≈</span>
+            <b>{breach ? px(breach) : "—"}</b>
+          </div>
+          <div>
+            <span>Order value</span>
+            <b>{size > 0 ? usd(notional, 2) : "—"}</b>
+          </div>
+          <div>
+            <span>Margin required ≈</span>
+            <b>{size > 0 ? usd(margin, 2) : "—"}</b>
+          </div>
+          {tab === "market" && (
+            <div>
+              <span>Est. slippage</span>
+              <b>{size > 0 ? `${num(slip, 2)}%` : "—"}</b>
+            </div>
+          )}
+          <div>
+            <span>
+              Fees <small>maker / taker</small>
+            </span>
+            <b>
+              {num(maker * 100, 3)}% / {num(taker * 100, 3)}%
+            </b>
+          </div>
+        </div>
       </div>
     </div>
   );

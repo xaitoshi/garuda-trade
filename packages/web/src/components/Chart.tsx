@@ -28,7 +28,7 @@ export function PriceChart({ candles, marks, resetKey, height = 440 }: { candles
     const c = createChart(host.current, {
       height,
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b8e98", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, attributionLogo: false },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b8e98", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, attributionLogo: true },
       grid: { vertLines: { visible: false }, horzLines: { color: "#ffffff0a" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.06, bottom: 0.22 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },

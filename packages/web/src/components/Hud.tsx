@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { ChallengeState } from "../lib/types";
 import { bossState, knightView } from "../lib/knight";
 import { hms, msToUtcReset, num, pct, usd } from "../lib/format";
@@ -54,7 +55,7 @@ export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string })
   );
 }
 
-function Tile({ label, big, of, left, right, pctUsed, color, note }: { label: string; big: string; of?: string; left: React.ReactNode; right: React.ReactNode; pctUsed: number; color: string; note: string }) {
+function Tile({ label, big, of, rows, pctUsed, color, note }: { label: string; big: string; of?: string; rows: [string, React.ReactNode][]; pctUsed: number; color: string; note: string }) {
   return (
     <div className="hud">
       <div className="lbl">{label}</div>
@@ -63,9 +64,13 @@ function Tile({ label, big, of, left, right, pctUsed, color, note }: { label: st
         {of && <small> / {of}</small>}
       </div>
       <Bar pct={pctUsed} color={color} h={8} />
-      <div className="hud-sub">
-        <span>{left}</span>
-        <span>{right}</span>
+      <div className="acc-grid">
+        {rows.map(([k, v]) => (
+          <Fragment key={k}>
+            <span>{k}</span>
+            <b>{v}</b>
+          </Fragment>
+        ))}
       </div>
       <div className="note">{note}</div>
     </div>
@@ -86,12 +91,12 @@ export function HudTiles({ c }: { c: ChallengeState }) {
   return (
     <div className="hudrow" data-testid="hud">
       {target !== null ? (
-        <Tile label="Profit target" big={usd(Math.max(0, r.profitLoss))} of={usd(target)} pctUsed={(r.targetProgressPct ?? 0) * 100} color="var(--fire)" left={<>Equity <b>{usd(r.equity)}</b></>} right={<b className={r.profitLoss >= 0 ? "up" : "dn"}>{pct(r.targetProgressPct ?? 0)}</b>} note="Boss HP = distance to target" />
+        <Tile label="Profit target" big={usd(Math.max(0, r.profitLoss))} of={usd(target)} pctUsed={(r.targetProgressPct ?? 0) * 100} color="var(--fire)" rows={[["Equity", usd(r.equity)], ["Progress", <span className={r.profitLoss >= 0 ? "up" : "dn"}>{pct(r.targetProgressPct ?? 0)}</span>]]} note="Boss HP = distance to target" />
       ) : (
-        <Tile label="Profit (cycle)" big={usd(r.profitLoss)} pctUsed={0} color="var(--fire)" left={<>Equity <b>{usd(r.equity)}</b></>} right={<b>80% yours</b>} note="Funded: no target, keep the buffers" />
+        <Tile label="Profit (cycle)" big={usd(r.profitLoss)} pctUsed={0} color="var(--fire)" rows={[["Equity", usd(r.equity)], ["Your split", "80%"]]} note="Funded: no target, keep the buffers" />
       )}
-      <Tile label="Daily loss" big={usd(dailyUsed)} of={usd(r.dailyLossLimit)} pctUsed={dailyUsedPct * 100} color="var(--violet)" left={<>Buffer <b>{usd(Math.max(0, r.dailyRemaining))}</b></>} right={<b>{pct(dailyUsedPct, 0)}</b>} note={`Knight HP · resets in ${hms(reset)}`} />
-      <Tile label="Max drawdown" big={usd(ddUsed)} of={usd(ddLimit)} pctUsed={ddUsedPct * 100} color="var(--violet2)" left={<>Buffer <b>{usd(Math.max(0, ddLimit - ddUsed))}</b></>} right={<b>{pct(ddUsedPct, 0)}</b>} note={`Armor · static from ${usd(r.startingBalance)}`} />
+      <Tile label="Daily loss" big={usd(dailyUsed)} of={usd(r.dailyLossLimit)} pctUsed={dailyUsedPct * 100} color="var(--violet)" rows={[["Buffer", usd(Math.max(0, r.dailyRemaining))], ["Used", pct(dailyUsedPct, 0)]]} note={`Knight HP · resets in ${hms(reset)}`} />
+      <Tile label="Max drawdown" big={usd(ddUsed)} of={usd(ddLimit)} pctUsed={ddUsedPct * 100} color="var(--violet2)" rows={[["Buffer", usd(Math.max(0, ddLimit - ddUsed))], ["Used", pct(ddUsedPct, 0)]]} note={`Armor · static from ${usd(r.startingBalance)}`} />
       <div className="hud">
         <div className="lbl">Account</div>
         <div className="hud-big">{usd(c.account.balance)}</div>

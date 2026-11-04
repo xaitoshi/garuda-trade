@@ -218,3 +218,54 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 :root main.pg-payouts .req .inp small{color:#b9bbc5}
 :root .chip{white-space:nowrap;flex:none}
 :root main .mk{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
+
+/* ticket rhythm: label sits 8px above its field, groups are 16px apart, disabled fields keep their frame */
+:root main .tk-b{gap:16px}
+:root main .tk .fld{display:flex;flex-direction:column;gap:8px}
+:root main .tk .fld .inp{margin-top:0}
+:root main .tk .fld .sub,:root main .tk .ticks{margin-top:-2px}
+:root main .tk .two{gap:12px;align-items:end}
+:root main .tk .pcts{margin-top:-6px}
+:root main .tk .check{align-self:flex-start;min-height:20px;margin-top:2px}
+:root main .inp.off{opacity:1;background:transparent;border-color:var(--edge)}
+:root main .inp.off input,:root main .inp.off span{color:#55575d}
+
+/* HUD tiles share one skeleton: label, figure, 4px meter, key/value rows, one-line note pinned to the bottom */
+:root main .hud{display:flex;flex-direction:column;min-width:0;padding:20px}
+:root main .hud .lbl{font-size:13px;color:#b9bbc5}
+:root main .hud .hud-big{margin:14px 0 16px;font-size:clamp(28px,2.6vw,38px);white-space:nowrap}
+:root main .hud .hud-big small{font-size:14px;color:#8b8e98}
+:root main .hud .bar{height:4px!important;margin-bottom:16px}
+:root main .hud .acc-grid{grid-template-columns:minmax(0,1fr) auto;gap:9px 12px;margin:0;font-size:13px}
+:root main .hud .acc-grid span{color:#8b8e98;white-space:nowrap}
+:root main .hud .acc-grid b{color:#f1f1f4;font-weight:500;white-space:nowrap}
+:root main .hud .note{margin-top:auto;padding-top:14px;font-size:12px;color:#6b6e76;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- motion, matched to Pilot: 420ms slides, 280ms color, cubic-bezier(.22,.7,.24,1) ---------- */
+:root{--motion-ease:cubic-bezier(.22,.7,.24,1);--motion-fast:280ms;--motion-slide:420ms;--motion-screen:480ms}
+/* the selected fill and the three-dot marker live on the control and glide to the active child (lib/slide.ts) */
+:root :is(.tabs,.seg,.seg2,.tabs2,.tb,.tf,.flt,.sw){position:relative;isolation:isolate}
+:root :is(.tabs,.seg,.seg2)::before{content:"";position:absolute;z-index:-1;left:0;top:0;width:var(--sw,0);height:var(--sh,0);transform:translate(var(--sx,0),var(--sy,0));border-radius:999px;pointer-events:none}
+:root .tabs::before{background:#eeeeef}
+:root .seg2::before{background:#ffffff0c}
+:root .seg::before{border-radius:var(--r-inner);background:color-mix(in srgb,var(--positive) 12.55%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--positive) 20%,transparent)}
+:root .seg:has(.short.on)::before{background:color-mix(in srgb,var(--negative) 12.55%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--negative) 20%,transparent)}
+:root :is(.tabs,.seg2,.tabs2,.tb,.tf,.flt,.sw)::after{content:"";position:absolute;z-index:2;left:0;top:0;width:2px;height:2px;border-radius:50%;background:#f1f1f4;box-shadow:-4px 0 #f1f1f4,4px 0 #f1f1f4;transform:translate(calc(var(--sx,0) + var(--sw,0) / 2 - 1px),calc(var(--sy,0) + var(--sh,0) - 6px));opacity:var(--dots,1);pointer-events:none}
+:root .tabs::after{background:#2e2e2e;box-shadow:-4px 0 #2e2e2e,4px 0 #2e2e2e;transform:translate(calc(var(--sx,0) + var(--sw,0) / 2 - 1px),calc(var(--sy,0) + var(--sh,0) - 5px))}
+:root :is(.tabs2,.tb)::after{transform:translate(calc(var(--sx,0) + var(--sw,0) / 2 - 1px),calc(var(--sy,0) + var(--sh,0) - 7px))}
+:root [data-slide=ready]:is(.tabs,.seg,.seg2)::before{transition:transform var(--motion-slide) var(--motion-ease),width var(--motion-slide) var(--motion-ease),background-color var(--motion-slide) var(--motion-ease),box-shadow var(--motion-slide) var(--motion-ease)}
+:root [data-slide=ready]:is(.tabs,.seg2,.tabs2,.tb,.tf,.flt,.sw)::after{transition:transform var(--motion-slide) var(--motion-ease)}
+/* the children stop painting their own selection; only their text color changes */
+:root :is(.tabs a.on,.tabs2 button.on,.tb button.on,.seg2 button.on,.tf .chip.on,.flt .chip.on,.sw .chip.on)::after{display:none}
+:root .tabs a.on,:root main .seg2 button.on,:root main .seg button.long.on,:root main .seg button.short.on{background:transparent;box-shadow:none}
+:root :is(.tabs a,.seg button,.seg2 button,.tabs2 button,.tb button,.chip,.pcts button,.btn,.wopt,.wallet,.inp,.check input){transition:color var(--motion-fast) var(--motion-ease),background-color var(--motion-fast) var(--motion-ease),border-color var(--motion-fast) var(--motion-ease),box-shadow var(--motion-fast) var(--motion-ease)}
+
+/* pages, menus and ticket bodies arrive the way Pilot screens do */
+@keyframes pilot-page-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pilot-pop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+:root main{animation:pilot-page-enter var(--motion-screen) var(--motion-ease) both}
+:root .menu{transform-origin:top right;animation:pilot-pop 240ms var(--motion-ease) both}
+:root main .tk-b>.fld,:root main .tk-b>.note{animation:pilot-page-enter var(--motion-fast) var(--motion-ease) both}
+:root main .rail-dots span{transition:width 180ms var(--motion-ease)}
+:root .bar i{transition:width var(--motion-slide) var(--motion-ease)}
+@media(prefers-reduced-motion:reduce){:root main,:root .menu,:root main .tk-b>*{animation:none}:root [data-slide]::before,:root [data-slide]::after{transition:none!important}}
