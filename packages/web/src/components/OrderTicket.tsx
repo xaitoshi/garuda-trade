@@ -144,13 +144,19 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
               ))}
             </div>
             <div className="fld">
-              <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Leverage</span>
-                <b className="mono" style={{ color: "var(--bone)" }}>
-                  {leverage}x
+              <div className="lbl">Leverage</div>
+              <div className="rail-row">
+                <div className="rail" style={{ ["--p" as string]: `${cap > 1 ? ((leverage - 1) / (cap - 1)) * 100 : 0}%` }}>
+                  <div className="rail-dots" aria-hidden="true">
+                    <span />
+                  </div>
+                  <input className="range" type="range" min={1} max={cap} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} aria-label="Leverage" />
+                </div>
+                <b className="rail-val">
+                  {leverage}
+                  <small>x</small>
                 </b>
               </div>
-              <input className="range" type="range" min={1} max={cap} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} style={{ ["--p" as string]: `${cap > 1 ? ((leverage - 1) / (cap - 1)) * 100 : 0}%` }} aria-label="Leverage" />
               <div className="ticks mono">
                 <span>1x</span>
                 <span>{Math.round(cap / 2)}x</span>
@@ -174,10 +180,9 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
               </div>
             </div>
             {tpBad && <div className="dn note">Take profit must be {long ? "above" : "below"} your entry.</div>}
-            <label className="tog">
-              <span>Reduce-only</span>
+            <label className="check">
               <input type="checkbox" checked={reduceOnly} onChange={(e) => setReduceOnly(e.target.checked)} />
-              <u />
+              <span>Reduce only</span>
             </label>
             <div className="est">
               <div>

@@ -95,7 +95,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const marks = useMemo<PriceMark[]>(() => {
     const out: PriceMark[] = [];
     if (pos) {
-      out.push({ price: pos.entryPrice, color: "#bbb4fb", title: `${pos.side.toUpperCase()} ${pos.size.toFixed(2)} ${symbol}` });
+      out.push({ price: pos.entryPrice, color: "#eeeef3", title: `${pos.side.toUpperCase()} ${pos.size.toFixed(2)} ${symbol}` });
       out.push({ price: breachPrice(pos, c.risk), color: "#ff5f6d", title: "BREACH" });
     }
     for (const o of c.openOrders) {

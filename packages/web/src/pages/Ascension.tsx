@@ -63,17 +63,17 @@ export function Ascension({ c }: { c: ChallengeState }) {
             <div className="eyebrow">Challenge passed</div>
             <h1 className="pt big-title">The Phoenix falls.</h1>
           </div>
-          <span className="slot-tag" style={{ right: 34, top: 34, zIndex: 3 }}>VICTORY</span>
+          <span className="slot-tag" style={{ right: 34, top: 34, zIndex: 3 }}>Victory</span>
           <div className="art">
             <div className="fall">
               <BossImg state="defeated" size={210} />
             </div>
-            <span className="fallx">BOSS HP 0%</span>
+            <span className="fallx">Boss HP 0%</span>
             {!k.demo && (
               <>
                 <div className="before">
                   <KnightImg level={k.level} size={150} />
-                  <div className="cap">BEFORE<b>LV.{k.level} {k.levelName}</b></div>
+                  <div className="cap">Before<b>LV.{k.level} {k.levelName}</b></div>
                 </div>
                 <div className="arrow">›››</div>
               </>
@@ -82,7 +82,7 @@ export function Ascension({ c }: { c: ChallengeState }) {
               <div className="halo" style={{ background: `radial-gradient(circle, ${LEVEL_COLOR[after]}55, transparent 68%)` }} />
               <KnightImg level={after} state="victory" size={270} />
               <div className="cap">
-                {k.demo ? "DEMO CLEARED" : "AFTER"}
+                {k.demo ? "Demo cleared" : "AFTER"}
                 <b style={{ color: LEVEL_COLOR[after] }}>{k.demo ? k.name : `LV.${after} ${LEVELS[after - 1]!.name}`}</b>
               </div>
             </div>
@@ -96,11 +96,11 @@ export function Ascension({ c }: { c: ChallengeState }) {
             </div>
             <div>
               <b>{usd(c.account.equity)}</b>
-              <span>FINAL EQUITY</span>
+              <span>Final equity</span>
             </div>
             <div>
               <b>{usd(c.account.feesPaid, 2)}</b>
-              <span>FEES PAID</span>
+              <span>Fees paid</span>
             </div>
             <div>
               <b>{usd(Math.max(0, c.risk.drawdownUsedPct) * ddLimit)}</b>

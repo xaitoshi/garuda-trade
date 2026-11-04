@@ -9,7 +9,7 @@ input,select{font:inherit;color:inherit}
 a.btn{text-decoration:none}
 .up{color:var(--green)}.dn{color:var(--red)}.mute{color:var(--mute)}.dim{color:var(--dim)}.fire{color:var(--fire)}
 .note{font-size:12.5px;color:var(--dim);line-height:1.4}
-.mono{font-family:"GM",monospace}
+.mono{font-family:Inter,sans-serif}
 .chip{cursor:pointer}
 button.chip:disabled{opacity:.5}
 select.chip{appearance:none;-webkit-appearance:none;padding-right:22px;background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),linear-gradient(135deg,var(--mute) 50%,transparent 50%);background-position:calc(100% - 13px) 55%,calc(100% - 9px) 55%;background-size:4px 4px;background-repeat:no-repeat}
@@ -38,7 +38,7 @@ button.wallet{cursor:pointer}
 .foot-r{display:flex;gap:18px}
 .foot-r a{color:var(--mute)}
 .foot-r a:hover{color:var(--fire)}
-.linkbtn{font-family:"GM",monospace;font-size:11px;color:var(--mute);text-decoration:underline;text-underline-offset:3px}
+.linkbtn{font-family:Inter,sans-serif;font-size:11px;color:var(--mute);text-decoration:underline;text-underline-offset:3px}
 .linkbtn:hover{color:var(--bone)}
 .tbl-scroll{overflow-x:auto}
 .tbl-scroll table{min-width:620px}
@@ -67,7 +67,7 @@ button.wallet{cursor:pointer}
 .pg-terminal .seg button.short.on{background:rgba(255,95,109,.16);color:var(--red)}
 .pg-terminal .tabs2 button{padding:0 0 10px;color:var(--mute);font-size:14px}
 .pg-terminal .tabs2 button.on{color:var(--bone);border-bottom:2px solid var(--fire);margin-bottom:-1px}
-.pg-terminal .pcts button{text-align:center;padding:7px;border-radius:8px;border:1px solid var(--line);color:var(--mute);font-size:12px;font-family:"GM",monospace}
+.pg-terminal .pcts button{text-align:center;padding:7px;border-radius:8px;border:1px solid var(--line);color:var(--mute);font-size:12px;font-family:Inter,sans-serif}
 .pg-terminal .pcts button.on{color:var(--bone);background:var(--panel2);border-color:var(--line2)}
 .pg-terminal .pcts button:hover{border-color:var(--line2)}
 .pg-terminal .tb button{padding:14px 0;color:var(--mute);font-size:14px}
@@ -132,7 +132,7 @@ button.wallet{cursor:pointer}
 .pg-leaderboard .seg2 button{padding:9px 18px;border-radius:9px;color:var(--mute);font-size:14px}
 .pg-leaderboard .seg2 button.on{background:var(--panel2);color:var(--bone)}
 .pg-payouts .inp.off{opacity:.5}
-.pg-payouts .tg{font-family:"GM",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line2);border-radius:6px;padding:3px 8px;color:var(--mute)}
+.pg-payouts .tg{font-family:Inter,sans-serif;font-size:10.5px;letter-spacing:0;text-transform:none;border:1px solid var(--line2);border-radius:6px;padding:3px 8px;color:var(--mute)}
 .st.dormant{color:var(--mute);border-color:var(--line2);background:var(--panel)}
 
 /* ---- small screens. Selectors repeat the page scope on purpose: the page rules are nested under .pg-x,

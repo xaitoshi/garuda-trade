@@ -10,8 +10,8 @@ export interface PriceMark {
   dashed?: boolean;
 }
 
-const GREEN = "#3ddc97";
-const RED = "#ff5f6d";
+const GREEN = "#3ce362";
+const RED = "#ff4953";
 const t = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
 
 export function PriceChart({ candles, marks, resetKey, height = 440 }: { candles: Candle[]; marks: PriceMark[]; resetKey: string; height?: number }) {
@@ -28,17 +28,18 @@ export function PriceChart({ candles, marks, resetKey, height = 440 }: { candles
     const c = createChart(host.current, {
       height,
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#5f5a5b", fontFamily: "GM, monospace", fontSize: 11, attributionLogo: false },
-      grid: { vertLines: { visible: false }, horzLines: { color: "#242122" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b8e98", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, attributionLogo: false },
+      grid: { vertLines: { visible: false }, horzLines: { color: "#ffffff0a" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.06, bottom: 0.22 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
-      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: "#3b3738", labelBackgroundColor: "#242122" }, horzLine: { color: "#3b3738", labelBackgroundColor: "#242122" } },
+      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: "#ffffff30", labelBackgroundColor: "#2a2c32" }, horzLine: { color: "#ffffff30", labelBackgroundColor: "#2a2c32" } },
       handleScale: { mouseWheel: true },
+      localization: { locale: "en-US" },
     });
-    cs.current = c.addSeries(CandlestickSeries, { upColor: GREEN, downColor: RED, borderUpColor: GREEN, borderDownColor: RED, wickUpColor: GREEN, wickDownColor: RED, priceLineColor: "#ff5f01" });
+    cs.current = c.addSeries(CandlestickSeries, { upColor: GREEN, downColor: RED, borderUpColor: GREEN, borderDownColor: RED, wickUpColor: GREEN, wickDownColor: RED, priceLineColor: GREEN });
     vol.current = c.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     c.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-    ma.current = c.addSeries(LineSeries, { color: "#bbb4fb", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    ma.current = c.addSeries(LineSeries, { color: "#ffffff55", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     chart.current = c;
     return () => {
       c.remove();
@@ -51,7 +52,7 @@ export function PriceChart({ candles, marks, resetKey, height = 440 }: { candles
   useEffect(() => {
     if (!cs.current || !vol.current || !ma.current || candles.length === 0) return;
     cs.current.setData(candles.map((k) => ({ time: t(k.time), open: k.open, high: k.high, low: k.low, close: k.close })));
-    vol.current.setData(candles.map((k) => ({ time: t(k.time), value: k.volume, color: k.close >= k.open ? "rgba(61,220,151,.28)" : "rgba(255,95,109,.28)" })));
+    vol.current.setData(candles.map((k) => ({ time: t(k.time), value: k.volume, color: k.close >= k.open ? "rgba(60,227,98,.28)" : "rgba(255,73,83,.28)" })));
     ma.current.setData(sma(candles, 10).map((p) => ({ time: t(p.time), value: p.value })));
     if (fitted.current !== resetKey) {
       chart.current?.timeScale().fitContent();

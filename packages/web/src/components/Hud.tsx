@@ -48,8 +48,8 @@ export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string })
         </svg>
         <BossImg state={bossState(c)} size={190} className="sc-b" />
       </div>
-      <span className="slot-tag a">ACCOUNT · {k.label.toUpperCase()}</span>
-      <span className="slot-tag b">LIVE · {symbol}-PERP</span>
+      <span className="slot-tag a">Account · {k.label}</span>
+      <span className="slot-tag b">Live · {symbol}-PERP</span>
     </div>
   );
 }

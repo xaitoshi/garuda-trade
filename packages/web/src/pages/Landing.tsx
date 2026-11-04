@@ -36,8 +36,8 @@ export function Landing() {
             <div className="mark glowmark" />
             <div className="mark" />
           </div>
-          <div className="fchip c1"><span className="mono">PHOENIX HP</span><b>62%</b><div className="bar"><i style={{ width: "62%" }} /></div></div>
-          <div className="fchip c2"><span className="mono">NEXT LEVEL</span><b>Knight, LV.2</b></div>
+          <div className="fchip c1"><span className="mono">Phoenix HP</span><b>62%</b><div className="bar"><i style={{ width: "62%" }} /></div></div>
+          <div className="fchip c2"><span className="mono">Next level</span><b>Knight, LV.2</b></div>
         </div>
       </header>
 
@@ -93,7 +93,7 @@ export function Landing() {
             </article>
           ))}
         </div>
-        <div className="fine rv"><span className="badge">SIMULATED ACCOUNT</span>Challenges run on simulated accounts against the live Phoenix orderbook. Try the free demo first.</div>
+        <div className="fine rv"><span className="badge">Simulated account</span>Challenges run on simulated accounts against the live Phoenix orderbook. Try the free demo first.</div>
       </section>
 
       <section className="s wrap" id="knights">
