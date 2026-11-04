@@ -25,7 +25,8 @@
     "web:dev": "pnpm --filter @garuda/web dev",
     "web:build": "pnpm --filter @garuda/web build",
     "web:stub": "tsx scripts/web-stub-server.ts",
-    "web:screens": "tsx scripts/web-screens.ts"
+    "web:screens": "tsx scripts/web-screens.ts",
+    "test:payout:devnet": "DEVNET=1 vitest run packages/api/test/e2e-payout.test.ts"
   },
   "devDependencies": {
     "@garuda/api": "workspace:*",
