@@ -9,7 +9,7 @@ import { useNow } from "../lib/hooks";
 export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string }) {
   const k = knightView(c);
   const r = c.risk;
-  const dailyLeft = 100 - r.dailyUsedPct * 100;
+  const dailyLeft = 100 - Math.max(0, r.dailyUsedPct) * 100;
   const hasBoss = r.targetProgressPct !== null;
   const bossHp = hasBoss ? 100 - r.targetProgressPct! * 100 : 100;
   const toGo = hasBoss ? Math.max(0, r.targetEquity! - r.equity) : 0;
@@ -78,8 +78,11 @@ export function HudTiles({ c }: { c: ChallengeState }) {
   const reset = msToUtcReset(now);
   const target = r.targetEquity !== null ? r.targetEquity - r.startingBalance : null;
   const ddLimit = r.startingBalance - r.drawdownFloor;
-  const ddUsed = r.drawdownUsedPct * ddLimit;
-  const dailyUsed = r.dailyUsedPct * r.dailyLossLimit;
+  // Used is negative while equity is above the line it is measured from: show 0 used, not a negative number.
+  const ddUsedPct = Math.max(0, r.drawdownUsedPct);
+  const dailyUsedPct = Math.max(0, r.dailyUsedPct);
+  const ddUsed = ddUsedPct * ddLimit;
+  const dailyUsed = dailyUsedPct * r.dailyLossLimit;
   return (
     <div className="hudrow" data-testid="hud">
       {target !== null ? (
@@ -87,8 +90,8 @@ export function HudTiles({ c }: { c: ChallengeState }) {
       ) : (
         <Tile label="Profit (cycle)" big={usd(r.profitLoss)} pctUsed={0} color="var(--fire)" left={<>Equity <b>{usd(r.equity)}</b></>} right={<b>80% yours</b>} note="Funded: no target, keep the buffers" />
       )}
-      <Tile label="Daily loss" big={usd(dailyUsed)} of={usd(r.dailyLossLimit)} pctUsed={r.dailyUsedPct * 100} color="var(--violet)" left={<>Buffer <b>{usd(Math.max(0, r.dailyRemaining))}</b></>} right={<b>{pct(r.dailyUsedPct, 0)}</b>} note={`Knight HP · resets in ${hms(reset)}`} />
-      <Tile label="Max drawdown" big={usd(ddUsed)} of={usd(ddLimit)} pctUsed={r.drawdownUsedPct * 100} color="var(--violet2)" left={<>Buffer <b>{usd(Math.max(0, ddLimit - ddUsed))}</b></>} right={<b>{pct(r.drawdownUsedPct, 0)}</b>} note={`Armor · static from ${usd(r.startingBalance)}`} />
+      <Tile label="Daily loss" big={usd(dailyUsed)} of={usd(r.dailyLossLimit)} pctUsed={dailyUsedPct * 100} color="var(--violet)" left={<>Buffer <b>{usd(Math.max(0, r.dailyRemaining))}</b></>} right={<b>{pct(dailyUsedPct, 0)}</b>} note={`Knight HP · resets in ${hms(reset)}`} />
+      <Tile label="Max drawdown" big={usd(ddUsed)} of={usd(ddLimit)} pctUsed={ddUsedPct * 100} color="var(--violet2)" left={<>Buffer <b>{usd(Math.max(0, ddLimit - ddUsed))}</b></>} right={<b>{pct(ddUsedPct, 0)}</b>} note={`Armor · static from ${usd(r.startingBalance)}`} />
       <div className="hud">
         <div className="lbl">Account</div>
         <div className="hud-big">{usd(c.account.balance)}</div>

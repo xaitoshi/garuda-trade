@@ -11,7 +11,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm --filter @garuda/web typecheck",
     "demo": "tsx scripts/demo.ts",
     "demo:mock": "GARUDA_DEMO_MOCK=1 tsx scripts/demo.ts",
     "api": "tsx packages/worker/src/server.ts",
@@ -21,7 +21,11 @@
     "chain:setup": "tsx scripts/chain-setup.ts",
     "chain:faucet": "tsx scripts/chain-mint-test-usdc.ts",
     "test:chain:local": "LOCAL_VALIDATOR=1 vitest run packages/api/test/e2e-chain.test.ts",
-    "test:chain:devnet": "DEVNET=1 vitest run packages/api/test/e2e-chain.test.ts"
+    "test:chain:devnet": "DEVNET=1 vitest run packages/api/test/e2e-chain.test.ts",
+    "web:dev": "pnpm --filter @garuda/web dev",
+    "web:build": "pnpm --filter @garuda/web build",
+    "web:stub": "tsx scripts/web-stub-server.ts",
+    "web:screens": "tsx scripts/web-screens.ts"
   },
   "devDependencies": {
     "@garuda/api": "workspace:*",

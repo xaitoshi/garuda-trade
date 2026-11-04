@@ -103,7 +103,7 @@ export function Ascension({ c }: { c: ChallengeState }) {
               <span>FEES PAID</span>
             </div>
             <div>
-              <b>{usd(c.risk.drawdownUsedPct * ddLimit)}</b>
+              <b>{usd(Math.max(0, c.risk.drawdownUsedPct) * ddLimit)}</b>
               <span>MAX DD USED / {usd(ddLimit)}</span>
             </div>
           </div>

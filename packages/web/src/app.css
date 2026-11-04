@@ -137,8 +137,9 @@ button.wallet{cursor:pointer}
 /* ---- small screens. Selectors repeat the page scope on purpose: the page rules are nested under .pg-x,
    so these need equal or higher specificity to win. ---- */
 @media (max-width:1180px){
-  main.pg-terminal .t-top{grid-template-columns:1fr}
-  main.pg-terminal .t-grid,main.pg-terminal .btm{grid-template-columns:1fr}
+  main.pg-terminal .t-top{grid-template-columns:minmax(0,1fr)}
+  main.pg-terminal .t-grid,main.pg-terminal .btm{grid-template-columns:minmax(0,1fr)}
+  main.pg-terminal .t-grid>*,main.pg-terminal .btm>*,main.pg-terminal .t-top>*{min-width:0}
   main.pg-terminal .hudrow{grid-template-columns:repeat(2,1fr);height:auto}
   main.pg-terminal .hud{min-height:200px}
   main.pg-challenges .cards{grid-template-columns:repeat(3,1fr)}
