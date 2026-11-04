@@ -1,5 +1,7 @@
 import type { Fill, FundingPayment, Order, Position } from "./types.js";
 
+const EPS = 1e-12;
+
 export interface SimAccountOptions {
   id: string;
   startingBalance: number;
@@ -31,6 +33,56 @@ export class SimAccount {
     this.id = opts.id;
     this.startingBalance = opts.startingBalance;
     this.balance = opts.startingBalance;
+  }
+
+  /**
+   * Rebuild an account from its persisted ledger (orders as last saved, every fill, every funding payment).
+   * Balance, realized PnL, fees, funding and average-entry positions are all DERIVED by replaying the ledger,
+   * so a restart cannot drift from what was recorded.
+   */
+  static restore(input: {
+    id: string;
+    startingBalance: number;
+    orders: Order[];
+    fills: Fill[];
+    fundingPayments: FundingPayment[];
+    marks?: Record<string, number>;
+    fundingAccruedTo?: Record<string, number>;
+    seq?: number;
+  }): SimAccount {
+    const a = new SimAccount({ id: input.id, startingBalance: input.startingBalance });
+    for (const o of input.orders) a.orders.set(o.id, { ...o });
+    for (const f of input.fills) a.replayFill(f);
+    for (const p of input.fundingPayments) {
+      a.balance -= p.amount;
+      a.fundingPaid += p.amount;
+      a.fundingPayments.push({ ...p });
+    }
+    for (const [k, v] of Object.entries(input.marks ?? {})) a.setMark(k, v);
+    for (const [k, v] of Object.entries(input.fundingAccruedTo ?? {})) a.fundingAccruedTo.set(k, v);
+    const maxFromIds = Math.max(0, ...[...a.orders.keys(), ...a.fills.map((f) => f.id)].map((id) => Number(id.split("_").pop()) || 0));
+    a.seq = Math.max(input.seq ?? 0, maxFromIds);
+    return a;
+  }
+
+  /** Apply one recorded fill to balance and position (the same average-entry rules the engine used). */
+  private replayFill(f: Fill): void {
+    const pos = this.positions.get(f.symbol);
+    const cur = pos?.size ?? 0;
+    const entry = pos?.entryPrice ?? f.price;
+    const signed = f.side === "buy" ? f.size : -f.size;
+    let newEntry = entry;
+    if (Math.abs(cur) <= EPS || Math.sign(cur) === Math.sign(signed)) {
+      newEntry = (Math.abs(cur) * entry + f.size * f.price) / (Math.abs(cur) + f.size);
+    } else if (f.size > Math.abs(cur) + EPS) {
+      newEntry = f.price;
+    }
+    this.balance += f.realizedPnl - f.fee;
+    this.realizedPnl += f.realizedPnl;
+    this.feesPaid += f.fee;
+    if (Math.abs(f.positionAfter) <= EPS) this.positions.delete(f.symbol);
+    else this.positions.set(f.symbol, { symbol: f.symbol, size: f.positionAfter, entryPrice: newEntry });
+    this.fills.push({ ...f });
   }
 
   nextId(prefix: string): string {

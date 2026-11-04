@@ -12,6 +12,13 @@ import {
   type Side,
 } from "./types.js";
 
+/**
+ * Pre-fill gate for RESTING limit orders. Called just before a resting order would fill `size` at `price`.
+ * Return the size that may fill (0 cancels the order); a smaller size trims the fill and cancels the rest.
+ * Used by the API to re-check the leverage cap at fill time (a resting order was only checked at placement).
+ */
+export type RestingFillGate = (order: Order, size: number, price: number) => { size: number; reason?: string };
+
 export interface EngineOptions {
   fees?: FeeSchedule;
   /**
@@ -150,7 +157,7 @@ export class SimEngine {
    * Feed a fresh book for a symbol: updates the mark (mid) and fills any resting limit orders
    * that the book now crosses. Fills execute at the order's limit price (maker fee).
    */
-  onBook(account: SimAccount, book: L2Book, now: number): Fill[] {
+  onBook(account: SimAccount, book: L2Book, now: number, gate?: RestingFillGate): Fill[] {
     const m = mid(book);
     if (m !== undefined) account.setMark(book.symbol, m);
     const out: Fill[] = [];
@@ -179,11 +186,24 @@ export class SimEngine {
           continue;
         }
       }
-      const take = Math.min(cap, avail * this.makerFillRatio);
+      let take = Math.min(cap, avail * this.makerFillRatio);
       if (take <= EPS) continue;
-      out.push(this.applyFill(account, order, take, lp, "maker", now, false));
-      order.remaining -= take;
-      if (order.remaining <= EPS) {
+      let trimmedReason: string | undefined;
+      if (gate) {
+        const g = gate(order, take, lp);
+        if (g.size < take - EPS) trimmedReason = g.reason ?? "gate";
+        take = Math.max(0, Math.min(take, g.size));
+      }
+      if (take > EPS) {
+        out.push(this.applyFill(account, order, take, lp, "maker", now, false));
+        order.remaining -= take;
+      }
+      if (trimmedReason) {
+        // Fill-time rule hit: whatever the gate refused is cancelled, the order does not keep resting.
+        order.status = "cancelled";
+        order.rejectReason = trimmedReason;
+        order.remaining = 0;
+      } else if (order.remaining <= EPS) {
         order.remaining = 0;
         order.status = "filled";
       } else {
