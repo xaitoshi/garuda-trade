@@ -8,7 +8,7 @@ The rules implemented here are the settled "Garuda Trading Rules" (Notion page, 
 
 ```bash
 pnpm install
-pnpm test            # 273 tests pass + 3 skipped (see Tests); Postgres tests run on pg-mem; no network or SOL needed
+pnpm test            # 296 tests pass + 3 skipped (see Tests); Postgres tests run on pg-mem; no network or SOL needed
 pnpm test:pg         # same suite with the Postgres tests on REAL Postgres (embedded, no docker needed)
 pnpm typecheck
 pnpm demo            # $25k challenge against the LIVE Phoenix book (falls back to recorded books)
@@ -16,6 +16,9 @@ pnpm demo:mock       # force the recorded-book fallback
 docker compose up -d db && cp .env.example .env
 pnpm api             # API + streaming risk worker on :3000 (PORT to change)
 pnpm chain:setup     # one-time Solana DEVNET setup: platform key, knight collection, test USDC mint (see Solana devnet)
+pnpm web:stub        # stub API on :3000: real engine, fake knights and fake USDC, recorded books (for the web app)
+VITE_DEV_WALLET=1 pnpm web:dev   # web app on :5173, /api proxied to :3000 (see Web app)
+pnpm web:screens     # drive the real UI with Playwright and write docs/screens/*.png
 ```
 
 Node 20+, pnpm 10. `PHOENIX_BUILDER_CODE` is a placeholder: Phase 1 never routes orders, so it is not used (builder codes only matter for real routed orders in Phase 2). No keys are needed for Phase 1: the Phoenix REST API is public. Without `DATABASE_URL` the server uses an in-memory store and loses everything on restart.
@@ -156,6 +159,49 @@ Pre-trade gates (opening orders only; reduce-only always passes): market whiteli
 ### `@garuda/market-data`
 `PhoenixSdkProvider` uses `@ellipsis-labs/rise` (`client.api.orderbook().getOrderbook`, `markets().getLatestMarketStats`, `markets().getMarkets`). Verified live: 100-level books, mark, funding, market status and tradfi session flags. `current_funding_rate` from the live API is in **percent per hour**; the provider divides by 100 (the docs example shows a fraction, the live values match `annualized_funding_rate` only as percent). `fixtures/phoenix-books.json` holds recorded real books (`pnpm fixtures:record`) used by tests and as the offline fallback.
 
+## Web app (M5)
+
+`packages/web` (`@garuda/web`): Vite + React 19 + react-router SPA, ported from the seven mocks and the landing page (warm black `#110f10`, fire `#ff5f01`, violet, Hanken Grotesk, the chibi knight and boss PNGs). It talks to the real API only; nothing is faked in the browser.
+
+| Route | What it does |
+| --- | --- |
+| `/` | Landing. Tier cards and rules come from `GET /rules` (with built-in fallbacks so it renders without the API). |
+| `/challenges` | Free Demo card plus Squire, Knight, Paladin, Ascended. Paladin and Ascended show a lock until the wallet holds the required knight. Checkout: name your knight, accept the terms, pay in USDC, reveal. The Revive tab lists wounded knights. |
+| `/terminal`, `/terminal/:id` | Battle terminal: knight and boss panel (PNG per state), profit target, daily loss and drawdown bars, account tile, candle chart, live book and mark, order ticket (market and limit, size by percent, leverage, take profit as a reduce-only limit, reduce-only), positions, open orders, history, combat log. A passed challenge shows the Ascension screen (claim the funded account). |
+| `/barracks` | One card per knight with filters and a detail panel (evolution strip, milestones, scars). |
+| `/revive/:id` | Wounded screen: what broke (chart rebuilt from fills, floor line, breach point), the 20% revive price from `/challenges/:id/revive`, knight record. Checks out through the same USDC flow. |
+| `/leaderboard` | Sample data, labelled as such (no backend yet). |
+| `/payouts` | Read-only. Shows what a funded account would be owed (`payout-quote`); the request button is disabled until KYC (M7) and the payout rail (M8) exist. |
+
+**Wallet and sign-in.** `@solana/wallet-adapter-react`; Phantom, Solflare, Backpack and other Wallet Standard wallets register themselves. Connecting runs the API's flow: `POST /auth/nonce`, `signMessage`, `POST /auth/verify`, then the bearer token is kept in `sessionStorage`.
+
+**USDC checkout.** `POST /purchases/challenge` (or `/purchases/revive`) returns a quote; the app builds one SPL `transferChecked` to the treasury token account with the quote's `reference` as an extra read-only key, the wallet signs and sends it, then `POST /purchases/:id/confirm` with the signature (202 `pending` is retried). On the stub server (`health.chain === "stub"`) the wallet transfer is replaced by `POST /dev/stub-pay`. The app shows "SIMULATED ACCOUNT" in the header on every page.
+
+**Public market routes** added for the app: `GET /markets/:symbol?depth=` (book, mark, funding) and `GET /markets/:symbol/candles?tf=&limit=` (Phoenix candles, or synthetic ones on the recorded books; the chart says which). Both are public and cached for a short time. CORS is off by default; set `GARUDA_CORS_ORIGIN` (comma list or `*`) only if the app is served from another origin. In dev the Vite proxy keeps everything same-origin.
+
+**Run it.**
+
+```bash
+pnpm install
+pnpm web:stub                        # terminal 1: stub API on :3000 (fake knights + USDC, recorded books that drift)
+VITE_DEV_WALLET=1 pnpm web:dev       # terminal 2: http://localhost:5173
+pnpm web:screens                     # starts its own stub (:3111) and Vite (:5188), writes docs/screens/*.png
+pnpm web:build                       # type-checks and builds packages/web/dist
+```
+
+`VITE_DEV_WALLET=1` adds a throwaway in-browser wallet ("Garuda Dev Wallet", key in `localStorage`) next to the real ones. It signs messages and fake transfers only and must never be enabled in a production build. Against a real server: `GARUDA_CHAIN=devnet pnpm api`, then `GARUDA_API_PROXY=http://localhost:3000 pnpm web:dev` with Phantom or Solflare set to devnet.
+
+| Env var | Where | Meaning |
+| --- | --- | --- |
+| `VITE_API_URL` | web build | API base URL. Default `/api` (the dev and preview proxy). Needs `GARUDA_CORS_ORIGIN` on the API when cross-origin. |
+| `VITE_SOLANA_RPC` | web build | RPC for the wallet adapter and the USDC transfer. Default devnet. |
+| `VITE_DEV_WALLET` | web build | `1` enables the dev wallet. |
+| `GARUDA_API_PROXY` | vite dev and preview | Where `/api` is proxied. Default `http://localhost:3000`. |
+| `WEB_PORT` | vite | Dev port (5173) and preview port (4173). |
+| `GARUDA_CORS_ORIGIN` | API | Allowed browser origins. Unset means none. |
+
+**Screenshots** (`docs/screens/`, produced by `pnpm web:screens` through the real UI: connect the dev wallet, sign in, buy a Squire, trade, seed a wounded and a passed account through the real engine, revive through checkout, claim funded): `00-landing`, `01-terminal`, `02-challenges`, `02b-checkout`, `02c-reveal`, `03-barracks`, `04-ascension`, `04b-funded-terminal`, `05-wounded`, `05b-revived`, `06-leaderboard`, `07-payouts`, and 390px wide `m-landing`, `m-challenges`, `m-terminal`. The stub-only routes `/dev/stub-pay` and `/dev/seed` exist only in `scripts/web-stub-server.ts`.
+
 ## Solana devnet (M3 and M4)
 
 Devnet only, no real funds. `GARUDA_CHAIN=devnet` turns on knights and USDC checkout; without it the server behaves as before (stub payments, trusted `nftLevels`).
@@ -205,6 +251,7 @@ Environment: `GARUDA_CHAIN=devnet`, `GARUDA_SOLANA_RPC_URL` (default public devn
 
 ## Known gaps
 
+- **Web app (M5).** The leaderboard is sample data (no ranking backend). Payouts are read-only until M7 and M8. Stop-loss and stop orders are disabled in the ticket (the engine has market and limit only); take profit is a reduce-only limit. The wounded chart is rebuilt from fills because the API keeps no equity history. Knight traits and rarity have no pipeline, so the reveal shows only real attributes (level, account, rules, status); art is the four PNG sets, no animated loops or reduce-motion switch yet. Live state is polled (1 to 8 s), not WebSocket or SSE. Not run in a browser against real devnet (the faucet is closed to this environment): the wallet transaction path is typechecked and its quote and confirm halves are covered by API tests, the stub covers the rest. Desktop and 390px layouts were checked on the screenshots; there is no cross-browser or tablet pass.
 - **Not run on Solana devnet yet.** The devnet faucet was closed to this build environment (RPC `requestAirdrop` answers 410, the PoW faucets are drained, faucet.solana.com asks bots not to use it), so the platform key holds 0 devnet SOL. The code is covered by mocked tests, and the same code passes the full end to end against a local validator running the real mpl-core and SPL programs (`pnpm test:chain:local`). To produce devnet addresses: fund `F64qji9FjMXLFF7UF5pjRYMSmbkjwJwD5YWd3FBVaMC4` (or run `pnpm chain:setup` for your own key) and run `pnpm chain:setup && pnpm test:chain:devnet`.
 - Knight image and metadata JSON are served by the API (`/nft/*`), not Arweave/Irys; wallets and explorers need `GARUDA_PUBLIC_URL` to be publicly reachable. Art is the four landing PNGs, one per level; the generative trait pipeline and animated loops are not built.
 - The knight's Attributes carry level, status, tier, current challenge id, wins and revives. Full history lives in our database; it is not mirrored onchain.
@@ -228,6 +275,6 @@ Environment: `GARUDA_CHAIN=devnet`, `GARUDA_SOLANA_RPC_URL` (default public devn
 
 1. **Devnet run of M3/M4**: fund the platform key, `pnpm chain:setup`, `pnpm test:chain:devnet`, then wire the frontend wallet flow (build the `transferChecked` plus reference transaction with `@solana/spl-token`). Then Arweave/Irys for art and metadata, a payment watcher, finalized commitment, multisig authority.
 2. **Rise websocket feed** and a shared cache (Redis) so the API and worker can scale past one process.
-3. **Frontend**: dashboard (HP / armor / boss bars, positions, combat log feed), trade ticket, Fallen screen with the revive quote, leaderboard.
+3. **Frontend follow-ups**: WebSocket or SSE state, a real leaderboard, stop orders, trait art and reveal animation, a devnet browser run with Phantom.
 4. **KYC and payouts** (M7, M8): KYC gate before funded activation, payout requests via treasury multisig.
 5. **Phase 2**: route selected funded trades to a firm Phoenix account using `PHOENIX_BUILDER_CODE` (builder-code fees are firm revenue, never charged to traders), with the A-book/B-book disclosures from the rulebook.
