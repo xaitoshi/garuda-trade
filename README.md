@@ -8,13 +8,14 @@ The rules implemented here are the settled "Garuda Trading Rules" (Notion page, 
 
 ```bash
 pnpm install
-pnpm test            # 196 tests pass + 2 skipped (see Tests); Postgres tests run on pg-mem
+pnpm test            # 273 tests pass + 3 skipped (see Tests); Postgres tests run on pg-mem; no network or SOL needed
 pnpm test:pg         # same suite with the Postgres tests on REAL Postgres (embedded, no docker needed)
 pnpm typecheck
 pnpm demo            # $25k challenge against the LIVE Phoenix book (falls back to recorded books)
 pnpm demo:mock       # force the recorded-book fallback
 docker compose up -d db && cp .env.example .env
 pnpm api             # API + streaming risk worker on :3000 (PORT to change)
+pnpm chain:setup     # one-time Solana DEVNET setup: platform key, knight collection, test USDC mint (see Solana devnet)
 ```
 
 Node 20+, pnpm 10. `PHOENIX_BUILDER_CODE` is a placeholder: Phase 1 never routes orders, so it is not used (builder codes only matter for real routed orders in Phase 2). No keys are needed for Phase 1: the Phoenix REST API is public. Without `DATABASE_URL` the server uses an in-memory store and loses everything on restart.
@@ -87,6 +88,14 @@ Deterministic and network-free: callers pass in an `L2Book` and a timestamp.
 
 `SimAccount.restore` rebuilds balance, positions (average entry, flips), fees and funding from the fills and funding payments, so the ledger is the source of truth and the cached balance is checked against a replay (`PgChallengeStore.verifyLedger`). Tests use pg-mem by default; `GARUDA_TEST_PG=embedded` (or `GARUDA_TEST_DATABASE_URL`) runs the same tests on real Postgres.
 
+### `@garuda/chain`
+Solana **devnet only** (every client refuses mainnet-looking RPC URLs, and `assertDevnetCluster` checks the genesis hash at server start). Two seams, each with a real and an in-memory implementation:
+- `KnightNft`: `MetaplexCoreKnights` (Metaplex Core, `mpl-core` 1.10 through Umi) and `FakeKnights`. A knight is a Core asset in the Garuda Knights collection (Royalties plugin on the collection, 5% default) with an **Attributes** plugin (`level` squire/knight/paladin/ascended, `status` active/funded/wounded/ascended/idle, `tier`, `challenge_id`, `wins`, `revives`) and a **PermanentFreezeDelegate** whose authority is the platform. `frozen` is the transfer lock: the owner cannot lift it (a plain FreezeDelegate would let him revoke it).
+- `UsdcChain`: `SolanaUsdc` (verify an incoming transfer, send a refund) and `FakeUsdc`.
+- `deriveKnightState(history)` is the single rule for what a knight's onchain state must be (level from passed evaluations and never lowered, wins, revives = scars, frozen while any challenge is live, status). It is a pure function of challenge history, so every sync is idempotent and a retry after an RPC failure converges.
+- The asset address of a knight is derived from the order id (HMAC of the platform secret and the order id), so a retried mint returns the same asset and can never create a second knight. The refund transaction carries a key derived the same way, so an earlier refund is found on chain instead of paid twice.
+- Metadata: one JSON file per level (`levelMetadataUri`) pointing at the PNGs in `garuda-landing/knights` (knight-1.png Squire to knight-4.png Ascended). The asset URI moves to the next level file on level-up. The API serves them at `/nft/collection.json`, `/nft/metadata/<level>.json` and `/nft/images/knight-N.png` (public, static; swap for Arweave/Irys later, which only changes `GARUDA_PUBLIC_URL`).
+
 ### `@garuda/api`
 `ChallengeService` over an async `ChallengeStore` (`InMemoryChallengeStore` or `PgChallengeStore`). Every operation on a challenge is serialised; account creation is serialised per wallet so caps cannot be raced. On breach or pass the service flattens the book and locks the challenge.
 
@@ -94,19 +103,39 @@ Deterministic and network-free: callers pass in an `L2Book` and a timestamp.
 
 **Rate limits** (fixed window, in process, defaults in `rate-limit.ts`): 300 requests/min per IP, 120/min per wallet, 20/min per IP on `/auth/*`, 30 orders per 10 s per wallet. 429 `rate_limited` with `Retry-After` and `X-RateLimit-*` headers; `/health` is exempt. Behind a proxy set `GARUDA_TRUST_PROXY=1`.
 
+**Knights (M3).** With a knight chain configured (`ChallengeService({knights})`) the client's `nftLevels` is ignored and everything is read from the chain:
+- *Mint:* a paid challenge without a knight mints a Squire-level knight to the buyer's wallet, already frozen, with `challenge_id` and `tier` set. A mint failure creates no account.
+- *Gating:* a gated tier (Paladin needs a Knight-level knight, Ascended a Paladin-level one) or a funded account needs `knightAsset` in the request. The asset must be a **genuine** knight (in the Garuda collection, update authority and plugin authorities are the platform: a lookalike with self-written attributes fails `knight_not_genuine`), held by the signed-in wallet right now (`not_knight_owner`), high enough (`tier_locked`), not Wounded (`knight_wounded`), not already fighting (`knight_busy`). A funded account needs a passed evaluation of the same tier on that knight.
+- *Transfer lock:* any live challenge (evaluation or funded, dormant included) freezes the knight. The freeze is written before the account is saved and the owner is re-read after it; if the knight moved in between the request is refused (`knight_moved`) and the freeze undone. A failed freeze refuses the open (`knight_lock_failed`), so no live account ever sits on an unlocked knight.
+- *Level-up and wounds:* on a pass the knight levels up (Squire or Knight pass gives Knight, Paladin pass gives Paladin, Ascended pass gives Ascended), `wins` +1, the lock lifts, the URI moves to the new level file. A breach sets `wounded` and lifts the lock (a Wounded knight may be sold). A revive sets `revives` +1 and relocks.
+- *Rights follow the knight for revives of a Wounded knight:* whoever holds it on chain now can quote and buy the revive and owns the new account; the seller can no longer. Funded and live accounts stay with the earning wallet because the knight is locked while they live. The payout quote reports `destination`, the wallet holding the knight at request time.
+- *Sync failures:* the onchain write after a breach or pass is best effort; on an RPC error the knight is marked dirty and `reconcileKnights()` (the server runs it every 30 s, and once for all knights at start) heals it. `GET /health` shows `chain.dirtyKnights`.
+
+**USDC checkout (M4).** `PurchaseService` (the `/purchases` routes) replaces the payment stub when `GARUDA_CHAIN=devnet`. Flow: **quote** (fails now when the account could not be opened: caps, tier gating, knight ownership, revive eligibility) returns the exact amount in USDC base units, the mint, the treasury wallet and a unique `reference` key; the buyer sends one SPL `transferChecked` of that amount to the treasury token account with `reference` as an extra read-only account (Solana Pay style); **confirm** with the signature. The server then reads the transaction from the RPC and checks: it succeeded, it carries the reference, the signed-in wallet signed it, the amount that landed in the treasury token account for the USDC mint (from the transaction's own pre and post token balances) is at least the quote, that amount left the signer's own token account, and it is not older than the order. A transfer that cannot be found yet returns 202 `pending` (retry). Only then is the knight minted and the account opened. Prices: Squire $119, Knight $275, Paladin $499, Ascended $899; revive is 20% off the tier fee ($95.20, $220, $399.20, $719.20).
+- *Idempotency:* the challenge id, knight asset and refund all derive from the order id; a signature is bound to one order (unique index, `signature_reused`); the confirm is serialised per order. Replaying a confirm, or racing four of them, opens exactly one account and mints one knight.
+- *Atomicity:* verify, then caps and gating preflight, then mint, then account, all inside the wallet's creation lock. If anything fails after the money was verified, the order goes `refund_pending` and the refund is sent to the payer's token account (`refunded`). If the refund send itself fails it stays `refund_failed`; `PurchaseService.reconcile()` (every 30 s in the server) retries it, finishes paid orders a crash left half done, and expires stale quotes (30 min). Order states: pending, paid, fulfilled, refund_pending, refund_failed, refunded, expired.
+- With `requirePayment` (set by `GARUDA_CHAIN=devnet`) a direct `POST /challenges` for a paid tier is 402 `payment_required` pointing at `/purchases/challenge`, and the legacy revive route no longer uses the stub (402 pointing at `/purchases/revive`). Demo and funded accounts stay free of fees.
+- Orders live in `payment_orders` (migration 005); `PgOrderStore` or `InMemoryOrderStore`.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/auth/nonce`, `/auth/verify`, `/auth/logout` | wallet sign-in, session revoke |
 | GET | `/auth/me` | wallet behind the token |
-| POST | `/challenges` | `{tier, knight?, stage?, nftLevels?}` create (201) under the signed-in wallet. 403 `tier_locked`, `evaluation_cap_exceeded`, `funded_cap_exceeded`; 409 `demo_exists`; 429 `demo_cooldown` |
+| POST | `/challenges` | `{tier, knight?, stage?, nftLevels?, knightAsset?}` create (201) under the signed-in wallet (`nftLevels` is only used when no knight chain is configured). 402 `payment_required` for paid evaluations in real-money mode; 403 `tier_locked`, `not_knight_owner`, `knight_not_genuine`, `knight_wounded`, `evaluation_cap_exceeded`, `funded_cap_exceeded`; 409 `demo_exists`, `knight_busy`, `knight_moved`; 429 `demo_cooldown` |
 | GET | `/challenges`, `/challenges/:id` | list yours; state (refreshes marks, funding, resting orders and risk first; `?refresh=false` to skip) |
 | POST | `/challenges/:id/orders` | `{symbol, side, size, type, limitPrice?, reduceOnly?, postOnly?}`; 201 accepted, 422 rejected with `reason` (including `feed_halted`), 409 if not active or archived |
 | DELETE | `/challenges/:id/orders/:orderId` | cancel a resting order |
 | POST | `/challenges/:id/tick` | force a refresh |
 | GET | `/challenges/:id/combat-log` | combat log |
-| GET / POST | `/challenges/:id/revive` | revive quote and eligibility / revive (header `Idempotency-Key`; 201, or 200 on a replay) |
+| GET / POST | `/challenges/:id/revive` | revive quote and eligibility / revive (header `Idempotency-Key`; 201, or 200 on a replay). With a knight chain the holder of a Wounded knight is the one allowed; in real-money mode the POST is 402 and the buyer uses `/purchases/revive` |
 | POST | `/challenges/:id/reactivate` | free wake-up of a Dormant funded account |
 | GET | `/challenges/:id/payout-quote` | payout quote (funded, not breached, not Demo); payout execution is still roadmap |
+| POST | `/purchases/challenge` | `{tier, knightAsset?}` quote a challenge purchase: amount, mint, treasury, `reference`, expiry (201) |
+| POST | `/purchases/revive` | `{challengeId}` quote a revive at 20% off (201) |
+| POST | `/purchases/:id/confirm` | `{signature}` verify the transfer on chain, then mint and open the account: 200 `fulfilled` (also on replay), 202 `pending` (transfer not visible yet), 200 `refunded` or `refund_pending` with `order.failure`; 402 `payment_<reason>` (`underpaid`, `no_transfer_to_treasury`, `reference_missing`, `payer_balance_mismatch`, `bad_signature`, `payer_not_signer`, `too_old`, `transaction_failed`); 409 `signature_reused`, `order_already_paid`; 410 `order_expired` |
+| GET | `/purchases`, `/purchases/:id` | your orders; one order |
+| GET | `/knights`, `/knights/:asset` | knights you hold (read from chain); one genuine knight |
+| GET | `/nft/collection.json`, `/nft/metadata/:level.json`, `/nft/images/knight-N.png` | public metadata and art the onchain URIs point at |
 | GET | `/rules`, `/health`, `/metrics` | rules as code, health (never reveals the builder code), worker metrics |
 
 Pre-trade gates (opening orders only; reduce-only always passes): market whitelisted, feed fresh (2 s) and not halted by the worker, market open (Phoenix tradfi closed periods are reduce-only), circuit breaker (spread over 100 bps or side depth within 0.5% below $10k), margin-style leverage cap.
@@ -115,7 +144,7 @@ Pre-trade gates (opening orders only; reduce-only always passes): market whiteli
 - *Caps (rulebook 20):* aggregate evaluation size per wallet at most $200,000, aggregate funded at most $300,000, counted over live accounts (active, not breached, not archived; Demo exempt). Checked on create and on revive.
 - *Free Demo:* $5,000, no NFT and no knight id, no payouts, no funded stage, one active per wallet (409), restart allowed 1 hour after a breach (429 before), cannot be revived.
 - *Dormancy (rulebook 18):* a funded account with no order or payout request for 90 days goes Dormant (keeps its risk checks, trading or `reactivate` wakes it for free); 365 days later it is Archived (flattened at the last known books, no trading, leaves the caps). Challenge accounts never time out. `sweepLifecycle` applies it; the worker runs it hourly, and a long outage steps through both transitions.
-- *Revive (rulebook 17):* Wounded knights only, 24 hours after the breach, 20% off the same tier (Knight $275 becomes $220), at most 3 per knight across its whole chain, a fresh evaluation account for the same knight (scar count +1, new id, the breached account is kept as history). Payment goes through a `PaymentProvider`; the shipped `StubPaymentProvider` always succeeds (real USDC checkout is roadmap M4) and a decline (402) creates nothing. An `Idempotency-Key` makes a retry return the first result with no second charge.
+- *Revive (rulebook 17):* Wounded knights only, 24 hours after the breach, 20% off the same tier (Knight $275 becomes $220), at most 3 per knight across its whole chain, a fresh evaluation account for the same knight (scar count +1, new id, the breached account is kept as history). Payment goes through a `PaymentProvider`: the `StubPaymentProvider` (dev default) always succeeds, `PaymentRequiredProvider` (real-money mode) sends the buyer to the USDC checkout above, and a decline (402) creates nothing. An `Idempotency-Key` makes a retry return the first result with no second charge.
 - *Fill-time leverage re-check:* a resting limit order is checked again when it fills, at the fill price and including the maker fee. If equity has fallen so the full size no longer fits, the fill is trimmed to the largest size that does and the rest is cancelled (`leverage_cap_exceeded`, with a combat-log warning). Reduce-only orders always fill.
 
 ### `@garuda/worker`
@@ -127,17 +156,39 @@ Pre-trade gates (opening orders only; reduce-only always passes): market whiteli
 ### `@garuda/market-data`
 `PhoenixSdkProvider` uses `@ellipsis-labs/rise` (`client.api.orderbook().getOrderbook`, `markets().getLatestMarketStats`, `markets().getMarkets`). Verified live: 100-level books, mark, funding, market status and tradfi session flags. `current_funding_rate` from the live API is in **percent per hour**; the provider divides by 100 (the docs example shows a fraction, the live values match `annualized_funding_rate` only as percent). `fixtures/phoenix-books.json` holds recorded real books (`pnpm fixtures:record`) used by tests and as the offline fallback.
 
+## Solana devnet (M3 and M4)
+
+Devnet only, no real funds. `GARUDA_CHAIN=devnet` turns on knights and USDC checkout; without it the server behaves as before (stub payments, trusted `nftLevels`).
+
+```bash
+pnpm chain:setup                 # creates .keys/platform.json (gitignored), airdrops devnet SOL, creates the collection,
+                                 # a test USDC mint and the treasury token account; prints the env lines
+pnpm chain:faucet <wallet> 1000  # test USDC to a wallet (the platform key is the mint authority of the test mint)
+GARUDA_CHAIN=devnet GARUDA_KNIGHT_COLLECTION=... GARUDA_USDC_MINT=... pnpm api
+pnpm test:chain:devnet           # opt-in end to end on devnet (needs SOL on the platform key)
+pnpm test:chain:local            # same test against a local solana-test-validator (see below)
+```
+
+The public devnet faucet is rate limited and sometimes closed (the RPC `requestAirdrop` answers 410 at times). If `pnpm chain:setup` cannot airdrop, fund the printed platform address at https://faucet.solana.com (devnet) by hand and run it again. Circle's devnet USDC can be used instead of the test mint: set `GARUDA_USDC_MINT` to it and fund buyers from Circle's faucet.
+
+The platform key is the update authority of the collection and every knight, the treasury (receives fees, signs refunds) and the fee payer. On devnet one key is fine; for mainnet it should become a multisig (Squads) with a separate hot refund key (roadmap open question).
+
+Environment: `GARUDA_CHAIN=devnet`, `GARUDA_SOLANA_RPC_URL` (default public devnet), `GARUDA_KEYPAIR_PATH` (default `.keys/platform.json`), `GARUDA_KNIGHT_COLLECTION`, `GARUDA_USDC_MINT`, `GARUDA_PUBLIC_URL` (base URL written into the knight metadata URIs; must be reachable by wallets and explorers), `GARUDA_ART_DIR` (default `/workspace/garuda-landing/knights`), `GARUDA_RECONCILE_MS` (default 30000).
+
+**Local validator dry run (not devnet).** `solana-test-validator --reset --url devnet --clone-upgradeable-program CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d --clone-upgradeable-program SysExL2WDyJi9aRZrXorrjHJut3JwHQ7R9bTyctbNNG --clone-upgradeable-program TokExjvjJmhKaRBShsBAsbSvEWMA1AgUNK7ps4SAc2p` runs the REAL mpl-core, mpl-system-extras and mpl-toolbox programs locally with free SOL; `pnpm test:chain:local` then exercises the same `MetaplexCoreKnights` and `SolanaUsdc` code on it: collection, test USDC, pay, verify, mint, freeze (a transfer by the owner is rejected), pass and level-up, unlock, transfer, refund after a failed mint, idempotent replays. To start the server on it set `GARUDA_CHAIN_ALLOW_LOCAL=1` (skips the devnet genesis check for loopback URLs only).
+
 ## Tests
 
-`pnpm test` runs 198 tests (196 pass, 2 skipped: one needs `LIVE=1` network, one needs real Postgres). `pnpm test:pg` (GARUDA_TEST_PG=embedded) runs the real-Postgres ones too: 197 pass.
+`pnpm test` runs 276 tests (273 pass, 3 skipped: one needs `LIVE=1` network, one needs real Postgres, one is the chain end to end that needs `DEVNET=1` or `LOCAL_VALIDATOR=1`). `pnpm test:pg` (GARUDA_TEST_PG=embedded) runs the real-Postgres ones too: 274 pass. Nothing in the default run needs network or SOL: the chain is mocked (mocked RPC with fixture transactions, `FakeKnights`, `FakeUsdc`).
 
 | Package | Tests | Covers |
 | --- | --- | --- |
 | sim-engine | 30 | book walks, fees, limits, reduce-only, flips, funding, closeAll; ledger replay equals live state |
 | risk-engine | 50 | floors, reset, warnings, breach, pass, leverage, combat log, payouts; caps, dormancy, revive, demo rules as pure functions |
 | market-data | 10 (1 skipped) | replay, status mapping, PollingFeed (errors, overlap, timers), ManualFeed |
-| db | 4 (1 skipped) | migrations, idempotence, rollback on failure, append-only triggers (real Postgres only) |
-| api | 89 | original 18 API tests unchanged, plus sign-in (valid, bad signature, replayed and expired nonce, expired session, 403 on foreign accounts), rate limits, caps, demo, dormancy and archive, revive (cooldown, price, cap of 3, idempotency, declined payment), fill-time leverage trim, Postgres restart and ledger replay |
+| db | 4 (1 skipped) | migrations (incl. 005 payment_orders), idempotence, rollback on failure, append-only triggers (real Postgres only) |
+| chain | 31 | devnet-only guard, HttpRpc errors, exact USDC base units, attribute round trip, per-level metadata, `deriveKnightState` (pass, wound, revive, funded, order independence), deterministic asset and refund keys, `verifyPayment` against fixture transactions (ok, overpay, pending, failed tx, missing or foreign reference, payer not signer, too old, underpaid, wrong mint, wrong destination, wrong source), `withReference`, refund idempotency |
+| api | 135 + 1 opt-in | original 18 API tests unchanged, plus sign-in (valid, bad signature, replayed and expired nonce, expired session, 403 on foreign accounts), rate limits, caps, demo, dormancy and archive, revive (cooldown, price, cap of 3, idempotency, declined payment), fill-time leverage trim, Postgres restart and ledger replay; knights (19: mint, lock, level-up, wound, forged assets, gating from chain, revive relock, sold wounded knight, mid-open ownership change, sync failure and reconcile, payout destination); purchases (27: exact quotes, pay-verify-mint, replay, concurrent confirms, signature replay across orders, every rejection reason, pending then confirm, expiry, refund on failed mint or cap or sold knight, refund retry, crash recovery, revive at 20% off, `PgOrderStore`, HTTP incl. sign-in and static NFT routes); opt-in chain e2e |
 | worker | 15 | breach caught from a dip that recovers before the next poll, seeded 600-step replay against an independent equity oracle (zero missed breaches, each caught on the exact update), stale-feed halt and recovery, metrics, resilience, dormancy sweep, end to end with PollingFeed |
 
 ## Decisions and assumptions to review
@@ -154,7 +205,16 @@ Pre-trade gates (opening orders only; reduce-only always passes): market whiteli
 
 ## Known gaps
 
-- `nftLevels` on create is still trusted input until NFT ownership is verified on chain (M3). KYC (M7), real USDC payment for revives and fees (M4) and payout execution (M8) are not built; the payment provider is a stub.
+- **Not run on Solana devnet yet.** The devnet faucet was closed to this build environment (RPC `requestAirdrop` answers 410, the PoW faucets are drained, faucet.solana.com asks bots not to use it), so the platform key holds 0 devnet SOL. The code is covered by mocked tests, and the same code passes the full end to end against a local validator running the real mpl-core and SPL programs (`pnpm test:chain:local`). To produce devnet addresses: fund `F64qji9FjMXLFF7UF5pjRYMSmbkjwJwD5YWd3FBVaMC4` (or run `pnpm chain:setup` for your own key) and run `pnpm chain:setup && pnpm test:chain:devnet`.
+- Knight image and metadata JSON are served by the API (`/nft/*`), not Arweave/Irys; wallets and explorers need `GARUDA_PUBLIC_URL` to be publicly reachable. Art is the four landing PNGs, one per level; the generative trait pipeline and animated loops are not built.
+- The knight's Attributes carry level, status, tier, current challenge id, wins and revives. Full history lives in our database; it is not mirrored onchain.
+- Payment confirm is pull based (the buyer posts the signature). There is no webhook or log subscription that finds a payment whose buyer never came back to confirm; such an order expires after 30 minutes and a late payment is not matched automatically (refund by hand from the signature). Overpayment is accepted and the excess is recorded on the order but not sent back automatically.
+- Confirmation uses commitment `confirmed`, not `finalized`: a rollback after confirmed is very unlikely but possible. `SolanaUsdc` takes `commitment: "finalized"`; use it for mainnet.
+- A mint that succeeded on chain but whose challenge save then failed leaves an orphan frozen-free knight asset (deterministic address, harmless, the refund still goes out). A reaper for orphans is not built.
+- A Wounded knight sold on a marketplace gives the new holder the revive right and the new account, but the old wounded account stays in the seller's history; the seller's funded and live accounts are unaffected (their knights are locked).
+- Single process: purchase serialisation and the knight sync queue are in memory, same constraint as the challenge cache.
+- Royalty enforcement on secondary sales (Core Royalties plugin with `ruleSet None`) is not enforced; marketplaces may ignore it. Royalty percent (5%) and update-authority custody (single key, not a multisig) are open owner decisions.
+- KYC (M7) and payout execution (M8) are not built; `payoutQuote` only reports the destination (the knight holder).
 - Price feed is polling (default 1 s) over Phoenix REST. A Rise websocket feed is not built; worst-case detection delay is about the poll period plus request latency. Phoenix `markPrice` is replaced by the book mid on each book update (existing behaviour).
 - Single process: the challenge cache and the worker index live in memory, so run one API-plus-worker process per database. Several replicas need a shared cache or the worker split out (Redis for the books/equity cache is not built).
 - Rate limits are per process (fixed window, in memory); with several replicas the effective limit multiplies. A Redis-backed limiter is the upgrade.
@@ -166,8 +226,8 @@ Pre-trade gates (opening orders only; reduce-only always passes): market whiteli
 
 ## Next steps
 
-1. **Metaplex Core knight NFTs** (M3): mint a Squire-level knight on every paid Squire/Knight challenge; store level, scars, revive count and history as plugin attributes; verify ownership for Paladin/Ascended gating (replace trusted `nftLevels`).
+1. **Devnet run of M3/M4**: fund the platform key, `pnpm chain:setup`, `pnpm test:chain:devnet`, then wire the frontend wallet flow (build the `transferChecked` plus reference transaction with `@solana/spl-token`). Then Arweave/Irys for art and metadata, a payment watcher, finalized commitment, multisig authority.
 2. **Rise websocket feed** and a shared cache (Redis) so the API and worker can scale past one process.
 3. **Frontend**: dashboard (HP / armor / boss bars, positions, combat log feed), trade ticket, Fallen screen with the revive quote, leaderboard.
-4. **Payments and payouts** (M4, M7, M8): USDC fee and revive collection on Solana behind the existing `PaymentProvider`, KYC gate before funded activation, payout requests via treasury multisig.
+4. **KYC and payouts** (M7, M8): KYC gate before funded activation, payout requests via treasury multisig.
 5. **Phase 2**: route selected funded trades to a firm Phoenix account using `PHOENIX_BUILDER_CODE` (builder-code fees are firm revenue, never charged to traders), with the A-book/B-book disclosures from the rulebook.
