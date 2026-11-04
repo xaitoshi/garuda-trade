@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
@@ -18,6 +19,7 @@ import { CANDLE_TIMEFRAMES, type CandleTimeframe, type MarketSnapshot } from "@g
 import type { AuthService } from "./auth.js";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitConfig } from "./rate-limit.js";
 import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, readArt } from "@garuda/chain";
+import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "./payouts.js";
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
 
@@ -55,6 +57,11 @@ const orderBody = z
   })
   .refine((b) => b.type !== "limit" || b.limitPrice !== undefined, { message: "limitPrice is required for limit orders", path: ["limitPrice"] });
 
+const payoutStatusEnum = z.enum(["pending_approval", "approved", "sending", "submitted", "paid", "rejected", "failed"]);
+const rejectPayoutBody = z.object({ reason: z.string().trim().min(1).max(500) });
+/** The admin token must be long enough to be unguessable: refuse a weak one at startup instead of running with it. */
+export const MIN_ADMIN_TOKEN_LENGTH = 24;
+
 const nonceBody = z.object({ wallet: z.string().min(32).max(44) });
 const privyBody = z.object({ accessToken: z.string().min(20).max(8192), wallet: z.string().min(32).max(44).optional() });
 const verifyBody = z.object({ wallet: z.string().min(32).max(44), nonce: z.string().min(8).max(64), signature: z.string().min(64).max(128) });
@@ -78,6 +85,13 @@ export interface AppOptions {
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** USDC checkout (M4). Enables the /purchases routes. */
   purchases?: PurchaseService;
+  /** USDC payouts (M8). Enables the /payouts routes. */
+  payouts?: PayoutService;
+  /**
+   * Bearer token for the /admin routes (approve, reject and retry payouts). Without one the admin routes do not exist
+   * (404). At least 24 characters; generate with `openssl rand -hex 32`.
+   */
+  adminToken?: string;
   /** Where the knight metadata JSON and PNGs are served from (the /nft routes). baseUrl must match what was written onchain. */
   nft?: { baseUrl: string; artDir?: string };
   /** Served at GET /metrics (worker latency, feed health). */
@@ -104,6 +118,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     orders: new RateLimiter(rl.orders, now),
   };
   const walletOf = new WeakMap<FastifyRequest, string>();
+  if (opts.adminToken !== undefined && opts.adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
+    throw new Error(`GARUDA_ADMIN_TOKEN must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
+  }
+  const adminDigest = opts.adminToken ? createHash("sha256").update(opts.adminToken).digest() : undefined;
 
   const limit = (req: FastifyRequest, reply: { header(k: string, v: string | number): unknown }, l: RateLimiter | undefined, key: string, scope: string) => {
     if (!l) return;
@@ -139,13 +157,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     if (path === "/health" || req.method === "OPTIONS") return;
     limit(req, reply, limiters?.ip, req.ip, "ip");
     if (path.startsWith("/auth/")) limit(req, reply, limiters?.auth, req.ip, "auth");
+    if (path.startsWith("/admin/")) limit(req, reply, limiters?.auth, `admin:${req.ip}`, "admin");
+  });
+
+  // Admin routes: invisible (404) unless a token is configured; otherwise one constant-time bearer check.
+  app.addHook("preHandler", async (req) => {
+    const path = req.url.split("?")[0]!;
+    if (!path.startsWith("/admin/")) return;
+    if (!adminDigest) throw new ServiceError(404, "not_found", "Not found");
+    const header = req.headers.authorization;
+    const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const given = createHash("sha256").update(token).digest();
+    if (!timingSafeEqual(given, adminDigest)) throw new ServiceError(401, "admin_unauthorized", "Admin token required");
   });
 
   // Sign-in required on everything that touches an account; /health, /rules, /metrics and /auth/* stay public.
   app.addHook("preHandler", async (req, reply) => {
     if (!auth) return;
     const path = req.url.split("?")[0]!;
-    const isAccountRoute = path === "/challenges" || path.startsWith("/challenges/") || path === "/purchases" || path.startsWith("/purchases/") || path === "/knights" || path.startsWith("/knights/") || path === "/auth/me" || path === "/auth/logout";
+    const isAccountRoute = path === "/challenges" || path.startsWith("/challenges/") || path === "/purchases" || path.startsWith("/purchases/") || path === "/payouts" || path.startsWith("/payouts/") || path === "/knights" || path.startsWith("/knights/") || path === "/auth/me" || path === "/auth/logout";
     if (!isAccountRoute) return;
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
@@ -176,6 +206,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     if (!bodyWallet) throw new ServiceError(400, "wallet_required", "wallet is required");
     return bodyWallet;
   };
+  const payouts = () => {
+    if (!opts.payouts) throw new ServiceError(404, "payouts_disabled", "Payouts are not configured on this server");
+    return opts.payouts;
+  };
   const purchases = () => {
     if (!opts.purchases) throw new ServiceError(404, "payments_disabled", "USDC checkout is not configured on this server");
     return opts.purchases;
@@ -196,6 +230,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get("/health", async () => ({
     ...(await opts.health?.()),
+    ...(opts.payouts ? { payouts: await opts.payouts.summary().catch(() => undefined) } : {}),
     ok: true,
     authRequired: Boolean(auth),
     privyAuth: Boolean(auth?.privy),
@@ -207,7 +242,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   }));
 
   app.get("/rules", async () => ({
-    common: COMMON_RULES,
+    // The configured payout split and minimum, not the rulebook constant, so the UI shows what will actually be paid.
+    common: { ...COMMON_RULES, profitSplit: svc.payoutPolicy.split, minPayoutUsd: svc.payoutPolicy.minUsd },
+    payouts: { split: svc.payoutPolicy.split, minUsd: svc.payoutPolicy.minUsd, autoApproveUpToUsd: svc.payoutPolicy.autoMaxUsd, enabled: Boolean(opts.payouts) },
     tiers: TIERS,
     fees: PHOENIX_FEES,
     revive: REVIVE_RULES,
@@ -371,6 +408,57 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     await authorize(req, req.params.id);
     return svc.payoutQuote(req.params.id, auth ? walletOf.get(req) : undefined);
   });
+
+  // ------------------------------------------------------------ M8: payouts
+
+  /** Request a payout of the account's full profit to the signed-in wallet. Send an Idempotency-Key so a retry cannot pay twice. */
+  app.post<{ Params: { id: string } }>("/challenges/:id/payouts", async (req, reply) => {
+    await authorize(req, req.params.id);
+    const key = req.headers["idempotency-key"];
+    const res = await payouts().request(req.params.id, { actorWallet: auth ? walletOf.get(req) : undefined, idempotencyKey: Array.isArray(key) ? key[0] : key });
+    return reply.status(res.replayed ? 200 : 201).send(res);
+  });
+
+  app.get<{ Params: { id: string } }>("/challenges/:id/payouts", async (req) => {
+    await authorize(req, req.params.id);
+    return { payouts: (await payouts().list({ challengeId: req.params.id })).map((p) => payoutView(p)) };
+  });
+
+  /** The signed-in wallet's payout history, newest first. */
+  app.get<{ Querystring: { wallet?: string } }>("/payouts", async (req) => {
+    const wallet = auth ? walletOf.get(req) : req.query.wallet;
+    return { payouts: (await payouts().list(wallet ? { wallet } : {})).map((p) => payoutView(p)) };
+  });
+
+  app.get<{ Params: { id: string } }>("/payouts/:id", async (req) => {
+    const p = await payouts().get(req.params.id);
+    if (auth && p.wallet !== walletOf.get(req)) throw new ServiceError(403, "not_owner", "This payout belongs to another wallet");
+    return payoutView(p);
+  });
+
+  // ------------------------------------------------------------ M8: payout admin (GARUDA_ADMIN_TOKEN)
+
+  const actorOf = (req: FastifyRequest): string => {
+    const h = req.headers["x-admin-actor"];
+    const v = (Array.isArray(h) ? h[0] : h)?.trim().replace(/[^\w .@-]/g, "").slice(0, 64);
+    return v || "admin";
+  };
+
+  app.get<{ Querystring: { status?: string; wallet?: string; challengeId?: string; limit?: string } }>("/admin/payouts", async (req) => {
+    const status = req.query.status ? (req.query.status.split(",").map((x) => payoutStatusEnum.parse(x.trim())) as PayoutStatus[]) : undefined;
+    const list = await payouts().list({ status, wallet: req.query.wallet, challengeId: req.query.challengeId, limit: Number(req.query.limit) || undefined });
+    return { payouts: list, summary: await payouts().summary() };
+  });
+
+  app.get<{ Params: { id: string } }>("/admin/payouts/:id", async (req) => ({ payout: await payouts().get(req.params.id), events: await payouts().store.events(req.params.id) }));
+
+  const adminResult = async (p: Payout) => ({ payout: p, events: await payouts().store.events(p.id) });
+
+  app.post<{ Params: { id: string } }>("/admin/payouts/:id/approve", async (req) => adminResult(await payouts().approve(req.params.id, actorOf(req))));
+
+  app.post<{ Params: { id: string } }>("/admin/payouts/:id/reject", async (req) => adminResult(await payouts().reject(req.params.id, rejectPayoutBody.parse(req.body ?? {}).reason, actorOf(req))));
+
+  app.post<{ Params: { id: string } }>("/admin/payouts/:id/retry", async (req) => adminResult(await payouts().retryNow(req.params.id, actorOf(req))));
 
   // ------------------------------------------------------------ M4: USDC checkout
 
