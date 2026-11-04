@@ -115,7 +115,7 @@ line(`\nSOL book: bid ${sol0.book.bids[0]![0]} / ask ${sol0.book.asks[0]![0]}, m
   `source=${sol0.source}${sol0.slot ? ", slot " + sol0.slot : ""}`);
 
 h("Challenge A: Knight $25k, Sir Pudding");
-let st = svc.create({ tier: "knight", knight: "Sir Pudding", wallet: "DemoWallet111111111111111111111111111111111" });
+let st = await svc.create({ tier: "knight", knight: "Sir Pudding", wallet: "DemoWallet111111111111111111111111111111111" });
 const id = st.id;
 showState(st);
 
@@ -172,13 +172,13 @@ const pay = quotePayout({ startingBalance: st.account.startingBalance, balance: 
 line(`  payout preview if funded: gross ${usd(pay.grossProfit)}, trader 80% ${usd(pay.traderShare)}, eligible=${pay.eligible}`);
 
 h("Combat log (Challenge A)");
-for (const e of svc.getCombatLog(id, 200)) line(`  ${new Date(e.ts).toISOString().slice(11, 16)}  ${e.text}`);
+for (const e of await svc.getCombatLog(id, 200)) line(`  ${new Date(e.ts).toISOString().slice(11, 16)}  ${e.text}`);
 
 // --------------------------------------------------------------- challenge B
 market.setMove("SOL", 0);
 h("Challenge B: free Demo ($5k), reckless 9x SOL long, then a -0.5% drop");
 clock += HOUR;
-const b = svc.create({ tier: "demo", knight: "Sir Reckless" });
+const b = await svc.create({ tier: "demo", knight: "Sir Reckless" });
 const solC = await snap("SOL");
 showOrder("open", await order(b.id, { symbol: "SOL", side: "buy", size: sizeFor(45_000, solC.markPrice), type: "market" }));
 for (const mv of [-0.001, -0.0035, -0.005]) {
@@ -188,7 +188,7 @@ for (const mv of [-0.001, -0.0035, -0.005]) {
   line(`  SOL ${(mv * 100).toFixed(2)}% -> ${s.status.toUpperCase()} equity ${usd(s.account.equity)} (floor ${usd(s.risk.effectiveFloor)})`);
   if (s.status !== "active") break;
 }
-for (const e of svc.getCombatLog(b.id, 50)) line(`  ${new Date(e.ts).toISOString().slice(11, 16)}  ${e.text}`);
+for (const e of await svc.getCombatLog(b.id, 50)) line(`  ${new Date(e.ts).toISOString().slice(11, 16)}  ${e.text}`);
 
 h("Done");
 line(`Data source for this run: ${sourceNote}`);
