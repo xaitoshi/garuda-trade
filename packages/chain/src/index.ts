@@ -4,6 +4,7 @@ export * from "./rpc.js";
 export * from "./keys.js";
 export * from "./metadata.js";
 export * from "./usdc.js";
+export * from "./payouts.js";
 export * from "./metaplex-knights.js";
 export * from "./fakes.js";
 export * from "./knight-state.js";
