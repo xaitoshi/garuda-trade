@@ -7,3 +7,4 @@ export * from "./usdc.js";
 export * from "./metaplex-knights.js";
 export * from "./fakes.js";
 export * from "./knight-state.js";
+export * from "./test-helpers.js";
