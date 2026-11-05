@@ -124,6 +124,12 @@ export interface AuthOptions {
   now?: () => number;
   /** Shown to the user in the signed message; wallets display it so users can see where they are signing in. */
   domain?: string;
+  /**
+   * Browser origins allowed to sign in (normally GARUDA_CORS_ORIGIN). Wallets (Phantom, Solflare) refuse a sign-in message
+   * whose domain is not the requesting page's host, so the message domain is the request Origin's host when the Origin is
+   * listed here ("*" allows any origin). Unlisted or missing Origin falls back to `domain`.
+   */
+  allowedOrigins?: readonly string[] | "*";
   nonceTtlMs?: number;
   sessionTtlMs?: number;
   /** Privy sign-in (email with an embedded wallet, or an external wallet connected through Privy). Off when omitted. */
@@ -145,6 +151,16 @@ export interface Session {
   expiresAt: number;
 }
 
+/** "https://Host:443/" -> "https://host"; undefined when not an http(s) origin. */
+export function normalizeOrigin(o: string): string | undefined {
+  try {
+    const u = new URL(o.trim());
+    return u.protocol === "https:" || u.protocol === "http:" ? u.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 /**
@@ -162,6 +178,7 @@ export class AuthService {
   private readonly nonceTtlMs: number;
   private readonly sessionTtlMs: number;
   readonly privy?: PrivyVerifier;
+  private readonly allowedOrigins: readonly string[] | "*";
 
   constructor(opts: AuthOptions = {}) {
     this.store = opts.store ?? new InMemoryAuthStore();
@@ -170,6 +187,15 @@ export class AuthService {
     this.nonceTtlMs = opts.nonceTtlMs ?? 5 * 60_000;
     this.sessionTtlMs = opts.sessionTtlMs ?? 24 * 3_600_000;
     this.privy = opts.privy;
+    this.allowedOrigins = opts.allowedOrigins === "*" ? "*" : (opts.allowedOrigins ?? []).map(normalizeOrigin).filter((o): o is string => !!o);
+  }
+
+  /** The domain to put in the sign-in message for a request from `origin` (host[:port] of an allowed origin, else the default). */
+  domainFor(origin: string | undefined): string {
+    const o = origin ? normalizeOrigin(origin) : undefined;
+    if (!o) return this.domain;
+    if (this.allowedOrigins !== "*" && !this.allowedOrigins.includes(o)) return this.domain;
+    return new URL(o).host;
   }
 
   /**
@@ -193,13 +219,13 @@ export class AuthService {
     return { token, wallet: chosen.address, expiresAt, userId, embedded: chosen.embedded };
   }
 
-  async issueNonce(wallet: string): Promise<NonceChallenge> {
+  async issueNonce(wallet: string, origin?: string): Promise<NonceChallenge> {
     if (!parseWallet(wallet)) throw new ServiceError(400, "invalid_wallet", "Not a valid Solana address");
     const issuedAt = this.now();
     const nonce = randomBytes(16).toString("hex");
     const expiresAt = issuedAt + this.nonceTtlMs;
     const message = [
-      `${this.domain} wants you to sign in with your Solana account:`,
+      `${this.domainFor(origin)} wants you to sign in with your Solana account:`,
       wallet,
       "",
       "Sign in to Garuda. This does not send a transaction or cost anything.",

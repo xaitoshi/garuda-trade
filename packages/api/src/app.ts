@@ -321,7 +321,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.post("/auth/nonce", async (req) => {
     if (!auth) throw new ServiceError(404, "auth_disabled");
-    return auth.issueNonce(nonceBody.parse(req.body).wallet);
+    return auth.issueNonce(nonceBody.parse(req.body).wallet, typeof req.headers.origin === "string" ? req.headers.origin : undefined);
   });
 
   app.post("/auth/verify", async (req) => {

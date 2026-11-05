@@ -200,3 +200,29 @@ describe("HTTP: sign-in and ownership", () => {
     expect(second.json().error).toBe("demo_exists");
   });
 });
+
+describe("sign-in message domain follows the requesting web origin", () => {
+  const allowed = ["https://garuda-grok-bot.vercel.app", "http://localhost:5173"];
+
+  it("uses the host of an allowed Origin, falls back to the default for unlisted or missing ones", async () => {
+    const auth = new AuthService({ allowedOrigins: allowed });
+    const w = newWallet();
+    expect((await auth.issueNonce(w.address, "https://garuda-grok-bot.vercel.app")).message.split("\n")[0]).toBe("garuda-grok-bot.vercel.app wants you to sign in with your Solana account:");
+    expect((await auth.issueNonce(w.address, "http://localhost:5173")).message.split("\n")[0]).toBe("localhost:5173 wants you to sign in with your Solana account:");
+    expect((await auth.issueNonce(w.address, "https://evil.example")).message.split("\n")[0]).toBe("garuda wants you to sign in with your Solana account:");
+    expect((await auth.issueNonce(w.address)).message.split("\n")[0]).toBe("garuda wants you to sign in with your Solana account:");
+    expect(new AuthService({ allowedOrigins: "*" }).domainFor("https://any.app")).toBe("any.app");
+  });
+
+  it("over HTTP: /auth/nonce reads the Origin header and the signed message verifies", async () => {
+    const rig = makeRig();
+    const app = buildApp({ service: rig.svc, auth: new AuthService({ allowedOrigins: allowed }), rateLimits: false });
+    const w = newWallet();
+    const r = await app.inject({ method: "POST", url: "/auth/nonce", headers: { origin: "https://garuda-grok-bot.vercel.app" }, payload: { wallet: w.address } });
+    const { nonce, message } = r.json() as { nonce: string; message: string };
+    expect(message.startsWith("garuda-grok-bot.vercel.app wants you to sign in")).toBe(true);
+    const v = await app.inject({ method: "POST", url: "/auth/verify", payload: { wallet: w.address, nonce, signature: w.signMessage(message) } });
+    expect(v.statusCode).toBe(200);
+    await app.close();
+  });
+});

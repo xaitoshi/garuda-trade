@@ -161,7 +161,7 @@ const app = buildApp({
   nft: knights ? { baseUrl: publicUrl, artDir: env.GARUDA_ART_DIR ?? DEFAULT_ART_DIR } : undefined,
   logger: true,
   builderCodeConfigured: Boolean(env.PHOENIX_BUILDER_CODE),
-  auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", privy }),
+  auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", allowedOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : (env.GARUDA_CORS_ORIGIN ?? "").split(",").map((o) => o.trim()).filter(Boolean), privy }),
   trustProxy: env.GARUDA_TRUST_PROXY === "1",
   corsOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : env.GARUDA_CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean),
   health: () => ({
