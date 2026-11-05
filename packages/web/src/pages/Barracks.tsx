@@ -113,13 +113,13 @@ function Detail({ k }: { k: KnightCard }) {
       </div>
       <div className="dstage" style={{ marginTop: 14 }}>
         <KnightImg level={v.level} state={artState(k.c)} size={190} />
-        <span className="slot-tag" style={{ left: 12, top: 12 }}>{artState(k.c).toUpperCase()}</span>
+        <span className="slot-tag" style={{ left: 12, top: 12 }}>{artState(k.c)[0]!.toUpperCase() + artState(k.c).slice(1)}</span>
       </div>
       <div className="stats">
-        <div><b>{k.battles}</b><span>BATTLES</span></div>
-        <div><b>{k.bosses}</b><span>BOSSES</span></div>
-        <div><b className={(k.bestReturn ?? 0) >= 0 ? "up" : "dn"}>{k.bestReturn === undefined ? "-" : pctSigned(k.bestReturn)}</b><span>BEST RETURN</span></div>
-        <div><b>$0</b><span>PAYOUTS</span></div>
+        <div><b>{k.battles}</b><span>Battles</span></div>
+        <div><b>{k.bosses}</b><span>Bosses</span></div>
+        <div><b className={(k.bestReturn ?? 0) >= 0 ? "up" : "dn"}>{k.bestReturn === undefined ? "-" : pctSigned(k.bestReturn)}</b><span>Best return</span></div>
+        <div><b>$0</b><span>Payouts</span></div>
       </div>
       <div className="evo">
         {LEVELS.map((l, i) => (

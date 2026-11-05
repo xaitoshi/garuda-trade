@@ -4,7 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import "./styles.css";
 import "./app.css";
 import "./landing.css";
+import "./pilot-theme.css";
+import "./pilot-terminal.css";
 import { App } from "./App";
+import { installSlidingIndicators } from "./lib/slide";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -13,3 +16,5 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+installSlidingIndicators();

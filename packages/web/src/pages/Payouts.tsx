@@ -83,7 +83,7 @@ function PayoutsView() {
               <div className="kn"><KnightImg level={knightView(funded).level} state={artState(funded)} size={170} /></div>
               <div style={{ textAlign: "center", margin: "6px 0 16px" }}>
                 <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.03em" }}>{knightView(funded).name}</div>
-                <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>{knightView(funded).label.toUpperCase()} · #{funded.id.slice(-4).toUpperCase()}</div>
+                <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>{knightView(funded).label} · #{funded.id.slice(-4).toUpperCase()}</div>
               </div>
               <div className="kr"><span>Account size</span><b>{usd(funded.risk.startingBalance)}</b></div>
               <div className="kr"><span>Balance</span><b>{usd(funded.risk.balance)}</b></div>

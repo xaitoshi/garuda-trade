@@ -187,7 +187,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               {[...c.recentFills].reverse().map((f) => (
                 <tr key={f.id}>
                   <td className="mono">{clock(f.ts)}</td>
-                  <td>{f.symbol}-PERP {f.forced && <span className="tag dn">FORCED</span>}</td>
+                  <td>{f.symbol}-PERP {f.forced && <span className="tag dn">Forced</span>}</td>
                   <td className={f.side === "buy" ? "up" : "dn"}>{f.side === "buy" ? "Buy" : "Sell"}</td>
                   <td>{num(f.size, 4)}</td>
                   <td>{px(f.price)}</td>

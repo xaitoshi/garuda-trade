@@ -89,7 +89,7 @@ function ReviveView({ id }: { id: string }) {
             <div className="eyebrow" style={{ color: "var(--red)" }}>Challenge ended</div>
             <h1 className="pt hero-title">Your knight<br />is wounded.</h1>
             <p className="mute" style={{ marginTop: 14, fontSize: 18 }}>Not burned. Revive and fight again.</p>
-            <span className="slot-tag" style={{ right: 20, top: 20 }}>WOUNDED</span>
+            <span className="slot-tag" style={{ right: 20, top: 20 }}>Wounded</span>
             <div className="art">
               <div className="ph2"><BossImg state={bossState(c)} size={190} /></div>
               <div className="k"><KnightImg level={k.level} state="wounded" size={210} /></div>

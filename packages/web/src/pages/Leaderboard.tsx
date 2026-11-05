@@ -62,7 +62,7 @@ export function Leaderboard() {
                 <div style={{ display: "flex", justifyContent: "center" }}><KnightImg level={lv} size={n === 1 ? 150 : 120} /></div>
                 <div className="hn">{name}</div>
                 <div className="rt up">+{ret.toFixed(1)}%</div>
-                <div className="sub">{tname.toUpperCase()} · {bosses} BOSSES</div>
+                <div className="sub">{tname} · {bosses} bosses</div>
               </div>
             );
           })}

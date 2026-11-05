@@ -10,7 +10,7 @@ export function SimBadge() {
   return (
     <span className="simbadge" title="Challenge accounts are simulated. Fees and payouts are in USDC on Solana devnet.">
       <i />
-      SIMULATED ACCOUNT
+      Simulated account
     </span>
   );
 }

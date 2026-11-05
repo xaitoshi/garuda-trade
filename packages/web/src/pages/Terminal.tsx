@@ -13,11 +13,11 @@ import { Gate, Notice } from "../components/Gate";
 import { BattleSlot, HudTiles } from "../components/Hud";
 import { PriceChart, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
+import { MarketButton, MarketPicker } from "../components/MarketPicker";
 import { PositionsPanel } from "../components/Positions";
 import { CombatLog } from "../components/CombatLog";
 import { Ascension } from "./Ascension";
 
-const QUICK = ["SOL", "BTC", "ETH"];
 
 export function Terminal() {
   const { id } = useParams();
@@ -82,6 +82,7 @@ function TerminalView({ id }: { id: string }) {
 function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: ChallengeState) => void; reload: () => Promise<void> }) {
   const { rules } = useSession();
   const [symbol, setSymbol] = useState("SOL");
+  const [picking, setPicking] = useState(false);
   const [tf, setTf] = useState<(typeof CANDLE_TF)[number]>("1h");
   const [reviving, setReviving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -95,7 +96,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const marks = useMemo<PriceMark[]>(() => {
     const out: PriceMark[] = [];
     if (pos) {
-      out.push({ price: pos.entryPrice, color: "#bbb4fb", title: `${pos.side.toUpperCase()} ${pos.size.toFixed(2)} ${symbol}` });
+      out.push({ price: pos.entryPrice, color: "#eeeef3", title: `${pos.side.toUpperCase()} ${pos.size.toFixed(2)} ${symbol}` });
       out.push({ price: breachPrice(pos, c.risk), color: "#ff5f6d", title: "BREACH" });
     }
     for (const o of c.openOrders) {
@@ -109,7 +110,6 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const last = live[live.length - 1];
   const chg = m && live.length ? changePct(live, m.mark, TF_BARS[tf]) : undefined;
   const k = knightView(c);
-  const more = (rules?.markets ?? []).map((x) => x.symbol).filter((s) => !QUICK.includes(s));
 
   async function wake() {
     setReviving(true);
@@ -149,19 +149,8 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
         <div className="panel cc">
           <div className="ph">
             <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-              <div className="mk">
-                {QUICK.map((s) => (
-                  <button key={s} className={`chip ${s === symbol ? "on" : ""}`} onClick={() => setSymbol(s)} data-testid={`mk-${s}`}>
-                    {s}-PERP
-                  </button>
-                ))}
-                <select className="chip" value={QUICK.includes(symbol) ? "" : symbol} onChange={(e) => e.target.value && setSymbol(e.target.value)} aria-label="More markets">
-                  <option value="">More</option>
-                  {more.map((s) => (
-                    <option key={s} value={s}>{s}-PERP</option>
-                  ))}
-                </select>
-              </div>
+              <MarketButton symbol={symbol} maxLeverage={m?.maxLeverage ?? rules?.markets.find((x) => x.symbol === symbol)?.maxLeverage} onOpen={() => setPicking(true)} />
+              {picking && <MarketPicker markets={rules?.markets ?? []} current={symbol} onPick={setSymbol} onClose={() => setPicking(false)} />}
               <div className="px">
                 <b data-testid="mark">{m ? px(m.mark) : "..."}</b>
                 {chg !== undefined && <span className={`${chg >= 0 ? "up" : "dn"} mono`} style={{ fontSize: 12 }}>{pctSigned(chg, 2)}</span>}

@@ -49,7 +49,7 @@ section.s{padding:170px var(--pad) 0}
 .step:hover{border-color:var(--line2);transform:translateY(-4px)}
 .step .art{display:block;width:100%;height:auto;background:radial-gradient(circle at 50% 40%,#1f1c1d,var(--ink2) 70%);border-bottom:1px solid var(--line)}
 .step-body{padding:26px 28px 32px}
-.step-n{font-family:"GM",monospace;font-size:12px;color:var(--dim);letter-spacing:.14em}
+.step-n{font-family:Inter,sans-serif;font-size:12px;color:var(--dim);letter-spacing:0}
 .step h3{font-size:34px;font-weight:500;letter-spacing:-.035em;margin:10px 0 8px}
 .step p{color:var(--mute);font-size:18px}
 
@@ -66,10 +66,10 @@ section.s{padding:170px var(--pad) 0}
 .tier dl div{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
 .tier dt{color:var(--mute)}.tier dd{font-weight:500}
 .tier-foot{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:24px}
-.fee span{display:block;font-size:12px;color:var(--dim);font-family:"GM",monospace;letter-spacing:.1em;text-transform:uppercase}
+.fee span{display:block;font-size:12px;color:var(--dim);font-family:Inter,sans-serif;letter-spacing:0;text-transform:none}
 .fee b{font-size:32px;font-weight:600;letter-spacing:-.04em}
 .fine{margin-top:22px;font-size:13px;color:var(--dim);display:flex;gap:10px;align-items:center}
-.badge{font-family:"GM",monospace;font-size:11px;letter-spacing:.12em;border:1px solid var(--line2);border-radius:6px;padding:4px 8px;color:var(--mute)}
+.badge{font-family:Inter,sans-serif;font-size:11px;letter-spacing:0;border:1px solid var(--line2);border-radius:6px;padding:4px 8px;color:var(--mute)}
 
 /* levels */
 .stairs{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:end;height:560px}
@@ -97,7 +97,7 @@ section.s{padding:170px var(--pad) 0}
 .feed-row .ic{width:42px;height:42px;border-radius:12px;background:var(--panel2);display:grid;place-items:center}
 .feed-row .ic svg{width:34px;height:auto}
 .feed-row strong{font-weight:500;font-size:17px;display:block}
-.feed-row small{color:var(--dim);font-size:13px;font-family:"GM",monospace}
+.feed-row small{color:var(--dim);font-size:13px;font-family:Inter,sans-serif}
 .feed-row .amt{font-weight:600;font-size:21px;letter-spacing:-.03em;color:#3ddc97}
 .trust{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .trust div{background:var(--ink2);border:1px solid var(--line);border-radius:22px;padding:26px 28px}
@@ -127,7 +127,7 @@ section.s{padding:170px var(--pad) 0}
 
 .step .art{display:flex;justify-content:center;align-items:flex-end;gap:14px;height:290px;padding:24px 20px 22px;position:relative}
 .step .art img{display:block}
-.step .art .vs{align-self:center;font-family:"GM",monospace;color:var(--dim);font-size:12px;letter-spacing:.14em}
+.step .art .vs{align-self:center;font-family:Inter,sans-serif;color:var(--dim);font-size:12px;letter-spacing:0}
 .tier-art img{display:block}
 .tier .btn{min-width:90px}
 .final{padding-bottom:140px}
