@@ -46,13 +46,11 @@ export function Landing() {
                 src="/brand/phoenix-mark.png"
                 width={44}
                 height={44}
-                alt=""
+                alt="Phoenix"
                 decoding="async"
-              />{" "}
-              Phoenix
+              />
             </span>
           </h1>
-          <p className="lead">The onchain prop firm where your trades fight a boss.</p>
           <div className="cta-row">
             <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
             <span className="cta-note"><i className="chain" />Phoenix perps on <b>Solana</b></span>
