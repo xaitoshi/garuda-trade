@@ -22,13 +22,15 @@ import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, read
 import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "./payouts.js";
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
+import { KNIGHT_NAME_MAX } from "./knight-name.js";
 
 const tierEnum = z.enum(TIER_IDS as [string, ...string[]]);
 
 const createBody = z.object({
   tier: tierEnum,
   stage: z.enum(["evaluation", "funded"]).optional(),
-  knight: z.string().min(1).max(40).optional(),
+  /** Cosmetic display name (demo + legacy create). Same 24-char cap as purchase knightName. */
+  knight: z.string().trim().min(1).max(KNIGHT_NAME_MAX).optional(),
   wallet: z.string().min(1).max(64).optional(),
   nftLevels: z.array(tierEnum).optional(),
   /** Knight NFT address the wallet holds (gated tiers and funded accounts). */
@@ -40,9 +42,10 @@ const purchaseChallengeBody = z.object({
   knightAsset: z.string().min(32).max(44).optional(),
   wallet: z.string().min(1).max(64).optional(),
   /** Cosmetic name for the knight a paid challenge mints. */
-  knightName: z.string().trim().min(1).max(24).optional(),
+  knightName: z.string().trim().min(1).max(KNIGHT_NAME_MAX).optional(),
 });
 const purchaseReviveBody = z.object({ challengeId: z.string().min(1).max(64), wallet: z.string().min(1).max(64).optional() });
+const renameKnightBody = z.object({ knight: z.string().trim().min(1).max(KNIGHT_NAME_MAX) });
 const confirmBody = z.object({ signature: z.string().min(64).max(100) });
 
 const orderBody = z
@@ -360,6 +363,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     await authorize(req, req.params.id);
     return svc.getState(req.params.id, { refresh: req.query.refresh !== "false" });
   });
+
+  /** One-shot name for an unnamed demo (owner only). Paid challenges are rejected. */
+  app.patch<{ Params: { id: string } }>("/challenges/:id/knight", async (req) => {
+    await authorize(req, req.params.id);
+    const body = renameKnightBody.parse(req.body);
+    return svc.renameDemoKnight(req.params.id, body.knight);
+  });
+
 
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>("/challenges/:id/combat-log", async (req) => {
     await authorize(req, req.params.id);

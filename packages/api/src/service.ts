@@ -55,6 +55,7 @@ import {
 } from "@garuda/sim-engine";
 import { StubPaymentProvider, type PaymentProvider } from "./payments.js";
 import { InMemoryChallengeStore, summarize, type Challenge, type ChallengeStore, type ChallengeSummary } from "./store.js";
+import { DEFAULT_KNIGHT_NAME, isUnnamedKnight, normalizeKnightName } from "./knight-name.js";
 
 export type { Challenge, ChallengeStore } from "./store.js";
 export { InMemoryChallengeStore } from "./store.js";
@@ -500,7 +501,7 @@ export class ChallengeService {
       id,
       tier: a.tier,
       stage: a.stage,
-      knight: a.knight?.trim() || "Sir Unnamed",
+      knight: normalizeKnightName(a.knight) ?? DEFAULT_KNIGHT_NAME,
       knightId: a.knightId,
       wallet: a.wallet,
       createdAt: t,
@@ -1093,6 +1094,23 @@ export class ChallengeService {
     const ch = await this.get(id);
     await this.mutate(ch, async () => {
       ch.combatLog.push({ ts: this.now(), kind: "tribute", text });
+    });
+  }
+
+  /**
+   * One-shot cosmetic rename for an unnamed demo (no NFT). Paid knights keep their mint-time name;
+   * historical combat-log lines are left as written.
+   */
+  async renameDemoKnight(id: string, rawName: string): Promise<ChallengeState> {
+    const name = normalizeKnightName(rawName);
+    if (!name) throw new ServiceError(400, "invalid_knight_name", `Name must be 1–${24} characters`);
+    const ch = await this.get(id);
+    return this.mutate(ch, async () => {
+      if (ch.tier !== "demo") throw new ServiceError(403, "not_demo", "Only demo accounts can be named this way");
+      if (!isUnnamedKnight(ch.knight)) throw new ServiceError(409, "already_named", "This demo knight already has a name");
+      ch.knight = name;
+      ch.combatLog.push({ ts: this.now(), kind: "dawn", text: `The recruit takes the name ${name}` });
+      return this.view(ch);
     });
   }
 

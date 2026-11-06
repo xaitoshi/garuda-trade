@@ -112,9 +112,9 @@ button.wallet{cursor:pointer}
 .pg-challenges .revive-list{display:grid;gap:10px;margin-top:14px}
 .pg-challenges .rl-row{display:grid;grid-template-columns:50px 1fr auto auto;gap:14px;align-items:center;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
 .pg-challenges .rl-row:hover{border-color:var(--line2)}
-.pg-challenges .nm-field{display:block;margin:4px 0 14px}
-.pg-challenges .nm-row{display:flex;gap:8px;margin-top:6px}
-.pg-challenges .nm-row input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:11px 14px;font-size:16px}
+.nm-field{display:block;margin:4px 0 14px}
+.nm-row{display:flex;gap:8px;margin-top:6px}
+.nm-row input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:11px 14px;font-size:16px}
 .pg-challenges .cb input{position:absolute;opacity:0}
 .pg-challenges .cb{position:relative;cursor:pointer}
 .pg-challenges .cb input:checked + u{background:var(--fire);border-color:var(--fire)}

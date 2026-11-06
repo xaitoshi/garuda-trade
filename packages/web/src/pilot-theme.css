@@ -112,7 +112,7 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 :root main .inp span{color:#b9bbc5;font-size:12px;font-weight:500}
 :root main .inp:focus-within{border-color:#ffffff40}
 :root main.pg-payouts .req .inp{min-height:47px;border-radius:999px;padding:0 18px}
-:root main.pg-challenges .nm-row input{border:1px solid var(--edge-field);border-radius:var(--r-control);background:var(--neutral-raised);font-size:14px}
+:root main.nm-row input{border:1px solid var(--edge-field);border-radius:var(--r-control);background:var(--neutral-raised);font-size:14px}
 :root main .pcts{gap:6px}
 :root main .pcts button{height:28px;padding:0;border:1px solid var(--edge);border-radius:999px;background:transparent;color:#8b8e98;font-family:Inter,sans-serif;font-size:11px}
 :root main .pcts button:hover{border-color:#ffffff30;color:#fff}
