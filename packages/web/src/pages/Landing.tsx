@@ -1,8 +1,12 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
 import { LEVELS, type KnightLevel } from "../lib/knight";
 import { pct, usd } from "../lib/format";
 import { BossImg, KnightImg } from "../components/Art";
+
+/** Near-black sampled from the dotted hero artwork edges (~#08090a). */
+const LANDING_INK = "#08090a";
 
 /** Used until /rules answers, so the landing page never depends on the API being up. */
 const FALLBACK = {
@@ -17,12 +21,36 @@ export function Landing() {
   const c = rules?.common ?? FALLBACK.common;
   const t = rules?.tiers ?? FALLBACK.tiers;
   const paid = LEVELS.map((l) => ({ ...l, ...t[l.tier] }));
+
+  // Match document chrome to the hero artwork so the dotted knight has no visible page card edge.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("landing-skin");
+    root.style.setProperty("--landing-ink", LANDING_INK);
+    return () => {
+      root.classList.remove("landing-skin");
+      root.style.removeProperty("--landing-ink");
+    };
+  }, []);
+
   return (
     <main className="pg-landing" data-testid="landing">
       <header className="hero">
         <div className="hero-copy">
-          <h1>
-            Slay the<br />Phoenix.<br /><em>Get funded.</em>
+          <h1 className="hero-headline">
+            The First Prop Firm on Solana,
+            <span className="powered-by">
+              powered by{" "}
+              <img
+                className="phoenix-mark"
+                src="/brand/phoenix-mark.png"
+                width={44}
+                height={44}
+                alt=""
+                decoding="async"
+              />{" "}
+              Phoenix
+            </span>
           </h1>
           <p className="lead">The onchain prop firm where your trades fight a boss.</p>
           <div className="cta-row">
@@ -31,13 +59,14 @@ export function Landing() {
           </div>
         </div>
         <div className="hero-art">
-          <div className="phoenix">
-            <div className="glow" />
-            <div className="mark glowmark" />
-            <div className="mark" />
-          </div>
-          <div className="fchip c1"><span className="mono">Phoenix HP</span><b>62%</b><div className="bar"><i style={{ width: "62%" }} /></div></div>
-          <div className="fchip c2"><span className="mono">Next level</span><b>Knight, LV.2</b></div>
+          <img
+            className="hero-knight"
+            src="/art/landing/hero-knight-dotted.png"
+            alt="Dotted Garuda knight"
+            width={904}
+            height={884}
+            decoding="async"
+          />
         </div>
       </header>
 

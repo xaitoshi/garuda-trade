@@ -1,0 +1,10 @@
+Phoenix brand marks used on the Garuda landing page:
+
+- phoenix-icon.png — https://www.phoenix.trade/icons/phoenix-icon-512.png
+  (official Phoenix Trade site icon; dark backdrop retained as downloaded)
+- phoenix-mark.png — same official icon with near-black backdrop made transparent
+  for inline use next to “powered by”
+- phoenix-wordmark.svg — https://cdn.prod.website-files.com/6682724078514acfa240fba3/6939dfed342f79d55f88a3e4_phoenix-new.svg
+  (published on the Ellipsis Labs / Phoenix public website)
+
+Garuda does not claim ownership of the Phoenix marks; they identify the venue.
