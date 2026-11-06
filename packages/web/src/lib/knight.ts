@@ -33,9 +33,25 @@ export interface KnightView {
   demo: boolean;
 }
 
+export const DEFAULT_KNIGHT_NAME = "Sir Unnamed";
+export const KNIGHT_NAME_MAX = 24;
+
+export function isUnnamedKnight(name: string | undefined): boolean {
+  const n = name?.trim();
+  return !n || n === DEFAULT_KNIGHT_NAME;
+}
+
+/** Trim + collapse spaces, then cap at KNIGHT_NAME_MAX. Empty → undefined. */
+export function normalizeKnightName(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const n = raw.trim().replace(/\s+/g, " ");
+  if (!n) return undefined;
+  return n.slice(0, KNIGHT_NAME_MAX);
+}
+
 export function displayName(raw: string | undefined, demo = false): string {
   const n = raw?.trim();
-  if (!n || n === "Sir Unnamed") return demo ? "Demo recruit" : "Sir Unnamed";
+  if (!n || n === DEFAULT_KNIGHT_NAME) return demo ? "Demo recruit" : DEFAULT_KNIGHT_NAME;
   return n;
 }
 

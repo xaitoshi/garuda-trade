@@ -57,6 +57,8 @@ export const api = {
   challenges: () => call<{ challenges: ChallengeState[] }>("/challenges").then((r) => r.challenges),
   challenge: (id: string) => call<ChallengeState>(`/challenges/${id}`),
   createDemo: (knight?: string, wallet?: string) => post<ChallengeState>("/challenges", { tier: "demo", knight, wallet }),
+  /** One-shot name for an unnamed demo. */
+  renameDemoKnight: (id: string, knight: string) => call<ChallengeState>(`/challenges/${id}/knight`, { method: "PATCH", body: { knight } }),
   createFunded: (tier: TierId, knightAsset?: string, wallet?: string) => post<ChallengeState>("/challenges", { tier, stage: "funded", knightAsset, wallet }),
   placeOrder: (id: string, o: { symbol: string; side: "buy" | "sell"; size: number; type: "market" | "limit"; limitPrice?: number; reduceOnly?: boolean }) =>
     post<PlaceOrderResult>(`/challenges/${id}/orders`, o, undefined, [422]),

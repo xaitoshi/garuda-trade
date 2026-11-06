@@ -6,7 +6,8 @@ import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { applyTick, breachPrice, changePct } from "../lib/trade";
 import { px, pctSigned } from "../lib/format";
-import { knightView } from "../lib/knight";
+import { isUnnamedKnight, knightView, normalizeKnightName, randomKnightName } from "../lib/knight";
+import { KnightNameField } from "../components/KnightNameField";
 import { CANDLE_TF, TF_MS, TF_BARS } from "../lib/timeframes";
 import type { ChallengeState } from "../lib/types";
 import { Gate, Notice } from "../components/Gate";
@@ -31,6 +32,7 @@ function Pick() {
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [name, setName] = useState(() => randomKnightName());
 
   if (list.loading) return <main><div className="panel gate"><p className="mute">Loading your accounts...</p></div></main>;
   const all = list.data ?? [];
@@ -42,7 +44,7 @@ function Pick() {
     setBusy(true);
     setErr(null);
     try {
-      const c = await api.createDemo(undefined, wallet ?? undefined);
+      const c = await api.createDemo(normalizeKnightName(name), wallet ?? undefined);
       nav(`/terminal/${c.id}`);
     } catch (e) {
       setErr(errorText(e));
@@ -51,6 +53,9 @@ function Pick() {
   };
   return (
     <Notice title="No challenge yet" note="Start the free $5,000 demo to learn the rules, or pick a paid trial and mint a knight.">
+      <div style={{ width: "min(100%, 360px)", margin: "0 auto 14px", textAlign: "left" }}>
+        <KnightNameField value={name} onChange={setName} disabled={busy} label="Name your demo knight" />
+      </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
         <button className="btn btn-fire" onClick={() => void demo()} disabled={busy} data-testid="start-demo">
           {busy ? "Starting..." : "Start free demo"}
@@ -86,6 +91,10 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const [tf, setTf] = useState<(typeof CANDLE_TF)[number]>("1h");
   const [reviving, setReviving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState(() => randomKnightName());
+  const [naming, setNaming] = useState(false);
+  const [nameErr, setNameErr] = useState<string | null>(null);
+  const needsName = c.demo && isUnnamedKnight(c.knight);
 
   const market = usePoll(() => api.market(symbol, 14), POLL.marketMs, symbol);
   const candles = usePoll(() => api.candles(symbol, tf, 120), POLL.chartMs, `${symbol}:${tf}`);
@@ -122,6 +131,23 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
       setReviving(false);
     }
   }
+
+  async function saveName() {
+    const n = normalizeKnightName(nameDraft);
+    if (!n) {
+      setNameErr("Pick a name (1–24 characters).");
+      return;
+    }
+    setNaming(true);
+    setNameErr(null);
+    try {
+      onState(await api.renameDemoKnight(c.id, n));
+    } catch (e) {
+      setNameErr(errorText(e));
+    } finally {
+      setNaming(false);
+    }
+  }
   useEffect(() => {
     document.title = `${k.name} · Garuda terminal`;
   }, [k.name]);
@@ -139,6 +165,17 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
             </button>
           )}
           {err && <span className="dn">{err}</span>}
+        </div>
+      )}
+      {needsName && (
+        <div className="banner" data-testid="demo-name-banner">
+          <div style={{ flex: 1, minWidth: 220, maxWidth: 360 }}>
+            <KnightNameField value={nameDraft} onChange={setNameDraft} disabled={naming} label="Name this demo knight" />
+            {nameErr && <div className="dn" style={{ fontSize: 12, marginTop: 6 }}>{nameErr}</div>}
+          </div>
+          <button className="btn btn-fire btn-sm" onClick={() => void saveName()} disabled={naming} data-testid="save-demo-name">
+            {naming ? "Saving..." : "Save name"}
+          </button>
         </div>
       )}
       <div className="t-top">

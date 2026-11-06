@@ -5,7 +5,8 @@ import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { STEP_TEXT, usePurchase } from "../lib/usePurchase";
 import { bestKnight, eligibilityFor } from "../lib/eligibility";
-import { LEVELS, randomKnightName, type KnightLevel } from "../lib/knight";
+import { LEVELS, normalizeKnightName, randomKnightName, type KnightLevel } from "../lib/knight";
+import { KnightNameField } from "../components/KnightNameField";
 import { pct, shortAddr, usd } from "../lib/format";
 import type { Rules, TierId, TierSpec } from "../lib/types";
 import { Check, KnightImg, Lock, Logo, Spark } from "../components/Art";
@@ -48,7 +49,7 @@ export function Challenges() {
     setDemoBusy(true);
     setDemoErr(null);
     try {
-      const c = await api.createDemo(undefined, address ?? undefined);
+      const c = await api.createDemo(normalizeKnightName(name), address ?? undefined);
       nav(`/terminal/${c.id}`);
     } catch (e) {
       setDemoErr(errorText(e));
@@ -58,7 +59,7 @@ export function Challenges() {
 
   async function pay() {
     if (!chosen || !elig) return;
-    const knightName = name.trim().slice(0, 24) || undefined;
+    const knightName = normalizeKnightName(name);
     try {
       const order = await buy.run(() => api.quoteChallenge(chosen.id, knightName, elig.asset));
       setMinted({ challengeId: order.challengeId ?? "", tier: chosen.id, name: knightName ?? "Sir Unnamed" });
@@ -107,6 +108,13 @@ export function Challenges() {
           )}
         </div>
       ) : (
+        <>
+        {tab === "demo" && (
+          <div className="panel" style={{ padding: 20, marginBottom: 16, maxWidth: 420 }}>
+            <KnightNameField value={name} onChange={setName} disabled={demoBusy} label="Name your demo knight" />
+            <p className="mute" style={{ fontSize: 13, margin: 0 }}>Cosmetic only — demos do not mint an NFT.</p>
+          </div>
+        )}
         <div className={`cards ${tab === "demo" ? "one" : ""}`}>
           <TierCard
             id="demo"
@@ -139,6 +147,7 @@ export function Challenges() {
               );
             })}
         </div>
+        </>
       )}
       {demoErr && <div className="dn note" style={{ textAlign: "center", marginTop: 12 }}>{demoErr}</div>}
 
@@ -240,13 +249,7 @@ function PayPanel({ chosen, name, setName, agree, setAgree, onPay, buy, done, wa
       </div>
       {chosen ? (
         <>
-          <label className="nm-field">
-            <span className="lbl">Name your knight</span>
-            <span className="nm-row">
-              <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} disabled={done || buy.busy} data-testid="knight-name" />
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setName(randomKnightName())} disabled={done || buy.busy} aria-label="Random name">Roll</button>
-            </span>
-          </label>
+          <KnightNameField value={name} onChange={setName} disabled={done || buy.busy} />
           <div className="line"><span>{chosen.name} Trial · {usd(chosen.accountSize / 1000)}k</span><b>{usd(chosen.fee, 2)}</b></div>
           <div className="line"><span>Network fee</span><b>~$0.01 in SOL</b></div>
           <div className="line tot"><span style={{ alignSelf: "center" }}>Total</span><b>{usd(fee, 2)} <span className="mute" style={{ fontSize: 14, fontWeight: 400 }}>USDC</span></b></div>
