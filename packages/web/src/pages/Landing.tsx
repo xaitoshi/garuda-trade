@@ -53,7 +53,6 @@ export function Landing() {
           </h1>
           <div className="cta-row">
             <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
-            <span className="cta-note"><i className="chain" />Phoenix perps on <b>Solana</b></span>
           </div>
         </div>
         <div className="hero-art">
