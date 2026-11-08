@@ -7,7 +7,6 @@
 @font-face{font-family:Inter;src:url(/fonts/Inter-600.woff2) format("woff2");font-weight:600;font-display:swap}
 @font-face{font-family:Inter;src:url(/fonts/Inter-700.woff2) format("woff2");font-weight:700;font-display:swap}
 @font-face{font-family:"Geist Pixel Circle";src:url(/fonts/GeistPixel-Circle.woff2) format("woff2");font-weight:400;font-display:swap}
-@font-face{font-family:KnightMono;src:url(/fonts/KnightMono.woff2) format("woff2");font-display:swap}
 
 :root{
   --neutral-canvas:#000;--neutral-panel:#111112;--neutral-inset:#1a1b1e;--neutral-raised:#1a1b1e;

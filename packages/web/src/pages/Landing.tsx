@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { AsciiKnight } from "../components/AsciiKnight";
 import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
 import { LEVELS, type KnightLevel } from "../lib/knight";
@@ -57,7 +56,14 @@ export function Landing() {
           </div>
         </div>
         <div className="hero-art">
-          <AsciiKnight className="hero-knight hero-ascii" />
+          <img
+            className="hero-knight"
+            src="/art/landing/hero-knight-dotted.png"
+            alt="Dotted Garuda knight"
+            width={904}
+            height={884}
+            decoding="async"
+          />
         </div>
       </header>
 
