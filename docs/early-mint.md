@@ -95,7 +95,7 @@ from the admin list.
 
 ## Artwork
 
-The NFT image is `packages/web/public/early/garuda-beta-access.png`, served at
+The NFT image is `packages/web/public/early/garuda-beta-access.png` (1024x1024; the page shows `garuda-beta-access-720.webp`, regenerate both and bump `?v=` in `EARLY_ART` / `EARLY_ART_PREVIEW`), served at
 `https://garuda.markets/early/garuda-beta-access.png`. The page uses the same file (`EARLY_ART` in
 `packages/web/src/lib/config.ts`). Metadata JSON: `https://garuda.markets/early/metadata.json` (asset) and
 `https://garuda.markets/early/collection.json` (collection). To swap the art, replace the PNG **keeping the file name**,
