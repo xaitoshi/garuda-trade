@@ -8,7 +8,7 @@ svg text{font-family:Inter,ui-sans-serif,system-ui,sans-serif}svg text.mono,svg 
 .ax{font-size:11px;fill:#5f5a5b}
 .up{color:var(--green)}.dn{color:var(--red)}.fire{color:var(--fire)}.mute{color:var(--mute)}.dim{color:var(--dim)}
 /* top */
-.top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:64px;padding:0 24px;border-bottom:1px solid var(--line);background:var(--ink)}
+.top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:64px;padding:0 24px;border-bottom:1px solid var(--line);background:var(--ink);position:relative;z-index:300;overflow:visible}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:0;font-size:14px}
 .tabs{display:flex;gap:4px}
 .tabs a{padding:9px 16px;border-radius:10px;color:var(--mute);font-size:15px}
@@ -341,9 +341,9 @@ img.knight.knight-victory{filter:brightness(1.08) contrast(1.06) drop-shadow(0 0
 .nav-drop-trigger:hover > a,.nav-drop-trigger:hover .nav-drop-btn,.nav-drop.open .nav-drop-trigger > a,.nav-drop.on .nav-drop-trigger > a,.nav-drop.open .nav-drop-btn,.nav-drop.on .nav-drop-btn{color:var(--bone)}
 .nav-drop.on .nav-drop-trigger,.nav-drop.open .nav-drop-trigger{background:var(--panel);border:1px solid var(--line)}
 .nav-drop-chev{width:8px;height:8px;display:block;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg);margin-top:-3px}
-.nav-drop-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:70;min-width:180px;padding:8px;border-radius:14px;background:var(--ink2);border:1px solid var(--line2);box-shadow:0 24px 60px -20px rgba(0,0,0,.8);display:flex;flex-direction:column;gap:2px}
-.nav-drop-menu a{display:block;padding:10px 12px;border-radius:10px;color:var(--mute);font-size:15px}
-.nav-drop-menu a:hover,.nav-drop-menu a.on{color:var(--bone);background:var(--panel)}
+.nav-drop-menu{position:fixed;left:0;top:0;z-index:4000;min-width:180px;padding:8px;border-radius:14px;background:#1d1f21;border:1px solid #ffffff20;box-shadow:0 16px 48px #000c;display:flex;flex-direction:column;gap:2px}
+.nav-drop-menu a{display:block;padding:10px 12px;border-radius:10px;color:#c9cbd2;font-size:15px;font-weight:500;background:transparent;height:auto}
+.nav-drop-menu a:hover,.nav-drop-menu a.on{color:#f4f4f5;background:#2a2c32}
 
 .pg-info{max-width:980px}
 .pg-info .info-hd{margin-bottom:28px}
