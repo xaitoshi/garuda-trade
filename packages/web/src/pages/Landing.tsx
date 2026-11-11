@@ -84,7 +84,7 @@ export function Landing() {
         <div className="steps">
           <article className="step rv">
             <div className="art">
-              <img className="knight knight-fill" src="/art/steps/2.png" alt="" draggable={false} />
+              <img className="knight knight-fill" src="/art/steps/1.png" alt="" draggable={false} />
             </div>
             <div className="step-body"><span className="step-n">01</span><h3>Mint a knight</h3><p>Every challenge mints a knight NFT.</p></div>
           </article>
