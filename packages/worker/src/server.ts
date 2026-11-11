@@ -28,6 +28,7 @@ import { DEFAULT_ART_DIR, HttpRpc, MetaplexCoreKnights, SolanaTreasuryPayout, So
 import { openDb } from "@garuda/db";
 import { payoutPolicyFromEnv } from "@garuda/risk-engine";
 import { PhoenixSdkProvider, PollingFeed, ReplayProvider, loadRecordedMarkets, type MarketDataProvider } from "@garuda/market-data";
+import { InMemoryRoutingStore, PgRoutingStore, createRouterFromEnv, type PhoenixRouter, type RoutingStore } from "@garuda/router";
 import { RiskWorker } from "./worker.js";
 
 const env = process.env;
@@ -54,6 +55,7 @@ let store: ChallengeStore = new InMemoryChallengeStore();
 let authStore: AuthStore = new InMemoryAuthStore();
 let orderStore: OrderStore = new InMemoryOrderStore();
 let payoutStore: PayoutStore = new InMemoryPayoutStore();
+let routingStore: RoutingStore = new InMemoryRoutingStore();
 let storage = "memory (state is lost on restart: set DATABASE_URL)";
 let closeDb: () => Promise<void> = async () => {};
 if (env.DATABASE_URL) {
@@ -62,6 +64,7 @@ if (env.DATABASE_URL) {
   authStore = new PgAuthStore(db);
   orderStore = new PgOrderStore(db);
   payoutStore = new PgPayoutStore(db);
+  routingStore = new PgRoutingStore(db);
   closeDb = () => db.close();
   storage = "postgres";
 }
@@ -110,7 +113,12 @@ if (adminToken && adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
   process.exit(1);
 }
 
+// Phase 2 Phoenix routing (packages/router, docs/phoenix-routing.md). OFF unless ROUTING_ENABLED=true; DRY_RUN by default
+// once enabled. Bound late because the router reads books through the service and the service feeds it fills.
+let router: PhoenixRouter | undefined;
+
 const service = new ChallengeService({
+  onFills: (ev) => router?.onFills(ev),
   // Path to Funded (rulebook section 9): KYC and the risk review are manual ops steps unless set to "auto" (dev only).
   kycMode: env.GARUDA_KYC_MODE === "auto" ? "auto" : "manual",
   fundedReview: env.GARUDA_FUNDED_REVIEW === "auto" ? "auto" : "manual",
@@ -120,6 +128,28 @@ const service = new ChallengeService({
   requireWalletForDemo: !authOff,
   ...(knights ? { knights, requirePayment: true, payments: new PaymentRequiredProvider() } : {}),
 });
+try {
+  router = await createRouterFromEnv(env, {
+    store: routingStore,
+    log: (m) => console.log(`[garuda-router] ${m}`),
+    traderBook: async (id) => {
+      const st = await service.getState(id, { refresh: false }).catch(() => undefined);
+      if (!st) return undefined;
+      return {
+        stage: st.stage,
+        demo: st.demo,
+        wallet: st.wallet,
+        status: st.status,
+        positions: Object.fromEntries(st.positions.map((p) => [p.symbol, { size: p.side === "long" ? p.size : -p.size, markPrice: p.markPrice }])),
+      };
+    },
+  });
+} catch (e) {
+  // A bad routing config must not take the API down: report it and run with routing off.
+  console.error(`[garuda-router] routing config rejected, routing stays OFF: ${e instanceof Error ? e.message : e}`);
+  router = undefined;
+}
+if (router?.mode !== "disabled") router?.start();
 const payouts = payoutExecutor ? new PayoutService({ service, executor: payoutExecutor, store: payoutStore }) : undefined;
 const purchases = usdc ? new PurchaseService({ service, usdc, store: orderStore }) : undefined;
 
@@ -163,6 +193,7 @@ const app = buildApp({
   adminToken,
   nft: knights ? { baseUrl: publicUrl, artDir: env.GARUDA_ART_DIR ?? DEFAULT_ART_DIR } : undefined,
   logger: true,
+  routing: router,
   builderCodeConfigured: Boolean(env.PHOENIX_BUILDER_CODE),
   auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", allowedOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : (env.GARUDA_CORS_ORIGIN ?? "").split(",").map((o) => o.trim()).filter(Boolean), privy }),
   trustProxy: env.GARUDA_TRUST_PROXY === "1",
@@ -179,6 +210,7 @@ const app = buildApp({
 const shutdown = async () => {
   if (reconciler) clearInterval(reconciler);
   await payouts?.idle();
+  await router?.stop();
   await worker.stop();
   await app.close();
   await closeDb();
@@ -189,5 +221,5 @@ process.on("SIGTERM", () => void shutdown());
 
 await app.listen({ port, host: "0.0.0.0" });
 console.log(
-  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | payouts ${payouts ? `${payoutExecutor!.name} split ${payoutPolicy.split} auto<=$${payoutPolicy.autoMaxUsd}${adminToken ? " admin on" : " admin OFF"}` : "off"} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | SIMULATED accounts`,
+  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | payouts ${payouts ? `${payoutExecutor!.name} split ${payoutPolicy.split} auto<=$${payoutPolicy.autoMaxUsd}${adminToken ? " admin on" : " admin OFF"}` : "off"} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | routing ${router?.healthLabel() ?? "disabled"}${router?.modeReason && router.mode === "disabled" && router.config.enabled ? ` (${router.modeReason})` : ""} | SIMULATED accounts`,
 );

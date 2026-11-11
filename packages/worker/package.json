@@ -14,6 +14,7 @@
     "@garuda/risk-engine": "workspace:*",
     "@garuda/sim-engine": "workspace:*",
     "@garuda/db": "workspace:*",
-    "@garuda/chain": "workspace:*"
+    "@garuda/chain": "workspace:*",
+    "@garuda/router": "workspace:*"
   }
 }

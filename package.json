@@ -26,7 +26,8 @@
     "web:build": "pnpm --filter @garuda/web build",
     "web:stub": "tsx scripts/web-stub-server.ts",
     "web:screens": "tsx scripts/web-screens.ts",
-    "test:payout:devnet": "DEVNET=1 vitest run packages/api/test/e2e-payout.test.ts"
+    "test:payout:devnet": "DEVNET=1 vitest run packages/api/test/e2e-payout.test.ts",
+    "phoenix:delegate": "tsx packages/router/src/cli/phoenix-delegate.ts"
   },
   "devDependencies": {
     "@garuda/api": "workspace:*",
@@ -40,6 +41,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
-    "@garuda/chain": "workspace:*"
+    "@garuda/chain": "workspace:*",
+    "@garuda/router": "workspace:*"
   }
 }

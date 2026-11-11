@@ -111,6 +111,22 @@ export interface ServiceDeps {
    * When either step is manual, a funded account can ONLY be opened through an approved claim.
    */
   fundedReview?: "auto" | "manual";
+  /**
+   * Phase 2 routing hook (packages/router): called synchronously after every batch of simulated fills, on every stage.
+   * Must not throw or block; the router filters to selected FUNDED accounts and queues its own work.
+   */
+  onFills?: (ev: FillsEvent) => void;
+}
+
+/** Simulated fills on one account plus its signed position per filled symbol afterwards (the routing hook's input). */
+export interface FillsEvent {
+  challengeId: string;
+  stage: Stage;
+  demo: boolean;
+  wallet?: string;
+  status: string;
+  fills: Fill[];
+  positions: Record<string, number>;
 }
 
 /** Path to Funded view of an account: progress on the four pass requirements plus the claim (KYC and review). */
@@ -290,8 +306,10 @@ export class ChallengeService {
   private createChains = new Map<string, Promise<unknown>>();
   readonly kycMode: "auto" | "manual";
   readonly fundedReview: "auto" | "manual";
+  private readonly onFills?: (ev: FillsEvent) => void;
 
   constructor(deps: ServiceDeps) {
+    this.onFills = deps.onFills;
     this.market = deps.market;
     this.store = deps.store ?? new InMemoryChallengeStore();
     this.engine = new SimEngine(deps.engine);
@@ -803,6 +821,15 @@ export class ChallengeService {
     const ctx = { knight: ch.knight, startingBalance: ch.account.startingBalance };
     out.push(...fillsToCombat(ctx, fills));
     ch.combatLog.push(...out);
+    if (fills.length && this.onFills) {
+      try {
+        const positions: Record<string, number> = {};
+        for (const f of fills) positions[f.symbol] = ch.account.positionSize(f.symbol);
+        this.onFills({ challengeId: ch.id, stage: ch.stage, demo: ch.tier === "demo", wallet: ch.wallet, status: ch.risk.status, fills, positions });
+      } catch {
+        /* the routing hook must never break a simulated fill */
+      }
+    }
     return out;
   }
 
