@@ -53,7 +53,10 @@ button.wallet{cursor:pointer}
 .pg-terminal .slab{position:absolute;bottom:26px;width:210px;height:92px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:linear-gradient(180deg,#2e2b2c,#1d1a1b)}
 .pg-terminal .slab.a{left:34px}.pg-terminal .slab.b{right:34px}
 .pg-terminal .sc-k{position:absolute;left:62px;bottom:50px;height:138px;width:auto;filter:drop-shadow(0 12px 14px rgba(0,0,0,.5))}
-.pg-terminal .sc-b{position:absolute;right:46px;bottom:46px;height:148px;width:auto;filter:drop-shadow(0 0 22px rgba(255,95,1,.35))}
+.pg-terminal .sc-k.knight-dormant{filter:grayscale(1) brightness(.62) drop-shadow(0 12px 14px rgba(0,0,0,.5));opacity:.75}
+.pg-terminal .sc-k.knight-wounded{filter:grayscale(.45) sepia(.4) hue-rotate(-25deg) brightness(.88) drop-shadow(0 12px 14px rgba(0,0,0,.5))}
+.pg-terminal .sc-k.knight-victory{filter:brightness(1.08) contrast(1.06) drop-shadow(0 0 18px rgba(255,194,74,.4))}
+.pg-terminal .sc-b{position:absolute;right:46px;bottom:46px;height:148px;width:148px;filter:drop-shadow(0 0 22px rgba(255,95,1,.35))}
 .pg-terminal .bolt{position:absolute;left:50%;bottom:92px;margin-left:-13px;filter:drop-shadow(0 0 8px rgba(255,194,74,.7))}
 .pg-terminal .acc-grid{display:grid;grid-template-columns:auto 1fr;gap:7px 10px;font-size:12.5px;margin-top:8px}
 .pg-terminal .acc-grid span{color:var(--dim)}
@@ -189,7 +192,7 @@ button.wallet{cursor:pointer}
   main.pg-wounded .hero .k{left:auto;right:6px;bottom:0}
   main.pg-wounded .hero .k img{height:170px;width:auto}
   main.pg-wounded .hero .ph2{right:auto;left:0;top:0}
-  main.pg-wounded .hero .ph2 img{height:130px;width:auto}
+  main.pg-wounded .hero .ph2 img, main.pg-wounded .hero .ph2 .boss-mark{height:130px;width:130px}
   main.pg-wounded .broke{grid-template-columns:1fr}
   main.pg-wounded .broke div{border-right:0;border-bottom:1px solid var(--line)}
   .hero-title,.big-title{font-size:40px}

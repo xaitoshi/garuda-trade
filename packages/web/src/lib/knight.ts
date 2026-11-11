@@ -74,7 +74,6 @@ export function bossState(c: Pick<ChallengeState, "status" | "risk">): BossState
   const hp = 1 - (c.risk.targetProgressPct ?? 0);
   return hp > 0.66 ? "full" : hp > 0.33 ? "hurt" : "low";
 }
-export const bossSrc = (s: BossState): string => `/art/boss/${s}.png`;
 
 /** Cosmetic names offered by the "Name" button on the reveal screen. */
 export const KNIGHT_NAMES = ["Sir Pudding", "Lady Ember", "Sir Rook", "Bramble", "Pip", "Tiny", "Dame Ash", "Sir Lag", "Moonpaw", "Nightowl"] as const;

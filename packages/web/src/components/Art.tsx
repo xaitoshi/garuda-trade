@@ -1,12 +1,19 @@
 import type { ArtState, KnightLevel, BossState } from "../lib/knight";
-import { bossSrc, knightSrc } from "../lib/knight";
+import { knightSrc } from "../lib/knight";
 
 export function KnightImg({ level, state = "active", size = 120, className = "", alt }: { level: KnightLevel; state?: ArtState; size?: number; className?: string; alt?: string }) {
-  return <img className={`knight ${className}`} src={knightSrc(level, state)} width={size} height={size} alt={alt ?? `Level ${level} knight, ${state}`} draggable={false} />;
+  return <img className={`knight knight-${state} ${className}`} src={knightSrc(level, state)} width={size} height={size} alt={alt ?? `Level ${level} knight, ${state}`} draggable={false} />;
 }
 
+/** Geometric Phoenix mark (no illustration). State is colour and scale only. */
 export function BossImg({ state = "full", size = 160, className = "" }: { state?: BossState; size?: number; className?: string }) {
-  return <img className={`boss ${className}`} src={bossSrc(state)} width={size} height={size} alt={`The Phoenix, ${state}`} draggable={false} />;
+  return (
+    <div className={`boss-mark boss-${state} ${className}`} style={{ width: size, height: size }} role="img" aria-label={`The Phoenix, ${state}`}>
+      <span className="boss-ring" aria-hidden />
+      <span className="boss-core" aria-hidden />
+      <span className="boss-label">{state === "defeated" ? "Fallen" : "Phoenix"}</span>
+    </div>
+  );
 }
 
 export function Bar({ pct, color, h = 8 }: { pct: number; color: string; h?: number }) {
