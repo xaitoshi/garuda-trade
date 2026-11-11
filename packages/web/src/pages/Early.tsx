@@ -7,6 +7,9 @@ import { api, ApiError, errorText } from "../lib/api";
 const LANDING_INK = "#08090a";
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,24}$/;
+const SHARE_PAGE = "https://garuda.markets/early/share";
+const SHARE_IMAGE = "/early/you-are-early.png";
+const SHARE_INTENT = `https://x.com/intent/post?text=${encodeURIComponent("Gm @garuda_markets")}&url=${encodeURIComponent(SHARE_PAGE)}`;
 
 function isSolanaAddress(value: string): boolean {
   const s = value.trim();
@@ -76,6 +79,15 @@ export function Early() {
         {done ? (
           <div className="early-done" data-testid="early-done">
             <h1>You're in.</h1>
+            <img className="early-share-art" src={SHARE_IMAGE} alt="You Are Early" width={1600} height={900} />
+            <div className="early-share-row">
+              <a className="btn btn-fire early-submit" href={SHARE_INTENT} target="_blank" rel="noopener noreferrer" data-testid="early-share-x">
+                Share on X
+              </a>
+              <a className="btn btn-ghost early-submit" href={SHARE_IMAGE} download="you-are-early.png" data-testid="early-share-download">
+                Download image
+              </a>
+            </div>
           </div>
         ) : (
           <form className="early-form" onSubmit={submit} noValidate>

@@ -1,3 +1,7 @@
 {
-  "rewrites": [{ "source": "/((?!assets/|art/|fonts/|.*\\..*).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/early/share", "destination": "/early/share.html" },
+    { "source": "/early/share/", "destination": "/early/share.html" },
+    { "source": "/((?!assets/|art/|fonts/|.*\\..*).*)", "destination": "/index.html" }
+  ]
 }
