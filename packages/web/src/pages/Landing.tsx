@@ -133,7 +133,7 @@ export function Landing() {
       <section className="s wrap" id="knights">
         <div className="s-head rv">
           <div><div className="eyebrow">Knights</div><h2>Level up<br />your knight.</h2></div>
-          <p className="lead">Win and it evolves. Lose and it is wounded, not burned.</p>
+          <p className="lead">Win and it evolves. Lose and it is wounded.</p>
         </div>
         <div className="stairs rv">
           {LEVELS.map((l, i) => (
@@ -176,7 +176,7 @@ export function Landing() {
           <div className="faq rv">
             <details open><summary>What is Garuda?</summary><p>A gamified prop firm on Phoenix perps. Trade a challenge, fight the Phoenix, get funded.</p></details>
             <details><summary>What does the NFT do?</summary><p>Your knight tracks your progress. It levels up when you pass. Rarity is cosmetic only.</p></details>
-            <details><summary>What if I fail?</summary><p>Your knight is wounded, not burned. Revive it at {pct(rules?.revive.discount ?? 0.2, 0)} off and retry.</p></details>
+            <details><summary>What if I fail?</summary><p>Your knight is wounded. Revive it at {pct(rules?.revive.discount ?? 0.2, 0)} off and retry.</p></details>
             <details><summary>How do payouts work?</summary><p>Funded accounts keep {pct(c.profitSplit, 0)} of profit, paid in USDC. Payouts are not switched on yet, so nothing can be withdrawn today.</p></details>
             <details><summary>Is this real money?</summary><p>Challenge accounts are simulated and fill against the live Phoenix orderbook. Challenge fees are paid in USDC.</p></details>
           </div>
