@@ -9,6 +9,7 @@ Outputs:
   packages/web/public/art/nft/{1-4}.png
   packages/web/public/art/knights/{1-4}-{active,dormant,victory,wounded}.png
   packages/web/public/art/cards/{1-4}.png   portrait crops for tall challenge / landing cards
+  packages/web/public/art/steps/{2,4}.png   landscape crops for landing How-it-works panels
   packages/web/public/art/icons/icon-{1-4}.png
   packages/web/public/art/landing/hero-knight-dotted.png  (Paladin square)
 """
@@ -32,8 +33,10 @@ SOURCES = {
 # to 0.69 (1-col mobile). 3:5 sits in the middle so cover only trims a little
 # on either side of that range.
 CARD_ASPECT = 3 / 5
+STEP_ASPECT = 3 / 2
 SQUARE_MAX = 1536
 CARD_MAX_H = 1800
+STEP_MAX_W = 1400
 DOT_LUM = 20  # luminance clearly above the near-black canvas
 
 
@@ -82,6 +85,33 @@ def center_of_mass(im: Image.Image) -> tuple[float, float]:
         return im.size[0] / 2, im.size[1] / 2
     ys, xs = np.indices(w.shape)
     return float((xs * w).sum() / w.sum()), float((ys * w).sum() / w.sum())
+
+
+
+def edge_fit_crop(im: Image.Image, aspect: float, max_w: int, step: int = 4) -> Image.Image:
+    """Cover-sized window of `aspect` (width/height) chosen so every edge has dots."""
+    lum = lum_of(im)
+    h, w = lum.shape
+    if w / h >= aspect:
+        wh, ww = h, int(round(h * aspect))
+    else:
+        ww, wh = w, int(round(w / aspect))
+    ww, wh = min(ww, w), min(wh, h)
+    dots = lum >= DOT_LUM
+    best: tuple[float, int, int] | None = None
+    for y in range(0, h - wh + 1, step):
+        for x in range(0, w - ww + 1, step):
+            win = dots[y:y + wh, x:x + ww]
+            score = min(float(win[:2].mean()), float(win[-2:].mean()), float(win[:, :2].mean()), float(win[:, -2:].mean()))
+            if best is None or score > best[0]:
+                best = (score, x, y)
+    assert best is not None
+    _, x, y = best
+    out = im.crop((x, y, x + ww, y + wh))
+    if out.size[0] > max_w:
+        nh = max(1, int(round(out.size[1] * max_w / out.size[0])))
+        out = out.resize((max_w, nh), Image.Resampling.LANCZOS)
+    return out.convert("RGBA")
 
 
 def cover_crop(im: Image.Image, aspect: float, max_side: int) -> Image.Image:
@@ -158,6 +188,14 @@ def main() -> int:
         for state in ("active", "dormant", "victory", "wounded"):
             save(square, ROOT / "packages/web/public/art/knights" / f"{level}-{state}.png")
         save(card, ROOT / "packages/web/public/art/cards" / f"{level}.png")
+        if level in (2, 4):
+            step = edge_fit_crop(trimmed, STEP_ASPECT, STEP_MAX_W)
+            save(step, ROOT / "packages/web/public/art/steps" / f"{level}.png")
+            srep = edge_report(step)
+            sok = all(v["ok"] for v in srep.values())
+            print("   step", step.size, {k: f"{v['dot_pct']:.1f}%" for k, v in srep.items()}, "OK" if sok else "FAIL")
+            if not sok:
+                failures.append((level, "step", srep))
         icon = square.resize((200, 200), Image.Resampling.LANCZOS)
         save(icon, ROOT / "packages/web/public/art/icons" / f"icon-{level}.png")
         if level == 3:

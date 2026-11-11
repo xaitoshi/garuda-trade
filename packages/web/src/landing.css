@@ -14,12 +14,12 @@ h2{font-size:64px;font-weight:500;letter-spacing:-.04em;line-height:1}
 .hero-headline .powered-by{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:.12em}
 .phoenix-mark{width:1.05em;height:1.05em;object-fit:contain;display:inline-block;vertical-align:middle;flex:none}
 .hero .cta-row{margin-top:34px}
-.cta-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.cta-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .cta-note{font-size:14px;color:var(--mute);display:flex;align-items:center;gap:8px}
 .cta-note b{color:var(--bone);font-weight:500}
 .chain{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3ddc97;box-shadow:0 0 10px #3ddc97}
-.hero-art{position:relative;min-height:420px;height:min(72vh,680px);margin:0 12px 0 0;display:flex;align-items:center;justify-content:center}
-.hero-knight{display:block;width:100%;height:100%;max-width:720px;object-fit:contain;object-position:center right;user-select:none;pointer-events:none}
+.hero-art{position:relative;min-height:420px;height:min(72vh,680px);margin:0;overflow:hidden;display:block}
+.hero-knight{display:block;width:100%;height:100%;max-width:none;object-fit:cover;object-position:center right;user-select:none;pointer-events:none}
 
 
 /* stat strip */
@@ -38,7 +38,8 @@ section.s{padding:170px var(--pad) 0}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .step{background:var(--ink2);border:1px solid var(--line);border-radius:22px;overflow:hidden;transition:border-color .3s,transform .3s}
 .step:hover{border-color:var(--line2);transform:translateY(-4px)}
-.step .art{display:block;width:100%;height:auto;background:radial-gradient(circle at 50% 40%,#1f1c1d,var(--ink2) 70%);border-bottom:1px solid var(--line)}
+.step .art{position:relative;display:block;width:100%;height:290px;padding:0;margin:0;overflow:hidden;background:#0c0c0d;border-bottom:1px solid var(--line)}
+.step .art .knight-fill{position:absolute;inset:-1px;width:auto;height:auto;object-fit:cover;object-position:center top;filter:none;padding:0;margin:0;border:0;max-width:none;z-index:0}
 .step-body{padding:26px 28px 32px}
 .step-n{font-family:Inter,sans-serif;font-size:12px;color:var(--dim);letter-spacing:0}
 .step h3{font-size:34px;font-weight:500;letter-spacing:-.035em;margin:10px 0 8px}
@@ -123,11 +124,12 @@ section.s{padding:170px var(--pad) 0}
 .wave line{stroke-linecap:butt}
 
 
-.step .art{display:flex;justify-content:center;align-items:flex-end;gap:14px;height:290px;padding:24px 20px 22px;position:relative}
-.step .art img,.step .art .boss-mark{display:block}
-.step .art .vs{align-self:center;font-family:Inter,sans-serif;color:var(--dim);font-size:12px;letter-spacing:0}
+.step .art img.knight{display:block}
 .tier-art img,.lvl-art img{display:block}
 .tier .btn{min-width:90px}
+.cta-x{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:48px;height:48px;flex:0 0 48px;border-radius:50%;border:1px solid var(--line2);background:#141314;color:var(--bone);text-decoration:none;transition:border-color .2s,background .2s,color .2s}
+.cta-x:hover{border-color:var(--mute);background:#1c1b1c;color:#fff}
+.cta-x svg{display:block;width:18px;height:18px}
 .final{padding-bottom:140px}
 .pg-landing-note{color:var(--dim);font-size:13px}
 .feed-row .amt{color:var(--bone);font-size:19px}
