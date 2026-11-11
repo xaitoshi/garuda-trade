@@ -6,7 +6,7 @@ import { SOLANA_RPC, DEV_WALLET } from "./lib/config";
 import { DevWalletAdapter } from "./lib/devWallet";
 import { SessionProvider } from "./lib/session";
 import { PrivyApp } from "./lib/PrivyApp";
-import { BareTopBar, TopBar } from "./components/TopBar";
+import { TopBar } from "./components/TopBar";
 import { Landing } from "./pages/Landing";
 import { Challenges } from "./pages/Challenges";
 import { ChallengeFaq, ChallengeMarkets, ChallengeRules } from "./pages/ChallengeInfo";
@@ -40,11 +40,11 @@ export function App() {
 function Shell() {
   const { pathname } = useLocation();
   const landing = pathname === "/";
-  // /early is a standalone mint page: logo home only, no app nav, no footer.
+  // /early is a standalone waitlist page: no app nav, no footer. The centered logo links home.
   const bare = pathname.replace(/\/+$/, "") === "/early";
   return (
     <>
-      {bare ? <BareTopBar /> : <TopBar landing={landing} />}
+      {!bare && <TopBar landing={landing} />}
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/challenges/rules" element={<ChallengeRules />} />
