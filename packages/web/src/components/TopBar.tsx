@@ -132,6 +132,18 @@ function ChallengesMenu() {
   );
 }
 
+/** /early only: the logo back home and nothing else (no links into the app). */
+export function BareTopBar() {
+  return (
+    <header className="top top-bare" data-testid="top-bare">
+      <Link className="brand" to="/" aria-label="Garuda home">
+        <Logo />
+        <span>GARUDA</span>
+      </Link>
+    </header>
+  );
+}
+
 export function TopBar({ landing }: { landing: boolean }) {
   return (
     <header className="top">
