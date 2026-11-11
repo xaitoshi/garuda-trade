@@ -15,6 +15,7 @@ import { Barracks } from "./pages/Barracks";
 import { Revive } from "./pages/Revive";
 import { Leaderboard } from "./pages/Leaderboard";
 import { Payouts } from "./pages/Payouts";
+import { CalledIt } from "./pages/CalledIt";
 import { Footer } from "./components/Footer";
 
 export function App() {
@@ -54,6 +55,7 @@ function Shell() {
         <Route path="/revive/:id" element={<Revive />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/payouts" element={<Payouts />} />
+        <Route path="/calledit" element={<CalledIt />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Footer />
