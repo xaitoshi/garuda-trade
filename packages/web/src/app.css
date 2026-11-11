@@ -225,3 +225,5 @@ button.wallet{cursor:pointer}
 .lvl-up .lvl-art{width:150px;height:150px;display:grid;place-items:center}
 .lvl-up p{margin:0;font-size:14px;line-height:1.5}
 .scaling-table td,.scaling-table th{white-space:nowrap}
+.table-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.table-scroll .rule-table{margin-bottom:14px}
