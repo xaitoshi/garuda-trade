@@ -4,7 +4,7 @@ import { toSolanaWalletConnectors, useSignAndSendTransaction, useWallets } from 
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import type { Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { PRIVY_APP_ID, SOLANA_RPC } from "./config";
+import { EARLY_RPC, PRIVY_APP_ID, SOLANA_RPC } from "./config";
 import { PrivyCtx, type PrivyState } from "./privyState";
 import { privyChain, wireTransaction } from "./privyTx";
 
@@ -23,6 +23,8 @@ export default function PrivyBoundary({ children }: { children: ReactNode }) {
         rpcs: {
           // The cluster the API checks out on (devnet; the API refuses mainnet). Add 'solana:mainnet' when that ships.
           "solana:devnet": { rpc: createSolanaRpc(SOLANA_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(wsUrl(SOLANA_RPC)) },
+          // Mainnet is used by the /early Beta Access mint only (a $1.69 USDC payment).
+          "solana:mainnet": { rpc: createSolanaRpc(EARLY_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(wsUrl(EARLY_RPC)) },
         },
       },
     }),

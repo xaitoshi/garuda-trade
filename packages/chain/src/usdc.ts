@@ -101,6 +101,52 @@ type ParsedTx = {
   transaction: { message: { accountKeys: { pubkey: string; signer: boolean }[] } };
 };
 
+/**
+ * Verify an incoming USDC transfer from the transaction's own pre/post token balances (shared by checkout and the
+ * /early Beta Access mint). Cluster-agnostic: the caller decides which RPC (and therefore which cluster) it trusts.
+ */
+export async function verifyUsdcPayment(
+  rpc: JsonRpc,
+  cfg: { mint: string; treasury: string; commitment?: "confirmed" | "finalized" },
+  i: VerifyPaymentInput,
+): Promise<VerifyPaymentResult> {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(i.signature)) return { status: "invalid", reason: "bad_signature" };
+  const tx = (await rpc.call("getTransaction", [i.signature, { encoding: "jsonParsed", commitment: cfg.commitment ?? "confirmed", maxSupportedTransactionVersion: 0 }])) as ParsedTx | null;
+  if (!tx || !tx.meta) return { status: "pending" };
+  if (tx.meta.err) return { status: "invalid", reason: "transaction_failed", detail: { err: tx.meta.err } };
+  const keys = tx.transaction.message.accountKeys;
+  if (!keys.some((k) => k.pubkey === i.reference)) return { status: "invalid", reason: "reference_missing" };
+  if (!keys.some((k) => k.pubkey === i.wallet && k.signer)) return { status: "invalid", reason: "payer_not_signer" };
+  const blockTimeMs = tx.blockTime ? tx.blockTime * 1000 : undefined;
+  if (blockTimeMs !== undefined && blockTimeMs < i.notBeforeMs - SKEW_MS) return { status: "invalid", reason: "too_old", detail: { blockTimeMs } };
+
+  // Net token movement per token account for the USDC mint, from the transaction's own pre/post balances.
+  const delta = new Map<number, { owner?: string; d: bigint }>();
+  for (const b of tx.meta.preTokenBalances ?? []) if (b.mint === cfg.mint) delta.set(b.accountIndex, { owner: b.owner, d: -BigInt(b.uiTokenAmount.amount) });
+  for (const b of tx.meta.postTokenBalances ?? []) {
+    if (b.mint !== cfg.mint) continue;
+    const e = delta.get(b.accountIndex) ?? { owner: b.owner, d: 0n };
+    delta.set(b.accountIndex, { owner: b.owner ?? e.owner, d: e.d + BigInt(b.uiTokenAmount.amount) });
+  }
+  let toTreasury = 0n;
+  let payerIdx: number | undefined;
+  let payerDelta = 0n;
+  for (const [idx, e] of delta) {
+    if (e.owner === cfg.treasury) toTreasury += e.d;
+    if (e.owner === i.wallet && e.d < payerDelta) {
+      payerDelta = e.d;
+      payerIdx = idx;
+    }
+  }
+  if (toTreasury <= 0n) return { status: "invalid", reason: "no_transfer_to_treasury" };
+  if (toTreasury < i.amountBaseUnits) return { status: "invalid", reason: "underpaid", detail: { paid: toTreasury.toString(), required: i.amountBaseUnits.toString() } };
+  // The money must have left the signing wallet's own token account, not someone else's.
+  if (payerIdx === undefined || -payerDelta < i.amountBaseUnits) return { status: "invalid", reason: "payer_balance_mismatch" };
+  const payerTokenAccount = keys[payerIdx]?.pubkey;
+  if (!payerTokenAccount) return { status: "invalid", reason: "payer_balance_mismatch" };
+  return { status: "confirmed", payerTokenAccount, paidBaseUnits: toTreasury, excessBaseUnits: toTreasury - i.amountBaseUnits, blockTimeMs };
+}
+
 export class SolanaUsdc implements UsdcChain {
   readonly mint: string;
   readonly treasury: string;
@@ -132,41 +178,7 @@ export class SolanaUsdc implements UsdcChain {
   }
 
   async verifyPayment(i: VerifyPaymentInput): Promise<VerifyPaymentResult> {
-    if (!/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(i.signature)) return { status: "invalid", reason: "bad_signature" };
-    const tx = (await this.o.rpc.call("getTransaction", [i.signature, { encoding: "jsonParsed", commitment: this.commitment, maxSupportedTransactionVersion: 0 }])) as ParsedTx | null;
-    if (!tx || !tx.meta) return { status: "pending" };
-    if (tx.meta.err) return { status: "invalid", reason: "transaction_failed", detail: { err: tx.meta.err } };
-    const keys = tx.transaction.message.accountKeys;
-    if (!keys.some((k) => k.pubkey === i.reference)) return { status: "invalid", reason: "reference_missing" };
-    if (!keys.some((k) => k.pubkey === i.wallet && k.signer)) return { status: "invalid", reason: "payer_not_signer" };
-    const blockTimeMs = tx.blockTime ? tx.blockTime * 1000 : undefined;
-    if (blockTimeMs !== undefined && blockTimeMs < i.notBeforeMs - SKEW_MS) return { status: "invalid", reason: "too_old", detail: { blockTimeMs } };
-
-    // Net token movement per token account for the USDC mint, from the transaction's own pre/post balances.
-    const delta = new Map<number, { owner?: string; d: bigint }>();
-    for (const b of tx.meta.preTokenBalances ?? []) if (b.mint === this.mint) delta.set(b.accountIndex, { owner: b.owner, d: -BigInt(b.uiTokenAmount.amount) });
-    for (const b of tx.meta.postTokenBalances ?? []) {
-      if (b.mint !== this.mint) continue;
-      const e = delta.get(b.accountIndex) ?? { owner: b.owner, d: 0n };
-      delta.set(b.accountIndex, { owner: b.owner ?? e.owner, d: e.d + BigInt(b.uiTokenAmount.amount) });
-    }
-    let toTreasury = 0n;
-    let payerIdx: number | undefined;
-    let payerDelta = 0n;
-    for (const [idx, e] of delta) {
-      if (e.owner === this.treasury) toTreasury += e.d;
-      if (e.owner === i.wallet && e.d < payerDelta) {
-        payerDelta = e.d;
-        payerIdx = idx;
-      }
-    }
-    if (toTreasury <= 0n) return { status: "invalid", reason: "no_transfer_to_treasury" };
-    if (toTreasury < i.amountBaseUnits) return { status: "invalid", reason: "underpaid", detail: { paid: toTreasury.toString(), required: i.amountBaseUnits.toString() } };
-    // The money must have left the signing wallet's own token account, not someone else's.
-    if (payerIdx === undefined || -payerDelta < i.amountBaseUnits) return { status: "invalid", reason: "payer_balance_mismatch" };
-    const payerTokenAccount = keys[payerIdx]?.pubkey;
-    if (!payerTokenAccount) return { status: "invalid", reason: "payer_balance_mismatch" };
-    return { status: "confirmed", payerTokenAccount, paidBaseUnits: toTreasury, excessBaseUnits: toTreasury - i.amountBaseUnits, blockTimeMs };
+    return verifyUsdcPayment(this.o.rpc, { mint: this.mint, treasury: this.treasury, commitment: this.commitment }, i);
   }
 
   async refund(i: RefundInput): Promise<{ signature: string; alreadyRefunded: boolean }> {

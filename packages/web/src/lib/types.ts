@@ -373,3 +373,42 @@ export interface KnightInfo {
   frozen: boolean;
   genuine: boolean;
 }
+
+/** GET /early/status */
+export interface EarlyStatus {
+  enabled: boolean;
+  cluster: "mainnet-beta" | "devnet";
+  priceUsd: number;
+  currency: "USDC";
+  minted: number;
+  cap: number;
+  remaining: number;
+  soldOut: boolean;
+  waitlist: number;
+}
+
+export interface EarlyPayment {
+  claimId: string;
+  orderId: string;
+  cluster: string;
+  mint: string;
+  treasury: string;
+  decimals: number;
+  amountUsd: number;
+  amountBaseUnits: string;
+  reference: string;
+  expiresAt: number;
+  wallet: string;
+  payer: string;
+  asset: string;
+  /** Pre-signed legacy transaction (base64): USDC payment + NFT mint in one. The wallet signs and sends it. */
+  transaction: string;
+  lastValidBlockHeight: number;
+}
+
+export type EarlyOutcome =
+  | { status: "waitlist"; claimId: string; alreadyOnList: boolean }
+  | { status: "awaiting_payment"; claimId: string; payment: EarlyPayment }
+  | { status: "minted"; claimId: string; asset: string; signature?: string; explorer: string; alreadyMinted: boolean }
+  | { status: "paid"; claimId: string; message: string }
+  | { status: "refund_due"; claimId: string; message: string };

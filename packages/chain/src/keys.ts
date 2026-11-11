@@ -21,3 +21,9 @@ export function loadOrCreateKeypairFile(path: string): { keypair: Keypair; creat
   chmodSync(path, 0o600);
   return { keypair, created: true };
 }
+
+/** Keypair from a 64-byte secret (Solana CLI keypair file contents, e.g. a secret env var). */
+export function keypairFromSecret(secret: Uint8Array): Keypair {
+  if (secret.length !== 64) throw new Error("secret key must be 64 bytes");
+  return eddsa.createKeypairFromSecretKey(secret);
+}

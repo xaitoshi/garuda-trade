@@ -25,6 +25,7 @@ import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
 import { TweetLookup } from "./tweets.js";
+import { registerEarlyRoutes, type EarlyAccessService } from "./early.js";
 
 const tierEnum = z.enum(TIER_IDS as [string, ...string[]]);
 
@@ -134,6 +135,8 @@ export interface AppOptions {
   tweets?: TweetLookup;
   /** Phase 2 Phoenix order routing. Absent = routing disabled (the /admin/routing routes answer 404). */
   routing?: RoutingAdmin;
+  /** Garuda Beta Access (/early). Absent = the /early routes do not exist. */
+  early?: EarlyAccessService;
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -639,6 +642,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       return reply.header("content-type", "image/png").header("cache-control", "public, max-age=3600").send(bytes);
     });
   }
+
+  if (opts.early) registerEarlyRoutes(app, opts.early, now);
 
   return app;
 }
