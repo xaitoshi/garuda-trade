@@ -53,7 +53,14 @@ function ChallengesMenu() {
           aria-expanded={open}
           aria-haspopup="menu"
           data-testid="challenges-menu"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Hover already opens the menu on desktop. A click in that same gesture
+            // must not toggle it closed (Playwright and fine pointers hover before click).
+            const hoverDevice = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+            setOpen((v) => (hoverDevice ? true : !v));
+          }}
         >
           <span className="nav-drop-chev" />
         </button>
