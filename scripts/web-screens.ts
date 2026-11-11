@@ -157,7 +157,14 @@ try {
   // ---- 05 wounded + revive, 04 ascension (seeded for this wallet: market crash / rally through the real engine)
   const wounded = await post("/dev/seed", { wallet, scenario: "wounded" });
   const passed = await post("/dev/seed", { wallet, scenario: "passed" });
-  ok("seeded wounded and passed accounts", wounded.status === "wounded" && passed.status === "passed");
+  const progress = await post("/dev/seed", { wallet, scenario: "progress" });
+  ok(`seeded wounded, passed and in-progress accounts (${wounded.status}, ${passed.status}, ${progress.status})`, wounded.status === "wounded" && passed.status === "passed" && progress.status === "active");
+
+  // ---- Path to Funded progress on the challenge dashboard
+  await go(`/terminal/${progress.id}`);
+  await page.getByTestId("path-to-funded").waitFor();
+  ok("path to funded shows 2 of 3 trading days", (await page.getByTestId("ptf-days").innerText()).includes("2 / 3"));
+  await shot("01b-path-to-funded", { full: true, settle: 1500 });
 
   await go("/barracks");
   await page.getByTestId("knight-card").first().waitFor();
@@ -180,6 +187,7 @@ try {
   // ---- funded account for payouts: claim on the passed knight, add a winning trade
   await go(`/terminal/${passed.id}`);
   await page.getByTestId("claim-funded").click();
+  await page.getByTestId("open-funded").click(); // auto KYC and review on the stub (STUB_CLAIM=manual shows the steps)
   await page.waitForURL((u: URL) => !u.pathname.endsWith(String(passed.id)), { timeout: 15_000 });
   await page.getByTestId("terminal").waitFor();
   const fundedId = page.url().split("/").pop()!;

@@ -60,6 +60,8 @@ const orderBody = z
 
 const payoutStatusEnum = z.enum(["pending_approval", "approved", "sending", "submitted", "paid", "rejected", "failed"]);
 const rejectPayoutBody = z.object({ reason: z.string().trim().min(1).max(500) });
+const claimStatusQuery = z.enum(["kyc_pending", "under_review", "approved", "rejected"]).optional();
+const kycBody = z.object({ decision: z.enum(["approve", "reject"]), reason: z.string().trim().min(1).max(500).optional() });
 /** The admin token must be long enough to be unguessable: refuse a weak one at startup instead of running with it. */
 export const MIN_ADMIN_TOKEN_LENGTH = 24;
 
@@ -251,6 +253,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     tiers: TIERS,
     fees: PHOENIX_FEES,
     revive: REVIVE_RULES,
+    pathToFunded: {
+      targetCounts: "closed_balance",
+      mustBeFlat: true,
+      minTradingDays: COMMON_RULES.minTradingDays,
+      bestDayMaxShare: COMMON_RULES.bestDayMaxShare,
+      claimRequired: true,
+      kyc: svc.kycMode,
+      riskReview: svc.fundedReview,
+      riskReviewTarget: "about 1 business day",
+      payoutWaitingPeriodDays: 0,
+    },
     accountCaps: ACCOUNT_CAPS,
     circuitBreaker: CIRCUIT_BREAKER,
     leverageCapByClass: LEVERAGE_CAP_BY_CLASS,
@@ -411,6 +424,13 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     return reply.status(res.replayed ? 200 : 201).send(res);
   });
 
+  /** Path to Funded step 5: claim the funded account on a passed challenge (then KYC, then the risk review). */
+  app.post<{ Params: { id: string } }>("/challenges/:id/claim", async (req, reply) => {
+    await authorize(req, req.params.id);
+    const state = await svc.claimFunded(req.params.id, { actorWallet: auth ? walletOf.get(req) : undefined });
+    return reply.status(200).send(state);
+  });
+
   app.post<{ Params: { id: string } }>("/challenges/:id/reactivate", async (req) => {
     await authorize(req, req.params.id);
     return svc.reactivate(req.params.id);
@@ -471,6 +491,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.post<{ Params: { id: string } }>("/admin/payouts/:id/reject", async (req) => adminResult(await payouts().reject(req.params.id, rejectPayoutBody.parse(req.body ?? {}).reason, actorOf(req))));
 
   app.post<{ Params: { id: string } }>("/admin/payouts/:id/retry", async (req) => adminResult(await payouts().retryNow(req.params.id, actorOf(req))));
+
+  // ------------------------------------------------------------ Path to Funded admin (GARUDA_ADMIN_TOKEN)
+  // KYC is a manual ops step until a vendor (e.g. Sumsub) is integrated. TODO: replace /kyc with the vendor webhook.
+
+  app.get<{ Querystring: { status?: string } }>("/admin/claims", async (req) => {
+    const st = claimStatusQuery.parse(req.query.status ?? undefined);
+    return { claims: await svc.listClaims(st) };
+  });
+
+  app.post<{ Params: { id: string } }>("/admin/claims/:id/kyc", async (req) => {
+    const b = kycBody.parse(req.body ?? {});
+    return svc.setClaimKyc(req.params.id, { decision: b.decision, reason: b.reason, actor: actorOf(req) });
+  });
+
+  app.post<{ Params: { id: string } }>("/admin/claims/:id/approve", async (req) => svc.reviewClaim(req.params.id, { decision: "approve", actor: actorOf(req) }));
+
+  app.post<{ Params: { id: string } }>("/admin/claims/:id/reject", async (req) =>
+    svc.reviewClaim(req.params.id, { decision: "reject", reason: rejectPayoutBody.parse(req.body ?? {}).reason, actor: actorOf(req) }),
+  );
 
   // ------------------------------------------------------------ M4: USDC checkout
 

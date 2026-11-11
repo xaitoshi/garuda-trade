@@ -27,7 +27,7 @@ export type RiskEvent =
       dailyFloor: number;
       drawdownFloor: number;
     }
-  | { type: "pass"; ts: number; equity: number; targetEquity: number };
+  | { type: "pass"; ts: number; equity: number; targetEquity: number; balance?: number };
 
 export interface RiskSnapshot {
   status: ChallengeStatus;
@@ -50,8 +50,9 @@ export interface RiskSnapshot {
   drawdownRemaining: number;
   /** Equity room above the effective floor. */
   bufferRemaining: number;
+  /** Target CLOSED balance (Path to Funded rule 1); null in the funded stage. Name kept for API compatibility. */
   targetEquity: number | null;
-  /** 0..1 progress to the profit target (boss HP = 1 - this); null in the funded stage. */
+  /** 0..1 progress of the CLOSED balance to the profit target (boss HP = 1 - this); null in the funded stage. */
   targetProgressPct: number | null;
   profitLoss: number;
   msUntilReset: number;
@@ -98,7 +99,8 @@ export interface RiskMonitorState {
  *    evaluated balance; measured against EQUITY.
  *  - static floor = starting balance x (1 - maxDrawdownPct); never moves.
  *  - effective floor = max(daily, static). equity <= effective floor => breach (no grace).
- *  - equity >= target (evaluation only) => pass. Breach is checked first.
+ *  - pass (evaluation only), Path to Funded: CLOSED balance >= target AND flat book AND the caller's soft gates
+ *    (minimum trading days, best-day rule) are met. Open profit never passes. Breach is checked first.
  *  - warnings at 50% / 80% of either buffer; re-armed once the buffer recovers below the level.
  */
 export class RiskMonitor {
@@ -177,7 +179,15 @@ export class RiskMonitor {
     };
   }
 
-  evaluate(input: { balance: number; equity: number; now: number }): RiskEvent[] {
+  evaluate(input: {
+    balance: number;
+    equity: number;
+    now: number;
+    /** No open positions. Default: equity equals balance. */
+    flat?: boolean;
+    /** Path to Funded soft gates computed from the ledger (minimum trading days and best-day rule). Default true. */
+    gatesMet?: boolean;
+  }): RiskEvent[] {
     const { balance, equity, now } = input;
     const out: RiskEvent[] = [];
     if (this.s.status !== "active") return out; // terminal
@@ -209,10 +219,11 @@ export class RiskMonitor {
 
     // --- pass
     const target = this.target;
-    if (target !== null && equity >= target - EPS) {
+    const flat = input.flat ?? Math.abs(equity - balance) < 1e-6;
+    if (target !== null && balance >= target - EPS && flat && (input.gatesMet ?? true)) {
       this.s.status = "passed";
       this.record(balance, equity, now);
-      out.push({ type: "pass", ts: now, equity, targetEquity: target });
+      out.push({ type: "pass", ts: now, equity, targetEquity: target, balance });
       return out;
     }
 
@@ -288,7 +299,7 @@ export class RiskMonitor {
       drawdownRemaining: equity - this.ddFloor,
       bufferRemaining: equity - this.effectiveFloor,
       targetEquity: target,
-      targetProgressPct: target === null ? null : Math.max(0, Math.min(1, (equity - start) / (target - start))),
+      targetProgressPct: target === null ? null : Math.max(0, Math.min(1, (this.s.lastBalance - start) / (target - start))),
       profitLoss: equity - start,
       msUntilReset: msUntilNextReset(now),
       breach: this.s.breach,

@@ -7,11 +7,12 @@ import { LEVELS, knightView, tierOfLevel, type KnightLevel } from "../lib/knight
 import { pct, usd, usdSigned } from "../lib/format";
 import type { ChallengeState } from "../lib/types";
 import { BossImg, KnightImg, Spark } from "../components/Art";
+import { ClaimFunded } from "../components/PathToFunded";
 
 const LEVEL_COLOR: Record<number, string> = { 1: "#d9d3d4", 2: "#bbb4fb", 3: "#8fd3ff", 4: "#ffc24a" };
 
 /** Shown instead of the terminal when a challenge is passed: "The Phoenix falls." (mock 04) */
-export function Ascension({ c }: { c: ChallengeState }) {
+export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: ChallengeState) => void }) {
   const { rules, wallet } = useSession();
   const nav = useNavigate();
   const k = knightView(c);
@@ -98,8 +99,8 @@ export function Ascension({ c }: { c: ChallengeState }) {
               <span>PROFIT · {pct(c.risk.profitLoss / start)}</span>
             </div>
             <div>
-              <b>{usd(c.account.equity)}</b>
-              <span>Final equity</span>
+              <b>{usd(c.account.balance)}</b>
+              <span>Closed balance</span>
             </div>
             <div>
               <b>{usd(c.account.feesPaid, 2)}</b>
@@ -127,7 +128,7 @@ export function Ascension({ c }: { c: ChallengeState }) {
           <div className="panel">
             <div className="ph">
               <b>{k.demo ? "Demo account" : "Funded account"}</b>
-              <span className={`st ${k.demo ? "active" : "funded"}`}>{k.demo ? "Demo" : "Funded"}</span>
+              <span className={`st ${k.demo ? "active" : "funded"}`}>{k.demo ? "Demo" : c.pathToFunded?.next === "funded" ? "Funded" : "Eligible"}</span>
             </div>
             <div className="acc">
               <div className="rw"><span>Account size</span><b>{usd(start)}</b></div>
@@ -155,16 +156,19 @@ export function Ascension({ c }: { c: ChallengeState }) {
             <Link className="btn btn-fire" style={{ width: "100%", padding: 18 }} to="/challenges">
               Mint a knight and go for real
             </Link>
-          ) : funded ? (
+          ) : funded && !c.pathToFunded?.claim ? (
+            // An account funded before Path to Funded existed (no claim on record).
             <Link className="btn btn-fire" style={{ width: "100%", padding: 18 }} to={`/terminal/${funded.id}`} data-testid="open-funded">
               Open funded account
             </Link>
+          ) : c.pathToFunded ? (
+            <ClaimFunded c={c} onState={onState} />
           ) : (
             <button className="btn btn-fire" style={{ width: "100%", padding: 18 }} onClick={() => void claim()} disabled={busy} data-testid="claim-funded">
               {busy ? "Claiming..." : "Claim funded account"}
             </button>
           )}
-          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Payouts open with the payout rail (coming in a later release) and are sent to your signed-in wallet.</div>}
+          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Challenge profit is never paid out or carried over: the funded account starts fresh at {usd(start)}. Payouts go to your signed-in wallet.</div>}
           {err && <div className="dn note">{err}</div>}
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FakeKnights } from "@garuda/chain";
 import { ChallengeService, ServiceError } from "../src/index.js";
-import { breach, makeRig, HOUR, type Rig } from "./helpers.js";
+import { breach, makeRig, passEvaluation, HOUR, type Rig } from "./helpers.js";
 
 const A = "WalletA1111111111111111111111111111111111111";
 const B = "WalletB1111111111111111111111111111111111111";
@@ -12,13 +12,9 @@ function nftRig(extra: Partial<ConstructorParameters<typeof ChallengeService>[0]
   return { ...rig, knights };
 }
 
-/** Take a challenge to +10% (pass). Size scales with the account. */
-async function pass(rig: Rig, id: string, move = 0.014) {
-  const size = Math.round(((await rig.svc.getState(id, { refresh: false })).account.startingBalance * 2400) / 25_000);
-  await rig.svc.placeOrder(id, { symbol: "SOL", side: "buy", size, type: "market" });
-  rig.market.setMove("SOL", move);
-  const st = await rig.svc.tick(id);
-  rig.market.setMove("SOL", 0);
+/** Pass a challenge the Path to Funded way (3 days, +10% closed, flat, best-day rule). */
+async function pass(rig: Rig, id: string) {
+  const st = await passEvaluation(rig, id);
   if (st.status !== "passed") throw new Error(`expected passed, got ${st.status}`);
   return st;
 }

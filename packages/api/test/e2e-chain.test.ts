@@ -32,6 +32,7 @@ import {
 } from "@garuda/chain";
 import { PurchaseService, ChallengeService, PaymentRequiredProvider } from "../src/index.js";
 import { ReplayProvider, loadRecordedMarkets } from "@garuda/market-data";
+import { passEvaluation } from "./helpers.js";
 
 const mode = process.env.DEVNET === "1" ? "devnet" : process.env.LOCAL_VALIDATOR === "1" ? "local" : undefined;
 const rpcUrl = mode === "devnet" ? (process.env.DEVNET_RPC_URL ?? "https://api.devnet.solana.com") : (process.env.LOCAL_RPC_URL ?? "http://127.0.0.1:8899");
@@ -92,7 +93,8 @@ describe.skipIf(!mode)(`chain e2e (${mode})`, () => {
 
       const flaky = new FlakyKnights(knights0);
       const market = new ReplayProvider(loadRecordedMarkets());
-      const svc = new ChallengeService({ market, enforceGating: true, knights: flaky, requirePayment: true, payments: new PaymentRequiredProvider() });
+      const clock = { t: Date.now() };
+      const svc = new ChallengeService({ market, now: () => clock.t, enforceGating: true, knights: flaky, requirePayment: true, payments: new PaymentRequiredProvider() });
       const shop = new PurchaseService({ service: svc, usdc });
 
       // ---- buy a Squire challenge
@@ -124,9 +126,8 @@ describe.skipIf(!mode)(`chain e2e (${mode})`, () => {
       await expect(shop.confirm(q2.orderId, { signature: paySig })).rejects.toMatchObject({ code: expect.stringMatching(/signature_reused|reference_missing/) });
 
       // ---- pass the challenge: level up + unlock
-      await svc.placeOrder(done.order.challengeId!, { symbol: "SOL", side: "buy", size: 960, type: "market" });
-      market.setMove("SOL", 0.014);
-      expect((await svc.tick(done.order.challengeId!)).status).toBe("passed");
+      // Path to Funded: three days of closed profit, flat book, best-day rule met
+      expect((await passEvaluation({ svc, market, clock }, done.order.challengeId!)).status).toBe("passed");
       k = (await knights0.get(asset))!;
       expect(k).toMatchObject({ level: "knight", wins: 1, status: "idle", frozen: false });
       expect(k.uri).toMatch(/knight\.json$/);

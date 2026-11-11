@@ -7,7 +7,7 @@
  *
  * Extra routes that exist ONLY here (they bypass payment and move the market, so the real server never has them):
  *   POST /dev/stub-pay  { orderId }                       registers a simulated USDC transfer for the quote
- *   POST /dev/seed      { wallet, scenario }              wounded | passed | funded accounts for that wallet
+ *   POST /dev/seed      { wallet, scenario }              wounded | progress | passed | funded accounts for that wallet
  *   POST /dev/seed      { challengeId, scenario: "history" }  a few closed trades, for a fuller combat log
  */
 import { randomBytes } from "node:crypto";
@@ -39,6 +39,8 @@ const service = new ChallengeService({
   knights,
   requirePayment: true,
   payments: new PaymentRequiredProvider(),
+  // STUB_CLAIM=manual shows the identity check and risk review steps; the default opens the funded account on claim.
+  ...(process.env.STUB_CLAIM === "manual" ? { kycMode: "manual" as const, fundedReview: "manual" as const } : {}),
 });
 const purchases = new PurchaseService({ service, usdc });
 // Payouts run for real through the service and ledger; only the USDC transfer is a fake (instant, no chain).
@@ -103,9 +105,12 @@ app.post<{ Body: { wallet?: string; challengeId?: string; scenario?: string } }>
       await service.tick(challengeId);
       await service.placeOrder(challengeId, { symbol, side: side === "buy" ? "sell" : "buy", size, type: "market", reduceOnly: true });
     };
-    await trade("SOL", 2600, 0.012, "buy");
-    await trade("ETH", 2000, 0.006, "buy");
-    await trade("BTC", 1800, -0.004, "sell");
+    // One trade per UTC day of similar size, so the best-day rule holds for payouts on a funded account.
+    await trade("SOL", 1500, 0.012, "buy");
+    skewMs += 24 * 3_600_000;
+    await trade("ETH", 2600, 0.006, "buy");
+    skewMs += 24 * 3_600_000;
+    await trade("BTC", 3600, -0.004, "sell");
     for (const s of SYMS) setLevel(s, 0);
     return reply.send({ ok: true });
   }
@@ -119,13 +124,22 @@ app.post<{ Body: { wallet?: string; challengeId?: string; scenario?: string } }>
     skewMs += 25 * 3_600_000; // revive has a 24h cooldown after the breach
     return reply.send({ id: c.id, status: st.status });
   }
-  if (scenario === "passed" || scenario === "funded") {
+  if (scenario === "progress" || scenario === "passed" || scenario === "funded") {
+    // Path to Funded: one closed winning SOL trade per UTC day (the stub clock jumps a day between them).
     const c = await service.create({ tier: "knight", wallet, knight: "Lady Ember" }, { paid: paid() });
-    await openLong(c.id, 24000);
-    setLevel("SOL", 0.15);
-    const st = await service.tick(c.id);
-    setLevel("SOL", 0);
-    return reply.send({ id: c.id, status: st.status });
+    const days = scenario === "progress" ? 2 : 10;
+    let st = await service.getState(c.id, { refresh: false });
+    for (let d = 0; d < days && st.status === "active"; d++) {
+      if (d > 0) skewMs += 24 * 3_600_000;
+      const size = await notional("SOL", 40000);
+      await service.placeOrder(c.id, { symbol: "SOL", side: "buy", size, type: "market" });
+      setLevel("SOL", 0.0072);
+      st = (await service.placeOrder(c.id, { symbol: "SOL", side: "sell", size, type: "market", reduceOnly: true })).state;
+      setLevel("SOL", 0);
+    }
+    if (scenario === "progress") await openLong(c.id, 6000); // an open position: shows the "flat" requirement unmet
+    if (scenario === "funded" && st.status === "passed") st = await service.claimFunded(c.id, { actorWallet: wallet });
+    return reply.send({ id: c.id, status: st.status, fundedId: st.pathToFunded?.claim?.fundedId });
   }
   return reply.code(400).send({ error: "unknown scenario" });
 });

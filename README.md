@@ -2,7 +2,7 @@
 
 Core engine for **Garuda**, a gamified onchain prop firm on Phoenix Perps (Solana). Traders pass a one-step challenge on a **simulated** account that trades against the **live Phoenix L2 book**, then get funded and paid out in USDC. Phase 1 is simulation only: nothing is ever sent to Phoenix.
 
-The rules implemented here are the settled "Garuda Trading Rules" (Notion page, copy at `garuda/rules.md`): Demo $5k free, Squire $5k/$39, Knight $10k/$79, Paladin $15k/$119, Ascended $25k/$200; 10% target, 6% **static** max drawdown, 3% daily loss on start-of-day balance, 80% split, no time limit, no minimum days.
+The rules implemented here are the settled "Garuda Trading Rules" (Notion page, copy at `garuda/rules.md`): Demo $5k free, Squire $5k/$39, Knight $10k/$79, Paladin $15k/$119, Ascended $25k/$200; 10% target, 6% **static** max drawdown, 3% daily loss on start-of-day balance, 80% split, no time limit. Path to Funded (v1.1): the target counts the closed balance only, you must be flat, trade on at least 3 UTC days and keep your best day at or under 50% of your profitable days; then you claim the funded account, pass an identity check and a risk review (about one business day). Full rulebook: `docs/trading-rules.md`.
 
 ## Quick start
 
@@ -72,7 +72,7 @@ Deterministic and network-free: callers pass in an `L2Book` and a timestamp.
 - **Accounting**: average-entry positions with flips, `balance` = realized cash, `equity` = balance + unrealized at the latest mark. `closeAll` flattens at the book (remainder the book cannot absorb closes at mark minus a 100 bps haircut, flagged `forced`).
 
 ### `@garuda/risk-engine`
-- `RiskMonitor.evaluate({balance, equity, now})` returns events: `day_reset`, `warning` (50% / 80% of either buffer, with hysteresis so each fires once per cycle), `breach` (equity at or below the effective floor, no grace; reports the binding rule and whether both broke), `pass` (equity at or above target). Breach is checked before pass; both are terminal.
+- `RiskMonitor.evaluate({balance, equity, now})` returns events: `day_reset`, `warning` (50% / 80% of either buffer, with hysteresis so each fires once per cycle), `breach` (equity at or below the effective floor, no grace; reports the binding rule and whether both broke), `pass` (CLOSED balance at or above target, flat book, and the caller's Path to Funded soft gates met: 3 trading days and the best-day rule, see `path-to-funded.ts`). Breach is checked before pass; both are terminal.
 - Floors: `daily = SOD balance × 0.97` (SOD snapshotted from the last evaluated **balance** at 00:00 UTC, measured on **equity**); `static DD = start × 0.94`, never trails; effective floor = the higher one.
 - `snapshot()` gives the dashboard numbers: HP (daily buffer left), armor (DD buffer left), boss HP (distance to target), seconds to reset.
 - Leverage (rulebook §12): required margin = Σ notional at mark ÷ class cap; an order that raises it above equity is rejected; reducing orders always allowed. Caps: BTC/ETH/SOL 10x, other crypto 2x, stocks 4x, SPY/QQQ 10x, TLT 5x, GOLD/SILVER/WTIOIL 8x, COPPER 5x. 46-market whitelist.
@@ -100,7 +100,9 @@ Solana **devnet only** (every client refuses mainnet-looking RPC URLs, and `asse
 - Metadata: one JSON file per level (`levelMetadataUri`) pointing at the PNGs in `art/knights` (knight-1.png Squire to knight-4.png Ascended). The asset URI moves to the next level file on level-up. The API serves them at `/nft/collection.json`, `/nft/metadata/<level>.json` and `/nft/images/knight-N.png` (public, static; swap for Arweave/Irys later, which only changes `GARUDA_PUBLIC_URL`).
 
 ### `@garuda/api`
-`ChallengeService` over an async `ChallengeStore` (`InMemoryChallengeStore` or `PgChallengeStore`). Every operation on a challenge is serialised; account creation is serialised per wallet so caps cannot be raced. On breach or pass the service flattens the book and locks the challenge.
+`ChallengeService` over an async `ChallengeStore` (`InMemoryChallengeStore` or `PgChallengeStore`). Every operation on a challenge is serialised; account creation is serialised per wallet so caps cannot be raced. On a breach the service flattens the book and locks the challenge; a pass needs a flat book already and locks it.
+
+**Path to Funded (claim, KYC, risk review).** A passed evaluation is claimed with `POST /challenges/:id/claim` (status `kyc_pending`), ops record the identity check with `POST /admin/claims/:id/kyc {decision}` (status `under_review`) and approve the risk review with `POST /admin/claims/:id/approve` (or `/reject {reason}`), which opens the funded account on the same knight. `GET /admin/claims?status=` lists the queue. Admin routes need `GARUDA_ADMIN_TOKEN`. `GARUDA_KYC_MODE` and `GARUDA_FUNDED_REVIEW` (`manual` by default on the server, `auto` for dev) control the two steps; with either manual, `POST /challenges {stage: "funded"}` is refused with `claim_required`. TODO: KYC vendor integration (for example Sumsub) to replace the manual KYC step. Each challenge view carries `pathToFunded` (progress on each requirement plus the claim).
 
 **Wallet sign-in (Sign-In with Solana, no transaction, no fee).** `POST /auth/nonce {wallet}` returns a single-use nonce (5 min) and the exact message to sign. The wallet signs it with `signMessage` (Ed25519). `POST /auth/verify {wallet, nonce, signature}` (base58 or base64) verifies with `node:crypto`, burns the nonce (even on a bad signature), and returns an opaque session token (24 h, only its hash is stored). Send `Authorization: Bearer <token>` on every `/challenges` route. A challenge belongs to the wallet that created it: another wallet gets 403 `not_owner`, `wallet` in the create body must match the session, and `GET /challenges` lists only your own.
 
@@ -268,7 +270,7 @@ Environment: `GARUDA_CHAIN=devnet`, `GARUDA_SOLANA_RPC_URL` (default public devn
 
 - Floors and targets are rounded to cents.
 - The SOD snapshot uses the last **evaluated** balance, so the service must evaluate regularly (the API evaluates on every tick, order and state read). A worker should tick active challenges at least once around 00:00 UTC.
-- Pass or breach closes the book at the live L2 book; the pass is locked in even if close-out costs push equity slightly under target.
+- A breach closes the book at the live L2 book. A pass never closes anything: it needs a flat book.
 - A resting limit order is leverage-checked at placement and again at fill time (trim, never reject silently).
 - Maker fills assume the whole crossing size is available to us (`makerFillRatio` = 1, optimistic). Tune toward queue-position modelling before real money depends on it.
 - Archiving flattens open positions at the last known books (assumption: archived accounts do not trade). Dormant accounts keep their equity limits.

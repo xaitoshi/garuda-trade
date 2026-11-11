@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { createTestDb, stopEmbeddedPostgres } from "@garuda/db";
 import { AuthService, PgAuthStore, PgChallengeStore, buildApp, ChallengeService } from "../src/index.js";
-import { HOUR, breach, makeRig } from "./helpers.js";
+import { HOUR, breach, makeRig, passEvaluation } from "./helpers.js";
 import { bearer, newWallet, signIn } from "./http-helpers.js";
 
 afterAll(() => stopEmbeddedPostgres());
@@ -26,6 +26,23 @@ async function rigWithDb() {
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
 describe("PgChallengeStore", () => {
+  it("persists the Path to Funded state: trading days and best day come from the ledger, the claim survives a restart", async () => {
+    const r = await rigWithDb();
+    try {
+      const c = await r.svc.create({ tier: "knight", wallet: W });
+      const passed = await passEvaluation(r, c.id);
+      const st = await r.svc.claimFunded(c.id);
+      expect(st.pathToFunded!.claim!.status).toBe("approved");
+      const { svc2 } = await r.restart();
+      const again = await svc2.getState(c.id, { refresh: false });
+      expect(again.status).toBe("passed");
+      expect(again.pathToFunded).toMatchObject({ tradingDays: passed.pathToFunded!.tradingDays, next: "funded", claim: { status: "approved", fundedId: st.pathToFunded!.claim!.fundedId } });
+      expect(again.pathToFunded!.bestDay.share).toBeCloseTo(passed.pathToFunded!.bestDay.share!, 9);
+    } finally {
+      await r.t.close();
+    }
+  });
+
   it("rebuilds an account after a restart from the ledger: balance, positions, orders, fees, risk", async () => {
     const r = await rigWithDb();
     try {

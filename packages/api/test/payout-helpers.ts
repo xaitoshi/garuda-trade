@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { DEFAULT_PAYOUT_POLICY } from "@garuda/risk-engine";
 import { FakePayoutExecutor, FakeKnights } from "@garuda/chain";
 import { InMemoryPayoutStore, PayoutService, type PayoutServiceOptions, type PayoutStore } from "../src/index.js";
 import { makeRig, type Rig } from "./helpers.js";
@@ -15,8 +16,14 @@ export interface PayoutRig extends Rig {
   errors: string[];
 }
 
+/**
+ * Payout MECHANICS tests earn their profit in one trade on one day, so they switch the best-day rule off
+ * (bestDayMaxShare 1). The rule itself is covered in path-to-funded.test.ts with the rulebook default (0.5).
+ */
+export const NO_BEST_DAY = { ...DEFAULT_PAYOUT_POLICY, bestDayMaxShare: 1 };
+
 export function makePayoutRig(o: { deps?: Partial<ServiceDeps>; exec?: FakePayoutExecutor; store?: PayoutStore; payouts?: Partial<PayoutServiceOptions> } = {}): PayoutRig {
-  const rig = makeRig(o.deps);
+  const rig = makeRig({ payoutPolicy: NO_BEST_DAY, ...o.deps });
   const exec = o.exec ?? new FakePayoutExecutor();
   const store = o.store ?? new InMemoryPayoutStore();
   const errors: string[] = [];

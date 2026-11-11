@@ -98,7 +98,7 @@ export function Landing() {
             <div className="art">
               <img className="knight knight-fill" src="/art/steps/4.png" alt="" draggable={false} />
             </div>
-            <div className="step-body"><span className="step-n">03</span><h3>Ascend, get funded</h3><p>Hit {pct(c.profitTargetPct, 0)} inside the limits and claim a funded account.</p></div>
+            <div className="step-body"><span className="step-n">03</span><h3>Ascend, get funded</h3><p>Bank {pct(c.profitTargetPct, 0)} in closed profit over at least 3 trading days inside the limits, then claim a funded account.</p></div>
           </article>
         </div>
       </section>
@@ -175,6 +175,7 @@ export function Landing() {
           <div className="rv"><div className="eyebrow">FAQ</div><h2>Questions.</h2></div>
           <div className="faq rv">
             <details open><summary>What is Garuda?</summary><p>A gamified prop firm on Phoenix perps. Trade a challenge, fight the Phoenix, get funded.</p></details>
+            <details><summary>When do I get funded?</summary><p>Bank {pct(c.profitTargetPct, 0)} in closed profit, end flat, trade on at least 3 days, and keep your best day under half of your profit. Then claim, verify your identity, and pass a risk review of about one business day.</p></details>
             <details><summary>What does the NFT do?</summary><p>Your knight tracks your progress. It levels up when you pass. Rarity is cosmetic only.</p></details>
             <details><summary>What if I fail?</summary><p>Your knight is wounded. Revive it at {pct(rules?.revive.discount ?? 0.2, 0)} off and retry.</p></details>
             <details><summary>How do payouts work?</summary><p>Funded accounts keep {pct(c.profitSplit, 0)} of profit, paid in USDC. Payouts are not switched on yet, so nothing can be withdrawn today.</p></details>

@@ -165,12 +165,30 @@ describe("buffer warnings (50% / 80%)", () => {
 });
 
 describe("profit target / pass", () => {
-  it("passes when equity reaches +10% (floating P&L counts), no minimum days", () => {
+  it("rule 1: open profit never passes; the CLOSED balance must reach +10%", () => {
     const m = knight();
-    expect(m.evaluate({ balance: 25_000, equity: 27_499.99, now: D1 })).toHaveLength(0);
-    const e = m.evaluate({ balance: 25_000, equity: 27_500, now: D1 + 1 });
-    expect(e).toEqual([{ type: "pass", ts: D1 + 1, equity: 27_500, targetEquity: 27_500 }]);
+    expect(m.evaluate({ balance: 25_000, equity: 30_000, now: D1, flat: false })).toHaveLength(0);
+    expect(m.status).toBe("active");
+    expect(m.evaluate({ balance: 27_499.99, equity: 27_499.99, now: D1 + 1, flat: true })).toHaveLength(0);
+    const e = m.evaluate({ balance: 27_500, equity: 27_500, now: D1 + 2, flat: true });
+    expect(e).toEqual([{ type: "pass", ts: D1 + 2, equity: 27_500, targetEquity: 27_500, balance: 27_500 }]);
     expect(m.status).toBe("passed");
+  });
+
+  it("rule 2: must be flat to pass, even with the closed balance above target", () => {
+    const m = knight();
+    expect(m.evaluate({ balance: 27_600, equity: 27_650, now: D1, flat: false })).toHaveLength(0);
+    expect(m.status).toBe("active");
+    // without an explicit flag, an open P&L (equity != balance) means not flat
+    expect(m.evaluate({ balance: 27_600, equity: 27_650, now: D1 + 1 })).toHaveLength(0);
+    expect(m.evaluate({ balance: 27_600, equity: 27_600, now: D1 + 2, flat: true }).map((x) => x.type)).toEqual(["pass"]);
+  });
+
+  it("rules 3 and 4 are soft gates from the caller: no pass until met, and never a breach", () => {
+    const m = knight();
+    expect(m.evaluate({ balance: 27_600, equity: 27_600, now: D1, flat: true, gatesMet: false })).toHaveLength(0);
+    expect(m.status).toBe("active");
+    expect(m.evaluate({ balance: 27_600, equity: 27_600, now: D1 + 1, flat: true, gatesMet: true }).map((x) => x.type)).toEqual(["pass"]);
   });
 
   it("pass on day one in a single evaluation, state is terminal afterwards", () => {
@@ -209,7 +227,10 @@ describe("snapshot (HP / armor / boss bars)", () => {
     expect(s.drawdownRemaining).toBeCloseTo(1125, 8);
     expect(s.bufferRemaining).toBeCloseTo(375, 8);
     expect(s.targetProgressPct).toBe(0);
-    m.evaluate({ balance: 25_000, equity: 26_250, now: D1 + 1 });
+    // progress follows the CLOSED balance, not equity
+    m.evaluate({ balance: 25_000, equity: 26_250, now: D1 + 1, flat: false });
+    expect(m.snapshot().targetProgressPct).toBe(0);
+    m.evaluate({ balance: 26_250, equity: 26_250, now: D1 + 2, flat: true });
     expect(m.snapshot().targetProgressPct).toBeCloseTo(0.5, 8);
   });
 });

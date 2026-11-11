@@ -30,3 +30,27 @@ export async function breach(rig: Rig, id: string, _size = 1000) {
   rig.market.setMove("SOL", 0);
   return st;
 }
+
+/**
+ * Pass an evaluation the Path to Funded way (rulebook section 9): three UTC days, each with one closed winning trade of
+ * the same size, so the closed balance reaches +10%, the book is flat, there are 3 trading days and no day is more
+ * than 50% of the profit. Size scales with the account. Advances the rig clock by a day between trades.
+ */
+export async function passEvaluation(rig: Rig, id: string, opts: { move?: number; maxDays?: number } = {}) {
+  const start = (await rig.svc.getState(id, { refresh: false })).account.startingBalance;
+  const size = Math.round((start * 2400) / 25_000);
+  const move = opts.move ?? 0.0065;
+  for (let day = 0; day < (opts.maxDays ?? 5); day++) {
+    if (day > 0) rig.clock.t += DAY;
+    const b = await rig.svc.placeOrder(id, { symbol: "SOL", side: "buy", size, type: "market" });
+    if (!b.accepted) throw new Error(`setup buy rejected: ${b.reason}`);
+    rig.market.setMove("SOL", move);
+    const s = await rig.svc.placeOrder(id, { symbol: "SOL", side: "sell", size, type: "market", reduceOnly: true });
+    rig.market.setMove("SOL", 0);
+    if (!s.accepted) throw new Error(`setup sell rejected: ${s.reason}`);
+    if (s.state.status === "passed") return s.state;
+    if (s.state.status !== "active") throw new Error(`expected active, got ${s.state.status}`);
+  }
+  const st = await rig.svc.getState(id, { refresh: false });
+  throw new Error(`did not pass: ${JSON.stringify(st.pathToFunded)}`);
+}

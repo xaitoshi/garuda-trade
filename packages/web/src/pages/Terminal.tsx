@@ -16,6 +16,7 @@ import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
 import { PositionsPanel } from "../components/Positions";
 import { CombatLog } from "../components/CombatLog";
+import { PathToFundedPanel } from "../components/PathToFunded";
 import { Ascension } from "./Ascension";
 
 
@@ -75,7 +76,7 @@ function TerminalView({ id }: { id: string }) {
   }
   if (!c) return <main><div className="panel gate"><p className="mute">Loading challenge...</p></div></main>;
   if (c.status === "wounded") return <Navigate replace to={`/revive/${c.id}`} />;
-  if (c.status === "passed") return <Ascension c={c} />;
+  if (c.status === "passed") return <Ascension c={c} onState={st.set} />;
   return <Battle c={c} onState={st.set} reload={st.reload} />;
 }
 
@@ -145,6 +146,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
         <BattleSlot c={c} symbol={symbol} />
         <HudTiles c={c} />
       </div>
+      <PathToFundedPanel c={c} />
       <div className="t-grid">
         <div className="panel cc">
           <div className="ph">

@@ -148,7 +148,7 @@ export function riskEventToCombat(ctx: CombatContext, ev: RiskEvent): CombatLogE
       return {
         ts: ev.ts,
         kind: "pass",
-        text: `${ctx.knight} slays the boss! Equity ${usd(ev.equity)} reached the ${usd(ev.targetEquity)} target. Challenge PASSED`,
+        text: `${ctx.knight} slays the boss! Closed balance ${usd(ev.balance ?? ev.equity)} reached the ${usd(ev.targetEquity)} target with every Path to Funded rule met. Challenge PASSED: claim your funded account`,
       };
     case "day_reset":
       return {

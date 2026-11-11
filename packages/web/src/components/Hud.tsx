@@ -13,7 +13,8 @@ export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string })
   const dailyLeft = 100 - Math.max(0, r.dailyUsedPct) * 100;
   const hasBoss = r.targetProgressPct !== null;
   const bossHp = hasBoss ? 100 - r.targetProgressPct! * 100 : 100;
-  const toGo = hasBoss ? Math.max(0, r.targetEquity! - r.equity) : 0;
+  // Path to Funded: the target counts the CLOSED balance only.
+  const toGo = hasBoss ? Math.max(0, r.targetEquity! - r.balance) : 0;
   return (
     <div className="panel slot dots" data-testid="battle-slot">
       <div className="slot-hp">
@@ -91,7 +92,7 @@ export function HudTiles({ c }: { c: ChallengeState }) {
   return (
     <div className="hudrow" data-testid="hud">
       {target !== null ? (
-        <Tile label="Profit target" big={usd(Math.max(0, r.profitLoss))} of={usd(target)} pctUsed={(r.targetProgressPct ?? 0) * 100} color="var(--fire)" rows={[["Equity", usd(r.equity)], ["Progress", <span className={r.profitLoss >= 0 ? "up" : "dn"}>{pct(r.targetProgressPct ?? 0)}</span>]]} note="Boss HP = distance to target" />
+        <Tile label="Profit target (closed)" big={usd(Math.max(0, r.balance - r.startingBalance))} of={usd(target)} pctUsed={(r.targetProgressPct ?? 0) * 100} color="var(--fire)" rows={[["Closed balance", usd(r.balance)], ["Progress", <span className={r.balance >= r.startingBalance ? "up" : "dn"}>{pct(r.targetProgressPct ?? 0)}</span>]]} note="Only closed trades count" />
       ) : (
         <Tile label="Profit (cycle)" big={usd(r.profitLoss)} pctUsed={0} color="var(--fire)" rows={[["Equity", usd(r.equity)], ["Your split", "80%"]]} note="Funded: no target, keep the buffers" />
       )}

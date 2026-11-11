@@ -111,6 +111,9 @@ if (adminToken && adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
 }
 
 const service = new ChallengeService({
+  // Path to Funded (rulebook section 9): KYC and the risk review are manual ops steps unless set to "auto" (dev only).
+  kycMode: env.GARUDA_KYC_MODE === "auto" ? "auto" : "manual",
+  fundedReview: env.GARUDA_FUNDED_REVIEW === "auto" ? "auto" : "manual",
   market,
   store,
   payoutPolicy,

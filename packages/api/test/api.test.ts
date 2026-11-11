@@ -138,18 +138,46 @@ describe("orders", () => {
 });
 
 describe("rule engine through the API", () => {
-  it("pass: +10% flattens the book, locks the challenge and logs the boss kill", async () => {
+  it("open profit at +10% does NOT pass and nothing is auto-closed (Path to Funded rules 1 and 2)", async () => {
     const { body: c } = await create();
     const passSize = Math.round((c.account.startingBalance * 2400) / 25_000);
     await order(c.id, { symbol: "SOL", side: "buy", size: passSize, type: "market" });
     market.setMove("SOL", 0.014);
     const st = (await app.inject({ method: "POST", url: `/challenges/${c.id}/tick` })).json();
+    expect(st.account.equity).toBeGreaterThan(11_000);
+    expect(st.status).toBe("active");
+    expect(st.positions).toHaveLength(1);
+    expect(st.pathToFunded).toMatchObject({ targetMet: false, flat: false, next: "trade" });
+  });
+
+  it("pass: three days of closed profit, flat, best-day rule met; locks the challenge and logs the boss kill", async () => {
+    const { body: c } = await create();
+    const size = Math.round((c.account.startingBalance * 2400) / 25_000);
+    let last: any;
+    for (let day = 0; day < 3; day++) {
+      if (day > 0) clock += 24 * HOUR;
+      await order(c.id, { symbol: "SOL", side: "buy", size, type: "market" });
+      market.setMove("SOL", 0.0065);
+      last = (await order(c.id, { symbol: "SOL", side: "sell", size, type: "market", reduceOnly: true })).body;
+      market.setMove("SOL", 0);
+      expect(last.state.pathToFunded.tradingDays).toBe(day + 1);
+      if (day < 2) expect(last.state.status).toBe("active");
+    }
+    const st = last.state;
     expect(st.status).toBe("passed");
     expect(st.positions).toHaveLength(0);
+    expect(st.pathToFunded).toMatchObject({ targetMet: true, flat: true, daysMet: true, eligible: true, next: "claim" });
+    expect(st.pathToFunded.bestDay.ok).toBe(true);
     expect(st.combatLog.map((e: any) => e.kind)).toEqual(expect.arrayContaining(["pass", "strike"]));
     expect(st.combatLog.some((e: any) => /slays the boss/.test(e.text))).toBe(true);
     const again = await order(c.id, { symbol: "SOL", side: "buy", size: 1, type: "market" });
     expect(again.status).toBe(409);
+    // claim (library default: KYC and review auto) opens the funded account
+    const cl = await app.inject({ method: "POST", url: `/challenges/${c.id}/claim` });
+    expect(cl.statusCode).toBe(200);
+    expect(cl.json().pathToFunded).toMatchObject({ next: "funded", claim: { status: "approved", kyc: "approved" } });
+    const fid = cl.json().pathToFunded.claim.fundedId;
+    expect((await state(fid))).toMatchObject({ stage: "funded", status: "active", pathToFunded: null });
   });
 
   it("daily loss breach: warnings at 50/80%, then Wounded, positions closed, no more trading", async () => {
