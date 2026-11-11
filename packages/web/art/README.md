@@ -5,3 +5,5 @@ served from the repo-root copies in `art/knights/knight-{1-4}.png`.
 
 The previous SVG rasteriser (cartoon knight and Phoenix boss) has been removed.
 Do not regenerate those assets.
+
+Challenge card icons are the same stage art at `packages/web/public/art/icons/icon-{1-4}.png`.
