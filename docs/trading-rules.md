@@ -285,8 +285,8 @@ The exact list of markets is determined by Phoenix's listings and the weekly rev
 
 | Rule | Status | Source |
 | --- | --- | --- |
-| Consistency rule | None. No cap on single-day profit as a percentage of total. | mirrors Propr |
-| Minimum trading days | None. Pass in one trade if you want. | mirrors Propr |
+| Consistency rule | Only the best-day rule: best day at most 50% of profitable days. A soft gate on the pass and on payouts, never a breach (Section 9). | Path to Funded (mirrors OWNIT) |
+| Minimum trading days | 3 UTC trading days to pass (Section 9). None on funded accounts. | Path to Funded (mirrors HyroTrader) |
 | Time limit | None on challenges. | mirrors Propr |
 | Profit cap | None. | mirrors Propr |
 | News trading restriction | None. Trade during any market event. | mirrors Propr |
