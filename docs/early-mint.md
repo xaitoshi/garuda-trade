@@ -1,6 +1,6 @@
 # Garuda Beta Access mint (/early)
 
-`https://garuda.markets/early` sells one **Garuda Beta Access** NFT per wallet and per email for **$1.69 in USDC** on
+`https://garuda.markets/early` sells one **Garuda Beta Access** NFT per wallet and per email for **$1.69 in USDC** (no supply cap) on
 **Solana mainnet**. It is a Metaplex Core asset in its own "Garuda Beta Access" collection. Shipped **OFF**: with
 `EARLY_MINT_ENABLED` unset the page shows "Minting opens soon" and only records waitlist entries (wallet + email). No
 payment is taken and nothing touches the chain.
@@ -9,7 +9,7 @@ payment is taken and nothing touches the chain.
 
 1. The buyer enters the wallet that should receive the NFT and an email, and connects a wallet to pay (Privy or a
    browser wallet; it can be the same wallet).
-2. `POST /early/claim {wallet, email, payer}` validates both, reserves a slot under the cap for 5 minutes and returns
+2. `POST /early/claim {wallet, email, payer}` validates both, holds a 5 minute payment quote (no supply cap; one claim per wallet and per email) and returns
    ONE legacy transaction, pre-signed by Garuda (collection authority + the new asset key), that:
    1. creates the treasury's USDC token account if it is missing (idempotent, a no-op when it exists),
    2. transfers 1.69 USDC from the payer to the treasury, with a unique `reference` key attached,
@@ -67,12 +67,11 @@ Fund the mint authority with **0.01 SOL** (covers the collection plus headroom f
    | `EARLY_COLLECTION` | the address from step 3 |
    | `EARLY_MINT_TREASURY` | optional, default `CCezKqU697kanduvFk8GPwD484DGtKH46tfV9o7T2xKq` |
    | `EARLY_PRICE_USD` | optional, default `1.69` |
-   | `EARLY_MAX_SUPPLY` | optional, default `1000` |
    | `EARLY_SOULBOUND` | optional, default `true` |
    | `EARLY_CLUSTER` | optional, default `mainnet-beta` (the RPC's genesis hash must match or minting stays off) |
    | `EARLY_USDC_MINT` | optional, default mainnet USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
    | `EARLY_METADATA_URI` | optional, default `https://garuda.markets/early/metadata.json` |
-5. Redeploy. The API log line and `/health` show `early: minting on mainnet-beta $1.69 cap 1000`. Any missing or wrong
+5. Redeploy. The API log line and `/health` show `early: minting on mainnet-beta $1.69 no cap`. Any missing or wrong
    setting logs `[garuda-early] minting config rejected` and the page stays in waitlist mode. `GET /early/status` shows
    `enabled: true`.
 6. Do one real $1.69 mint yourself and check it on Solscan before announcing.

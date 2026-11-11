@@ -240,12 +240,11 @@ export interface EarlyOptions {
   /** EARLY_MINT_ENABLED. Off: claims are waitlist entries and no payment is taken. */
   enabled: boolean;
   priceUsd: number;
-  maxSupply: number;
   cluster: EarlyCluster;
   /** Required when enabled. */
   minter?: EarlyMinter;
   payment?: EarlyPaymentConfig;
-  /** How long a payment quote holds a slot under the cap. Default 5 min (a blockhash lives about 1 to 2 minutes). */
+  /** How long a payment quote (reference + pre-signed tx) stays valid. Default 5 min (a blockhash lives about 1 to 2 minutes). */
   quoteTtlMs?: number;
   /** Per-IP limit on POST /early/claim and confirm. Default 6 per 10 minutes. */
   claimLimit?: Limit | false;
@@ -297,7 +296,7 @@ export class EarlyAccessService {
   readonly store: EarlyStore;
   private readonly now: () => number;
   private readonly ttl: number;
-  /** Serialises cap checks and mints in this process so two buyers cannot take the last slot. */
+  /** Serialises claims and mints in this process so the same wallet or email cannot race itself. */
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(readonly o: EarlyOptions) {
@@ -306,7 +305,6 @@ export class EarlyAccessService {
     this.ttl = o.quoteTtlMs ?? 5 * 60_000;
     if (o.enabled && (!o.minter || !o.payment)) throw new Error("EARLY_MINT_ENABLED=true needs the mint authority, collection, treasury and RPC configured");
     if (!(o.priceUsd > 0) || !Number.isFinite(o.priceUsd)) throw new Error("EARLY_PRICE_USD must be a positive number");
-    if (!Number.isInteger(o.maxSupply) || o.maxSupply < 1) throw new Error("EARLY_MAX_SUPPLY must be a positive integer");
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -321,17 +319,12 @@ export class EarlyAccessService {
 
   async status() {
     const c = await this.store.counts();
-    const live = await this.liveQuotes();
-    const reserved = c.minted + c.paid + live;
     return {
       enabled: this.o.enabled,
       cluster: this.o.cluster,
       priceUsd: this.o.priceUsd,
       currency: "USDC",
       minted: c.minted,
-      cap: this.o.maxSupply,
-      remaining: Math.max(0, this.o.maxSupply - reserved),
-      soldOut: reserved >= this.o.maxSupply,
       waitlist: c.waitlist,
       collection: this.o.enabled ? this.o.minter?.collection : undefined,
       imageUrl: this.o.imageUrl,
@@ -339,10 +332,6 @@ export class EarlyAccessService {
     };
   }
 
-  private async liveQuotes(): Promise<number> {
-    const t = this.now();
-    return (await this.store.list({ status: ["awaiting_payment"] })).filter((q) => (q.expiresAt ?? 0) > t).length;
-  }
 
   private instructions(c: EarlyClaim, tx: { transaction: string; asset: string; lastValidBlockHeight: number }): EarlyPaymentInstructions {
     const p = this.o.payment!;
@@ -393,7 +382,7 @@ export class EarlyAccessService {
 
       if (mine?.status === "minted") return this.minted(mine, true);
       if (mine?.status === "paid") return { status: "paid", claimId: mine.id, message: "Payment received. Your NFT is being minted." };
-      if (mine?.status === "refund_due") return { status: "refund_due", claimId: mine.id, message: "Sold out after your payment. Your USDC will be refunded." };
+      if (mine?.status === "refund_due") return { status: "refund_due", claimId: mine.id, message: "Your payment could not be matched to a mint. Your USDC will be refunded." };
 
       if (!this.o.enabled) {
         if (mine) return { status: "waitlist", claimId: mine.id, alreadyOnList: true };
@@ -402,12 +391,7 @@ export class EarlyAccessService {
         return { status: "waitlist", claimId: c.id, alreadyOnList: false };
       }
 
-      // Minting on: a quote holds one slot under the cap until it expires.
-      const live = mine?.status === "awaiting_payment" && (mine.expiresAt ?? 0) > t;
-      if (!live) {
-        const c = await this.store.counts();
-        if (c.minted + c.paid + (await this.liveQuotes()) >= this.o.maxSupply) throw new ServiceError(410, "sold_out", "All Garuda Beta Access NFTs are claimed");
-      }
+      // Minting on: no supply cap. One claim per wallet and per email (UNIQUE columns).
       const next: EarlyClaim = {
         ...(mine ?? { id: randomUUID(), wallet, email, createdAt: t, ipHash }),
         status: "awaiting_payment",
@@ -460,7 +444,7 @@ export class EarlyAccessService {
     const c0 = await this.store.get(id);
     if (!c0) throw new ServiceError(404, "claim_not_found", "No such claim");
     if (c0.status === "minted") return this.minted(c0, true);
-    if (c0.status === "refund_due") return { status: "refund_due", claimId: c0.id, message: "Sold out after your payment. Your USDC will be refunded." };
+    if (c0.status === "refund_due") return { status: "refund_due", claimId: c0.id, message: "Your payment could not be matched to a mint. Your USDC will be refunded." };
     if (c0.status === "paid") return this.mintPaid(c0);
     if (c0.status !== "awaiting_payment") throw new ServiceError(409, "not_awaiting_payment", "Start the claim again");
     const used = (await this.store.list({ status: ["paid", "minted", "refund_due"] })).some((x) => x.paymentSignature === input.signature);

@@ -63,7 +63,7 @@ class FakeChain {
   };
 }
 
-function setup(o: { enabled?: boolean; cap?: number; store?: EarlyStore; limit?: number } = {}) {
+function setup(o: { enabled?: boolean; store?: EarlyStore; limit?: number } = {}) {
   const clock = { t: Date.UTC(2026, 10, 11) };
   const minter = new FakeMinter();
   const chain = new FakeChain();
@@ -72,7 +72,6 @@ function setup(o: { enabled?: boolean; cap?: number; store?: EarlyStore; limit?:
     store: o.store ?? new InMemoryEarlyStore(),
     enabled: o.enabled ?? false,
     priceUsd: 1.69,
-    maxSupply: o.cap ?? 1000,
     cluster: "devnet",
     minter: o.enabled ? minter : undefined,
     payment: o.enabled ? { mint: USDC, treasury: TREASURY, verify: chain.verify } : undefined,
@@ -116,7 +115,7 @@ describe("waitlist mode (minting disabled)", () => {
     const again = await claim(w, "early@garuda.markets");
     expect(again.json()).toMatchObject({ status: "waitlist", alreadyOnList: true });
     const st = (await app.inject({ method: "GET", url: "/early/status" })).json();
-    expect(st).toMatchObject({ enabled: false, minted: 0, cap: 1000, priceUsd: 1.69, waitlist: 1 });
+    expect(st).toMatchObject({ enabled: false, minted: 0, priceUsd: 1.69, waitlist: 1 });
     expect(JSON.stringify(st)).not.toContain("@");
     const confirm = await app.inject({ method: "POST", url: `/early/claim/${r.json().claimId}/confirm`, payload: { signature: sig(1) } });
     expect(confirm.json().error).toBe("minting_disabled");
@@ -215,20 +214,29 @@ describe("paid mint (minting enabled, mocked chain)", () => {
     expect((await app.inject({ method: "DELETE", url: `/admin/early/claims/${p.claimId}`, headers: admin })).statusCode).toBe(409);
   });
 
-  it("supply cap: live quotes hold slots, expired quotes release them, sold out after the cap", async () => {
-    const { claim, chain, app, clock } = setup({ enabled: true, cap: 1 });
-    await claim(newWallet().address, "cap1@garuda.markets");
-    expect((await claim(newWallet().address, "cap2@garuda.markets")).json().error).toBe("sold_out");
-    clock.t += 6 * 60_000; // quote expired: slot released, and the expired quote no longer holds its email
-    const p2 = (await claim(newWallet().address, "cap1@garuda.markets")).json().payment;
-    chain.pay(sig(6), p2.reference, p2.wallet, 1_690_000n, p2.asset);
-    expect((await app.inject({ method: "POST", url: `/early/claim/${p2.claimId}/confirm`, payload: { signature: sig(6) } })).json().status).toBe("minted");
-    expect((await claim(newWallet().address, "cap4@garuda.markets")).json().error).toBe("sold_out");
-    expect((await app.inject({ method: "GET", url: "/early/status" })).json()).toMatchObject({ minted: 1, soldOut: true, remaining: 0 });
+  it("no supply cap: many claims mint, one per wallet and one per email; expired quotes release their email", async () => {
+    const { claim, chain, app, clock } = setup({ enabled: true });
+    const minted: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const p = (await claim(newWallet().address, `many${i}@garuda.markets`)).json().payment;
+      chain.pay(sig(31 + i), p.reference, p.wallet, 1_690_000n, p.asset);
+      const r = (await app.inject({ method: "POST", url: `/early/claim/${p.claimId}/confirm`, payload: { signature: sig(31 + i) } })).json();
+      expect(r.status, JSON.stringify(r)).toBe("minted");
+      minted.push(p.wallet);
+    }
+    expect((await claim(minted[0]!, "other@garuda.markets")).json().error).toBe("wallet_taken");
+    expect((await claim(newWallet().address, "many1@garuda.markets")).json().error).toBe("email_taken");
+    await claim(newWallet().address, "hold@garuda.markets");
+    clock.t += 6 * 60_000; // quote expired: the expired quote no longer holds its email
+    expect((await claim(newWallet().address, "hold@garuda.markets")).json().payment).toBeTruthy();
+    const st = (await app.inject({ method: "GET", url: "/early/status" })).json();
+    expect(st).toMatchObject({ minted: 5 });
+    expect(st).not.toHaveProperty("cap");
+    expect(st).not.toHaveProperty("soldOut");
   });
 
   it("refuses to enable without a minter and payment config", () => {
-    expect(() => new EarlyAccessService({ store: new InMemoryEarlyStore(), enabled: true, priceUsd: 1.69, maxSupply: 10, cluster: "mainnet-beta" })).toThrow(/needs/);
+    expect(() => new EarlyAccessService({ store: new InMemoryEarlyStore(), enabled: true, priceUsd: 1.69, cluster: "mainnet-beta" })).toThrow(/needs/);
   });
 });
 

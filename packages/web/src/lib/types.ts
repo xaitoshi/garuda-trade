@@ -381,9 +381,6 @@ export interface EarlyStatus {
   priceUsd: number;
   currency: "USDC";
   minted: number;
-  cap: number;
-  remaining: number;
-  soldOut: boolean;
   waitlist: number;
 }
 
