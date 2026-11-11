@@ -50,7 +50,7 @@ function ScalingTable({ table }: { table: NonNullable<Rules["scaling"]>["table"]
   const squad = table.filter((r) => r.graduatesTo);
   const asc = table.find((r) => r.tier === "ascended");
   return (
-    <>
+    <div className="table-scroll">
       <table className="rule-table scaling-table" data-testid="scaling-table">
         <thead>
           <tr>
@@ -90,7 +90,7 @@ function ScalingTable({ table }: { table: NonNullable<Rules["scaling"]>["table"]
           </tbody>
         </table>
       )}
-    </>
+    </div>
   );
 }
 
@@ -109,6 +109,7 @@ export function ChallengeRules() {
       lead="One step evaluation. Every tier is open to buy and the same percentages apply at every size. Meet the four Path to Funded requirements without breaking either equity limit, claim your funded account, then level it up."
     >
       <h2>Tiers</h2>
+      <div className="table-scroll">
       <table className="rule-table">
         <thead>
           <tr>
@@ -141,6 +142,7 @@ export function ChallengeRules() {
           })}
         </tbody>
       </table>
+      </div>
       <h2>How a challenge works</h2>
       <ul>
         <li>Pay the fee in USDC, or start the free demo. Every paid challenge mints a knight NFT of that tier: a Paladin challenge mints a Paladin knight.</li>
