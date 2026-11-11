@@ -73,11 +73,12 @@ export function Challenges() {
   return (
     <main className="pg-challenges" data-testid="challenges">
       <button className="promo" onClick={() => { setTab("challenges"); setSel("ascended"); }}>
-        <div>
+        <KnightImg level={4} fill alt="" />
+        <div className="promo-shade" />
+        <div className="promo-copy">
           <h3>Ascended Trial: our biggest account</h3>
           <p>{usd(tiers.ascended.accountSize)} account. {pct(common.profitSplit, 0)} profit split.</p>
         </div>
-        <div className="pk"><KnightImg level={4} size={92} /></div>
         <span className="wbtn">View challenge</span>
       </button>
       <div className="tabrow">
@@ -178,13 +179,14 @@ function TierCard({ id, spec, rules, pill, note, btn, locked, selected, onPick, 
   const c = rules.common;
   const demo = id === "demo";
   return (
-    <div className={`cd ${locked ? "lk" : ""} ${selected ? "sel" : ""}`} style={{ ["--t" as string]: TINT[id] }} data-testid={`tier-${id}`}>
+    <div className={`cd ${locked ? "lk" : ""} ${selected ? "sel" : ""} ${demo ? "demo" : "bleed"}`} style={{ ["--t" as string]: TINT[id] }} data-testid={`tier-${id}`}>
+      {!demo && <KnightImg level={lvl(id)} fill alt="" />}
+      <div className="cd-shade" />
+      <div className="cd-body">
       <div className="ic">
         {demo ? (
           <div className="demo-ic"><Logo h={30} /></div>
-        ) : (
-          <img src={`/art/icons/icon-${lvl(id)}.png`} width={56} height={56} alt="" style={{ borderRadius: 14, display: "block" }} />
-        )}
+        ) : null}
         {locked && <span className="lkb"><Lock /></span>}
       </div>
       <div className="cn">{demo ? "Demo Account" : `${spec.name} Trial`}</div>
@@ -209,6 +211,7 @@ function TierCard({ id, spec, rules, pill, note, btn, locked, selected, onPick, 
         {locked && <Lock />} {needWallet && demo ? "Connect to start" : btn}
       </button>
       <div className="cnote">{note}</div>
+      </div>
     </div>
   );
 }
@@ -284,7 +287,6 @@ function Reveal({ tier, minted, rules, name, spec }: { tier: TierId | undefined;
       /* clipboard blocked */
     }
   }
-  const rings = [250, 330, 410];
   return (
     <div className="panel rv dots" data-testid="reveal">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -296,14 +298,10 @@ function Reveal({ tier, minted, rules, name, spec }: { tier: TierId | undefined;
       </div>
       <div className="rv-grid">
         <div className="portal">
-          <div className="ring" style={{ width: 480, height: 480, background: "radial-gradient(circle,rgba(187,180,251,.28),transparent 68%)" }} />
-          {rings.map((r, i) => (
-            <div key={r} className="ring" style={{ width: r, height: r, border: `1px ${i % 2 ? "dashed" : "solid"} rgba(187,180,251,${0.5 - i * 0.09})` }} />
-          ))}
-          <div style={{ position: "absolute", bottom: 34, width: 240, height: 54, borderRadius: "50%", background: "radial-gradient(ellipse,rgba(187,180,251,.35),transparent 70%)" }} />
-          <KnightImg level={level} state={minted ? "victory" : "dormant"} size={230} />
-          <Spark size={28} style={{ position: "absolute", left: 60, top: 40 }} />
-          <Spark size={18} color="#ffc24a" style={{ position: "absolute", right: 50, top: 110 }} />
+          <KnightImg level={level} state={minted ? "victory" : "dormant"} fill alt="" />
+          <div className="portal-shade" />
+          <Spark size={28} style={{ position: "absolute", left: 16, top: 16, zIndex: 2 }} />
+          <Spark size={18} color="#ffc24a" style={{ position: "absolute", right: 18, top: 28, zIndex: 2 }} />
         </div>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>

@@ -32,7 +32,7 @@ describe("payouts on Postgres", () => {
       // restart: balance is rebuilt from the ledger, replay matches the stored balance
       const svc2 = new ChallengeService({ market: rig.market, now: () => rig.clock.t, enforceGating: false, store: new PgChallengeStore(t.db) });
       const st = await svc2.getState(f.id, { refresh: false });
-      expect(st.account.balance).toBe(25_000);
+      expect(st.account.balance).toBe(10_000);
       expect(st.account.paidOut).toBeCloseTo(out.grossProfitUsd, 6);
       const v = await new PgChallengeStore(t.db).verifyLedger(f.id);
       expect(v).toMatchObject({ ok: true });
@@ -111,7 +111,7 @@ describe("payouts on Postgres", () => {
       rig.clock.t += DAY;
       await p2.reconcile();
       expect(await p2.get("po_pgcrash000000000001")).toMatchObject({ status: "paid", debited: true });
-      expect((await svc2.getState(f.id, { refresh: false })).account.balance).toBe(25_000);
+      expect((await svc2.getState(f.id, { refresh: false })).account.balance).toBe(10_000);
       expect(await new PgChallengeStore(t.db).verifyLedger(f.id)).toMatchObject({ ok: true });
     } finally {
       await t.close();

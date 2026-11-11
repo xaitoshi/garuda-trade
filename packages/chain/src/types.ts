@@ -1,4 +1,4 @@
-import type { TierId } from "@garuda/risk-engine";
+import { TIERS, type TierId } from "@garuda/risk-engine";
 
 /** Knight levels, lowest to highest (rulebook section 16): Squire L1, Knight L2, Paladin L3, Ascended L4. */
 export const KNIGHT_LEVELS = ["squire", "knight", "paladin", "ascended"] as const;
@@ -84,7 +84,7 @@ export interface KnightNft {
 }
 
 /** Fee schedule in USDC (rulebook section 3). */
-export const CHALLENGE_FEES_USD: Record<Exclude<TierId, "demo">, number> = { squire: 119, knight: 275, paladin: 499, ascended: 899 };
+export const CHALLENGE_FEES_USD: Record<Exclude<TierId, "demo">, number> = { squire: TIERS.squire.fee, knight: TIERS.knight.fee, paladin: TIERS.paladin.fee, ascended: TIERS.ascended.fee };
 
 export const USDC_DECIMALS = 6;
 /** Whole cents to base units, exact (no float drift): 95.20 -> 95_200_000. */

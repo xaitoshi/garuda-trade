@@ -28,7 +28,7 @@ describe("revive, reactivate and payout routes", () => {
 
   it("GET shows price, uses left and the cooldown", async () => {
     const r = await app.inject({ method: "GET", url: `/challenges/${id}/revive`, headers: bearer(token) });
-    expect(r.json()).toMatchObject({ eligible: false, reason: "revive_cooldown", fee: 220, revivesLeft: 3, tier: "knight" });
+    expect(r.json()).toMatchObject({ eligible: false, reason: "revive_cooldown", fee: 63.2, revivesLeft: 3, tier: "knight" });
   });
 
   it("POST is 429 during the 24h cooldown, then 201 with the discounted fee", async () => {
@@ -38,7 +38,7 @@ describe("revive, reactivate and payout routes", () => {
     rig.clock.t += 25 * HOUR;
     const ok = await revive();
     expect(ok.statusCode).toBe(201);
-    expect(ok.json()).toMatchObject({ feeUsd: 220, replayed: false, state: { reviveOf: id, scars: 1, status: "active", stage: "evaluation" } });
+    expect(ok.json()).toMatchObject({ feeUsd: 63.2, replayed: false, state: { reviveOf: id, scars: 1, status: "active", stage: "evaluation" } });
     expect(payments.charges).toHaveLength(1);
   });
 

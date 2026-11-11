@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeKnights, FakeUsdc, usdToBaseUnits } from "@garuda/chain";
+import { TIERS } from "@garuda/risk-engine";
 import { createTestDb } from "@garuda/db";
 import { InMemoryOrderStore, PaymentRequiredProvider, PgOrderStore, PurchaseService, ServiceError, buildApp, type OrderStore } from "../src/index.js";
 import { HOUR, breach, makeRig } from "./helpers.js";
@@ -33,7 +34,7 @@ const err = async (p: Promise<unknown>) => {
 describe("challenge purchase", () => {
   it("quotes the rulebook fee in exact USDC base units", async () => {
     const s = shop();
-    const fees = { squire: 119, knight: 275, paladin: 499, ascended: 899 } as const;
+    const fees = { squire: 39, knight: 79, paladin: 119, ascended: 200 } as const;
     for (const [tier, usd] of Object.entries(fees)) {
       const q = await s.purchases.quoteChallenge({ wallet: A, tier: tier as keyof typeof fees });
       expect(q).toMatchObject({ amountUsd: usd, amountBaseUnits: String(usd * 1_000_000), mint: s.usdc.mint, treasury: s.usdc.treasury, cluster: "devnet" });
@@ -97,7 +98,7 @@ describe("challenge purchase", () => {
   it("rejects underpayment, a wrong payer, a wrong reference, a failed tx and an old tx; the order stays payable", async () => {
     const s = shop();
     const q = await s.purchases.quoteChallenge({ wallet: A, tier: "knight" });
-    const under = s.pay(q, A, { amountBaseUnits: usdToBaseUnits(274.99) });
+    const under = s.pay(q, A, { amountBaseUnits: usdToBaseUnits(q.amountUsd - 0.01) });
     expect(await err(s.purchases.confirm(q.orderId, { signature: under }))).toBe("402:payment_underpaid");
     expect(await err(s.purchases.confirm(q.orderId, { signature: s.pay(q, B) }))).toBe("402:payment_payer_not_signer");
     expect(await err(s.purchases.confirm(q.orderId, { signature: s.pay({ ...q, reference: "someoneElsesReference1111111111111111111111" }) }))).toBe("402:payment_reference_missing");
@@ -148,10 +149,11 @@ describe("challenge purchase", () => {
 
   it("refunds when the account cannot be opened after payment (cap hit between quote and pay)", async () => {
     const s = shop();
-    // 20 x 10k = 200k evaluation aggregate cap
+    // fill the evaluation aggregate cap with squire accounts
     const q = await s.purchases.quoteChallenge({ wallet: A, tier: "squire" });
     const sig = s.pay(q);
-    for (let i = 0; i < 20; i++) await s.svc.create({ tier: "squire", wallet: A }, { paid: { orderId: `x${i}`, ref: "r" } });
+    const slots = Math.floor(200_000 / TIERS.squire.accountSize);
+    for (let i = 0; i < slots; i++) await s.svc.create({ tier: "squire", wallet: A }, { paid: { orderId: `x${i}`, ref: "r" } });
     const out = await s.purchases.confirm(q.orderId, { signature: sig });
     expect(out.status).toBe("refunded");
   });
@@ -191,7 +193,8 @@ describe("challenge purchase", () => {
     const q1 = await s.purchases.quoteChallenge({ wallet: A, tier: "squire" });
     const o1 = (await s.purchases.confirm(q1.orderId, { signature: s.pay(q1) })).order;
     // pass the squire evaluation
-    await s.svc.placeOrder(o1.challengeId!, { symbol: "SOL", side: "buy", size: 960, type: "market" });
+    const start = (await s.svc.getState(o1.challengeId!, { refresh: false })).account.startingBalance;
+    await s.svc.placeOrder(o1.challengeId!, { symbol: "SOL", side: "buy", size: Math.round((start * 2400) / 25_000), type: "market" });
     s.market.setMove("SOL", 0.014);
     expect((await s.svc.tick(o1.challengeId!)).status).toBe("passed");
     s.market.setMove("SOL", 0);
@@ -216,14 +219,14 @@ describe("revive purchase", () => {
   it("is 20% off the tier fee, paid through the same path, and relocks the knight", async () => {
     const { s, o } = await wounded();
     const q = await s.purchases.quoteRevive({ wallet: A, challengeId: o.challengeId! });
-    expect(q).toMatchObject({ kind: "revive", listUsd: 119, discountPct: 20, amountUsd: 95.2, amountBaseUnits: "95200000" });
+    expect(q).toMatchObject({ kind: "revive", listUsd: 39, discountPct: 20, amountUsd: 31.2, amountBaseUnits: "31200000" });
     const out = await s.purchases.confirm(q.orderId, { signature: s.pay(q) });
     expect(out.status).toBe("fulfilled");
     expect(out.order.challengeId).not.toBe(o.challengeId);
     expect(await s.knights.get(o.knightId!)).toMatchObject({ revives: 1, status: "active", frozen: true });
     const fresh = await s.svc.getState(out.order.challengeId!, { refresh: false });
     expect(fresh.reviveOf).toBe(o.challengeId);
-    expect(out.order.amountUsd).toBe(95.2);
+    expect(out.order.amountUsd).toBe(31.2);
   });
 
   it("replaying the confirm never opens a second account", async () => {

@@ -1,8 +1,12 @@
 import type { ArtState, KnightLevel, BossState } from "../lib/knight";
 import { knightSrc } from "../lib/knight";
 
-export function KnightImg({ level, state = "active", size = 120, className = "", alt }: { level: KnightLevel; state?: ArtState; size?: number; className?: string; alt?: string }) {
-  return <img className={`knight knight-${state} ${className}`} src={knightSrc(level, state)} width={size} height={size} alt={alt ?? `Level ${level} knight, ${state}`} draggable={false} />;
+export function KnightImg({ level, state = "active", size = 120, className = "", alt, fill }: { level: KnightLevel; state?: ArtState; size?: number; className?: string; alt?: string; fill?: boolean }) {
+  const src = knightSrc(level, state);
+  const cls = `knight knight-${state}${fill ? " knight-fill" : ""} ${className}`.trim();
+  const label = alt ?? `Level ${level} knight, ${state}`;
+  if (fill) return <img className={cls} src={src} alt={label} draggable={false} />;
+  return <img className={cls} src={src} width={size} height={size} alt={label} draggable={false} />;
 }
 
 /** Geometric Phoenix mark (no illustration). State is colour and scale only. */

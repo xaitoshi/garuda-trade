@@ -34,7 +34,7 @@ describe("PgChallengeStore", () => {
       await r.svc.placeOrder(c.id, { symbol: "ETH", side: "sell", size: 2, type: "market" });
       await r.svc.placeOrder(c.id, { symbol: "SOL", side: "sell", size: 100, type: "market" }); // partial close: realised pnl
       const mark = (await r.market.snapshot("BTC")).markPrice;
-      await r.svc.placeOrder(c.id, { symbol: "BTC", side: "buy", size: 0.1, type: "limit", limitPrice: +(mark * 0.9).toFixed(1) });
+      await r.svc.placeOrder(c.id, { symbol: "BTC", side: "buy", size: 0.02, type: "limit", limitPrice: +(mark * 0.9).toFixed(1) });
       r.clock.t += 3 * HOUR;
       r.market.setMove("SOL", -0.01);
       const before = await r.svc.tick(c.id);

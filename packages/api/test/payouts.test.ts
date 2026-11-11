@@ -24,7 +24,7 @@ describe("payout request", () => {
     const rig = makePayoutRig();
     const f = await fundedAccount(rig);
     const bal = await earn(rig, f.id, SMALL);
-    const gross = bal - 25_000;
+    const gross = bal - 10_000;
     const out = await rig.payouts.request(f.id, { actorWallet: WALLET_A, idempotencyKey: "req-0000001" });
     expect(out).toMatchObject({ status: "approved", destination: WALLET_A, needsApproval: false, split: 0.8 });
     expect(out.amountUsd).toBeCloseTo(Math.floor(gross * 0.8 * 100) / 100, 2);
@@ -37,7 +37,7 @@ describe("payout request", () => {
     expect(await events(rig, p.id)).toEqual(["requested", "debited", "approved", "attempt", "paid"]);
 
     const st = await rig.svc.getState(f.id);
-    expect(st.account.balance).toBe(25_000);
+    expect(st.account.balance).toBe(10_000);
     expect(st.account.paidOut).toBeCloseTo(gross, 6);
     expect(st.status).toBe("active");
     expect(st.combatLog.some((c) => c.kind === "tribute")).toBe(true);
@@ -50,8 +50,8 @@ describe("payout request", () => {
     const out = await rig.payouts.request(f.id, { actorWallet: WALLET_A });
     const p = await rig.payouts.get(out.id);
     expect(p.split).toBe(0.9);
-    expect(p.amountUsd).toBe(Math.floor((bal - 25_000) * 0.9 * 100) / 100);
-    expect(p.amountUsd + p.firmShareUsd).toBeCloseTo(bal - 25_000, 8);
+    expect(p.amountUsd).toBe(Math.floor((bal - 10_000) * 0.9 * 100) / 100);
+    expect(p.amountUsd + p.firmShareUsd).toBeCloseTo(bal - 10_000, 8);
     expect(Number.isInteger(Number(p.amountBaseUnits))).toBe(true);
     await rig.payouts.idle();
   });
@@ -135,7 +135,7 @@ describe("payout request", () => {
     const bal = await earn(rig, f.id, SMALL);
     await breach(rig, f.id, 1000);
     await failsWith(rig.payouts.request(f.id, { actorWallet: WALLET_A }), "payouts_unavailable");
-    expect(bal).toBeGreaterThan(25_000);
+    expect(bal).toBeGreaterThan(10_000);
     expect(await rig.payouts.list()).toEqual([]);
   });
 
@@ -175,11 +175,11 @@ describe("the sweep does not trip the risk rules", () => {
     await rig.payouts.idle();
     const st = await rig.svc.getState(f.id);
     expect(st.status).toBe("active");
-    expect(st.account.balance).toBe(25_000);
+    expect(st.account.balance).toBe(10_000);
     expect(st.risk.status).toBe("active");
     // static drawdown floor unchanged: 94% of 25k
-    expect(st.risk.drawdownFloor).toBe(23_500);
-    expect(st.risk.startOfDayBalance).toBe(25_000);
+    expect(st.risk.drawdownFloor).toBe(9_400);
+    expect(st.risk.startOfDayBalance).toBe(10_000);
     // and a real loss still counts
     expect((await breach(rig, f.id, 1000)).status).toBe("wounded");
   });
@@ -195,7 +195,7 @@ describe("approval threshold and admin", () => {
     await rig.payouts.idle();
     expect(rig.exec.submitCalls).toBe(0);
     // already swept: the money is reserved while it waits
-    expect((await rig.svc.getState(f.id)).account.balance).toBe(25_000);
+    expect((await rig.svc.getState(f.id)).account.balance).toBe(10_000);
 
     rig.clock.t += HOUR;
     await rig.payouts.reconcile();
@@ -313,7 +313,7 @@ describe("retries and reconcile", () => {
     expect((await events(rig, out.id)).slice(-2)).toEqual(["attempt_failed", "gave_up"]);
     expect(rig.errors.some((e) => e.includes("needs an admin"))).toBe(true);
     // still reserved, still one open payout, no more automatic tries
-    expect((await rig.svc.getState(f.id)).account.balance).toBe(25_000);
+    expect((await rig.svc.getState(f.id)).account.balance).toBe(10_000);
     await failsWith(rig.payouts.request(f.id, { actorWallet: WALLET_A }), "payout_in_flight");
     const calls = rig.exec.submitCalls;
     rig.clock.t += DAY;
@@ -455,7 +455,7 @@ describe("retries and reconcile", () => {
     const p = await rig.payouts.get("po_crash0000000000000001");
     expect(p).toMatchObject({ status: "paid", debited: true });
     const st = await rig.svc.getState(f.id);
-    expect(st.account.balance).toBe(25_000);
+    expect(st.account.balance).toBe(10_000);
     expect(st.account.paidOut).toBeCloseTo(quote.grossProfit, 8);
     expect(await events(rig, p.id)).toEqual(["requested", "debited", "attempt", "paid"]);
   });
@@ -484,9 +484,9 @@ describe("retries and reconcile", () => {
       { id: "po_gone00000000000000001", challengeId: f.id, wallet: WALLET_A, status: "approved", sweepUsd: quote.grossProfit, amountUsd: 36, amountBaseUnits: "36000000", firmShareUsd: 9, split: 0.8, autoMaxUsd: 500, autoApproved: true, debited: false, executor: "fake-treasury", attempts: 0, createdAt: t, updatedAt: t },
       { type: "requested", ts: t, data: {} },
     );
-    await rig.svc.placeOrder(f.id, { symbol: "SOL", side: "buy", size: 100, type: "market" });
-    rig.market.setMove("SOL", -0.05);
-    await rig.svc.placeOrder(f.id, { symbol: "SOL", side: "sell", size: 100, type: "market", reduceOnly: true });
+    await rig.svc.placeOrder(f.id, { symbol: "SOL", side: "buy", size: 20, type: "market" });
+    rig.market.setMove("SOL", -0.03);
+    await rig.svc.placeOrder(f.id, { symbol: "SOL", side: "sell", size: 20, type: "market", reduceOnly: true });
     await rig.payouts.reconcile();
     expect(await rig.payouts.get("po_gone00000000000000001")).toMatchObject({ status: "rejected", rejectedBy: "system" });
     expect(rig.exec.submitCalls).toBe(0);

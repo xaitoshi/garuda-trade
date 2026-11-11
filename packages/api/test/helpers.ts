@@ -18,8 +18,10 @@ export function makeRig(deps: Partial<ServiceDeps> = {}): Rig {
   return { market, svc, clock };
 }
 
-/** Open a SOL long and crash the market until the challenge is wounded (daily loss). Returns the wounded state. */
-export async function breach(rig: Rig, id: string, size = 1000) {
+/** Open a SOL long and crash the market until the challenge is wounded (daily loss). Size scales with account size. */
+export async function breach(rig: Rig, id: string, _size = 1000) {
+  const start = (await rig.svc.getState(id, { refresh: false })).account.startingBalance;
+  const size = Math.max(20, Math.round((start / 25_000) * 1000));
   const r = await rig.svc.placeOrder(id, { symbol: "SOL", side: "buy", size, type: "market" });
   if (!r.accepted) throw new Error(`setup order rejected: ${r.reason}`);
   rig.market.setMove("SOL", -0.1);

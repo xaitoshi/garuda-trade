@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { useSession } from "../lib/session";
@@ -17,11 +17,59 @@ export function SimBadge() {
 
 const TABS = [
   ["/terminal", "Terminal"],
-  ["/challenges", "Challenges"],
   ["/barracks", "Barracks"],
   ["/leaderboard", "Leaderboard"],
   ["/payouts", "Payouts"],
 ] as const;
+
+const CHALLENGE_LINKS = [
+  ["/challenges/rules", "Rules"],
+  ["/challenges/markets", "Markets"],
+  ["/challenges/faq", "FAQ"],
+] as const;
+
+function ChallengesMenu() {
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const on = pathname.startsWith("/challenges");
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  return (
+    <div className={`nav-drop${on ? " on" : ""}${open ? " open" : ""}`} ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div className="nav-drop-trigger">
+        <NavLink to="/challenges" className={({ isActive }) => (isActive && pathname === "/challenges" ? "on" : "")} onClick={() => setOpen(false)}>
+          Challenges
+        </NavLink>
+        <button
+          type="button"
+          className="nav-drop-btn"
+          aria-label="Challenge pages"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          data-testid="challenges-menu"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
+        >
+          <span className="nav-drop-chev" />
+        </button>
+      </div>
+      {open && (
+        <div className="nav-drop-menu" role="menu" data-testid="challenges-dropdown">
+          {CHALLENGE_LINKS.map(([to, label]) => (
+            <NavLink key={to} to={to} role="menuitem" className={({ isActive }) => (isActive ? "on" : "")} onClick={() => setOpen(false)}>
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TopBar({ landing }: { landing: boolean }) {
   return (
@@ -39,7 +87,9 @@ export function TopBar({ landing }: { landing: boolean }) {
         </nav>
       ) : (
         <nav className="tabs" aria-label="Main">
-          {TABS.map(([to, label]) => (
+          <NavLink to="/terminal" className={({ isActive }) => (isActive ? "on" : "")}>Terminal</NavLink>
+          <ChallengesMenu />
+          {TABS.filter(([to]) => to !== "/terminal").map(([to, label]) => (
             <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "on" : "")}>
               {label}
             </NavLink>

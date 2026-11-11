@@ -2,17 +2,21 @@ import { describe, expect, it } from "vitest";
 import { RiskMonitor, limitsForTier, msUntilNextReset, utcDayKey, type RiskEvent } from "../src/index.js";
 
 const D1 = Date.UTC(2026, 10, 4, 9, 0, 0); // 2026-11-04 09:00 UTC
-const knight = () => new RiskMonitor({ limits: limitsForTier("knight"), createdAt: D1 });
+const knight = () => knightAt25k();
 const ev = (e: RiskEvent[], t: RiskEvent["type"]) => e.filter((x) => x.type === t);
 
-describe("limits (Knight $25k)", () => {
-  it("derives the rulebook floors and target", () => {
-    const m = knight();
-    expect(m.dailyLossLimit).toBeCloseTo(750, 8);
-    expect(m.dailyFloor).toBeCloseTo(24_250, 8);
-    expect(m.ddFloor).toBeCloseTo(23_500, 8);
-    expect(m.target).toBeCloseTo(27_500, 8);
-    expect(m.effectiveFloor).toBeCloseTo(24_250, 8); // daily bites first on day one
+const knightLimits = { ...limitsForTier("knight"), startingBalance: 25_000 };
+const knightFundedLimits = { ...limitsForTier("knight", "funded"), startingBalance: 25_000 };
+const knightAt25k = () => new RiskMonitor({ limits: knightLimits, createdAt: D1 });
+
+describe("limits from the tier table", () => {
+  it("derives floors and target from each account size", () => {
+    const m = new RiskMonitor({ limits: limitsForTier("knight"), createdAt: D1 });
+    expect(m.dailyLossLimit).toBeCloseTo(300, 8);
+    expect(m.dailyFloor).toBeCloseTo(9_700, 8);
+    expect(m.ddFloor).toBeCloseTo(9_400, 8);
+    expect(m.target).toBeCloseTo(11_000, 8);
+    expect(m.effectiveFloor).toBeCloseTo(9_700, 8);
   });
 
   it("tier table matches the rulebook", () => {
@@ -21,9 +25,10 @@ describe("limits (Knight $25k)", () => {
       return [m.ddFloor, m.target];
     };
     expect(f("demo")).toEqual([4_700, 5_500]);
-    expect(f("squire")).toEqual([9_400, 11_000]);
-    expect(f("paladin")).toEqual([47_000, 55_000]);
-    expect(f("ascended")).toEqual([94_000, 110_000]);
+    expect(f("squire")).toEqual([4_700, 5_500]);
+    expect(f("knight")).toEqual([9_400, 11_000]);
+    expect(f("paladin")).toEqual([14_100, 16_500]);
+    expect(f("ascended")).toEqual([23_500, 27_500]);
   });
 });
 
@@ -105,7 +110,7 @@ describe("static max drawdown", () => {
   it("breaches max drawdown when it binds (after losing days)", () => {
     // Account at 24,000 balance at SOD: daily floor 23,280 < DD floor 23,500 => DD binds
     const m = new RiskMonitor({
-      limits: limitsForTier("knight"),
+      limits: knightLimits,
       createdAt: D1,
       restore: { startOfDayBalance: 24_000, lastBalance: 24_000, lastEquity: 24_000 },
     });
@@ -141,7 +146,7 @@ describe("buffer warnings (50% / 80%)", () => {
 
   it("drawdown warnings trigger at 50% / 80% of the $1,500 static buffer", () => {
     const m = new RiskMonitor({
-      limits: limitsForTier("knight"),
+      limits: knightLimits,
       createdAt: D1,
       restore: { startOfDayBalance: 24_000, lastBalance: 24_000, lastEquity: 24_000 }, // daily buffer 720 is wider than DD remaining
     });
@@ -176,7 +181,7 @@ describe("profit target / pass", () => {
   });
 
   it("funded stage has no target", () => {
-    const m = new RiskMonitor({ limits: limitsForTier("knight", "funded"), createdAt: D1 });
+    const m = new RiskMonitor({ limits: knightFundedLimits, createdAt: D1 });
     expect(m.target).toBeNull();
     expect(m.evaluate({ balance: 60_000, equity: 60_000, now: D1 })).toHaveLength(0);
     expect(m.snapshot().targetProgressPct).toBeNull();
@@ -211,14 +216,14 @@ describe("snapshot (HP / armor / boss bars)", () => {
 
 describe("payout rebase (rulebook section 11: the balance resets after a payout)", () => {
   it("a sweep is not a daily loss: the start-of-day balance drops to the post-payout balance", () => {
-    const m = new RiskMonitor({ limits: limitsForTier("knight", "funded"), createdAt: D1 });
+    const m = new RiskMonitor({ limits: knightFundedLimits, createdAt: D1 });
     // day 1 closes at a $28,000 balance, day 2 opens from it (floor 27,160)
     m.evaluate({ balance: 28_000, equity: 28_000, now: D1 });
     const day2 = D1 + 24 * 3_600_000;
     expect(m.evaluate({ balance: 28_000, equity: 28_000, now: day2 }).map((e) => e.type)).toEqual(["day_reset"]);
     expect(m.dailyFloor).toBeCloseTo(27_160, 6);
     // WITHOUT a rebase the swept balance would breach on the next evaluation
-    const naive = new RiskMonitor({ limits: limitsForTier("knight", "funded"), createdAt: D1, restore: structuredClone(m.state) as never });
+    const naive = new RiskMonitor({ limits: knightFundedLimits, createdAt: D1, restore: structuredClone(m.state) as never });
     expect(naive.evaluate({ balance: 25_000, equity: 25_000, now: day2 + 1000 }).map((e) => e.type)).toContain("breach");
     // with it, the account lives and its floors are the post-payout ones (static drawdown never moves)
     m.rebaseAfterPayout(25_000, 25_000, day2 + 1000);
