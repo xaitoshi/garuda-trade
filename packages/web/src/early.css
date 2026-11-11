@@ -36,7 +36,7 @@
 .early-done .btn{align-self:flex-start}
 @media (max-width:900px){
   .pg-early{padding:28px 20px 72px}
-  .early-grid{grid-template-columns:1fr;gap:28px}
+  .early-grid{grid-template-columns:minmax(0,1fr);gap:28px}
   .early-art{max-width:520px;width:100%;margin:0 auto}
   .early-lead{font-size:17px}
   .early-meta b{font-size:32px}
