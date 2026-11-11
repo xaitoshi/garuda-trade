@@ -17,3 +17,10 @@ export const PRIVY_APP_ID: string = ((import.meta.env.VITE_PRIVY_APP_ID as strin
 
 /** Screenshots only: render the Privy sign-in UI without an app id (the buttons are inert). Never set in a deployment. */
 export const PRIVY_PREVIEW: boolean = import.meta.env.VITE_PRIVY_PREVIEW === "1";
+
+/**
+ * Garuda Beta Access (/early). The NFT and its USDC payment live on Solana MAINNET (the rest of the app is devnet).
+ * EARLY_ART is the one file to swap for new artwork (keep the same name so the onchain metadata keeps resolving).
+ */
+export const EARLY_RPC: string = (import.meta.env.VITE_EARLY_RPC as string | undefined) ?? "https://api.mainnet-beta.solana.com";
+export const EARLY_ART = "/early/garuda-beta-access.png";

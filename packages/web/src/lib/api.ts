@@ -1,5 +1,5 @@
 import { API_URL } from "./config";
-import type { KnightInfo, Candle, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PayoutView, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
+import type { EarlyOutcome, EarlyStatus, KnightInfo, Candle, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PayoutView, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -76,6 +76,11 @@ export const api = {
   quoteRevive: (challengeId: string) => post<PaymentInstructions>("/purchases/revive", { challengeId }),
   confirm: (orderId: string, signature: string) => post<ConfirmOutcome>(`/purchases/${orderId}/confirm`, { signature }, undefined, [202]),
   order: (orderId: string) => call<PaymentOrder>(`/purchases/${orderId}`),
+  /** Garuda Beta Access (/early). */
+  earlyStatus: () => call<EarlyStatus>("/early/status", { auth: false }),
+  earlyClaim: (wallet: string, email: string, payer?: string) => call<EarlyOutcome>("/early/claim", { method: "POST", body: { wallet, email, payer }, auth: false }),
+  earlyConfirm: (claimId: string, signature: string, payer?: string) =>
+    call<EarlyOutcome | { status: "pending"; claimId: string }>(`/early/claim/${claimId}/confirm`, { method: "POST", body: { signature, payer }, auth: false, okStatuses: [202] }),
   /** Stub server only: registers a simulated USDC transfer for the quote and returns its signature. */
   stubPay: (orderId: string) => post<{ signature: string }>("/dev/stub-pay", { orderId }),
 };

@@ -7,6 +7,7 @@ import "./landing.css";
 import "./pilot-theme.css";
 import "./pilot-terminal.css";
 import "./calledit.css";
+import "./early.css";
 import { App } from "./App";
 import { installSlidingIndicators } from "./lib/slide";
 

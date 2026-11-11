@@ -53,7 +53,7 @@ export function Landing() {
             </span>
           </h1>
           <div className="cta-row">
-            <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
+            <Link className="btn btn-fire" to="/early" data-testid="cta-early">You Are Early</Link>
             <XMarketsButton />
           </div>
         </div>

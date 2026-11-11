@@ -1,0 +1,22 @@
+{
+  "name": "Garuda Beta Access",
+  "symbol": "GARUDA",
+  "description": "Early supporter of Garuda, the first prop firm on Solana, powered by Phoenix. Holders get beta access.",
+  "image": "https://garuda.markets/early/garuda-beta-access.png",
+  "external_url": "https://garuda.markets/early",
+  "attributes": [
+    {
+      "trait_type": "Access",
+      "value": "Beta"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "https://garuda.markets/early/garuda-beta-access.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "image"
+  }
+}

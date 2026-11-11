@@ -23,8 +23,14 @@ import {
   type OrderStore,
   type PayoutStore,
   MIN_ADMIN_TOKEN_LENGTH,
+  EarlyAccessService,
+  InMemoryEarlyStore,
+  PgEarlyStore,
+  type EarlyStore,
+  isSolanaAddress,
 } from "@garuda/api";
 import { DEFAULT_ART_DIR, HttpRpc, MetaplexCoreKnights, SolanaTreasuryPayout, SolanaUsdc, assertDevnetCluster, loadKeypairFile } from "@garuda/chain";
+import { EarlyRpc, MAINNET_USDC_MINT, MetaplexEarlyMinter, assertEarlyCluster, keypairFromSecret, verifyUsdcPayment, type EarlyCluster } from "@garuda/chain";
 import { openDb } from "@garuda/db";
 import { payoutPolicyFromEnv } from "@garuda/risk-engine";
 import { PhoenixSdkProvider, PollingFeed, ReplayProvider, loadRecordedMarkets, type MarketDataProvider } from "@garuda/market-data";
@@ -56,6 +62,7 @@ let authStore: AuthStore = new InMemoryAuthStore();
 let orderStore: OrderStore = new InMemoryOrderStore();
 let payoutStore: PayoutStore = new InMemoryPayoutStore();
 let routingStore: RoutingStore = new InMemoryRoutingStore();
+let earlyStore: EarlyStore = new InMemoryEarlyStore();
 let storage = "memory (state is lost on restart: set DATABASE_URL)";
 let closeDb: () => Promise<void> = async () => {};
 if (env.DATABASE_URL) {
@@ -65,6 +72,7 @@ if (env.DATABASE_URL) {
   orderStore = new PgOrderStore(db);
   payoutStore = new PgPayoutStore(db);
   routingStore = new PgRoutingStore(db);
+  earlyStore = new PgEarlyStore(db);
   closeDb = () => db.close();
   storage = "postgres";
 }
@@ -106,6 +114,48 @@ try {
   console.error(`[garuda] ${e instanceof Error ? e.message : e}`);
   process.exit(1);
 }
+// Garuda Beta Access (/early, docs/early-mint.md). Waitlist only unless EARLY_MINT_ENABLED=true. When enabled it runs on
+// EARLY_CLUSTER (default mainnet-beta): buyers pay EARLY_PRICE_USD in USDC to EARLY_TREASURY and the mint authority
+// (EARLY_MINT_KEYPAIR) mints a Metaplex Core asset into EARLY_COLLECTION. Any missing or wrong setting keeps it OFF.
+const earlyCluster: EarlyCluster = env.EARLY_CLUSTER === "devnet" ? "devnet" : "mainnet-beta";
+const earlyBase = {
+  store: earlyStore,
+  priceUsd: Number(env.EARLY_PRICE_USD ?? 1.69),
+  maxSupply: Number(env.EARLY_MAX_SUPPLY ?? 1000),
+  cluster: earlyCluster,
+  imageUrl: env.EARLY_IMAGE_URL ?? "https://garuda.markets/early/garuda-beta-access.png",
+  metadataUri: env.EARLY_METADATA_URI ?? "https://garuda.markets/early/metadata.json",
+  log: (m: string) => console.log(m),
+};
+// Owner's treasury for the $1.69 USDC proceeds (its USDC associated token account receives them; the buyer's transaction
+// creates that account idempotently if it is missing). Receive-only: the server never holds this wallet's key.
+const DEFAULT_EARLY_TREASURY = "CCezKqU697kanduvFk8GPwD484DGtKH46tfV9o7T2xKq";
+const earlyTreasury = (env.EARLY_MINT_TREASURY ?? env.EARLY_TREASURY ?? DEFAULT_EARLY_TREASURY).trim();
+if (!isSolanaAddress(earlyTreasury)) {
+  console.error(`[garuda-early] EARLY_MINT_TREASURY "${earlyTreasury}" is not a valid Solana address`);
+  process.exit(1);
+}
+let early: EarlyAccessService;
+let earlyLabel = "waitlist";
+try {
+  if (env.EARLY_MINT_ENABLED !== "true") throw Object.assign(new Error("EARLY_MINT_ENABLED is not true"), { quiet: true });
+  const need = (k: string) => env[k]?.trim() || (() => { throw new Error(`${k} is required when EARLY_MINT_ENABLED=true`); })();
+  const rpcUrl = need("EARLY_RPC_URL");
+  const rpc = new EarlyRpc(rpcUrl);
+  await assertEarlyCluster(rpc, earlyCluster);
+  const secret = JSON.parse(need("EARLY_MINT_KEYPAIR")) as number[];
+  if (!Array.isArray(secret) || secret.length !== 64) throw new Error("EARLY_MINT_KEYPAIR must be a 64-byte JSON array (Solana CLI keypair file contents)");
+  const usdcMint = env.EARLY_USDC_MINT?.trim() || (earlyCluster === "mainnet-beta" ? MAINNET_USDC_MINT : need("EARLY_USDC_MINT"));
+  const treasury = earlyTreasury;
+  const authority = keypairFromSecret(Uint8Array.from(secret));
+  const minter = new MetaplexEarlyMinter({ rpcUrl, cluster: earlyCluster, authority, collection: need("EARLY_COLLECTION"), metadataUri: earlyBase.metadataUri, soulbound: env.EARLY_SOULBOUND !== "false" });
+  early = new EarlyAccessService({ ...earlyBase, enabled: true, minter, payment: { mint: usdcMint, treasury, verify: (i) => verifyUsdcPayment(rpc, { mint: usdcMint, treasury }, i) } });
+  earlyLabel = `minting on ${earlyCluster} $${earlyBase.priceUsd} cap ${earlyBase.maxSupply}`;
+} catch (e) {
+  if (!(e as { quiet?: boolean }).quiet) console.error(`[garuda-early] minting config rejected, /early stays waitlist only: ${e instanceof Error ? e.message : e}`);
+  early = new EarlyAccessService({ ...earlyBase, enabled: false });
+}
+
 // Admin API (approve, reject and retry payouts). Off (routes answer 404) unless GARUDA_ADMIN_TOKEN is set.
 const adminToken = env.GARUDA_ADMIN_TOKEN?.trim() || undefined;
 if (adminToken && adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
@@ -194,6 +244,7 @@ const app = buildApp({
   nft: knights ? { baseUrl: publicUrl, artDir: env.GARUDA_ART_DIR ?? DEFAULT_ART_DIR } : undefined,
   logger: true,
   routing: router,
+  early,
   builderCodeConfigured: Boolean(env.PHOENIX_BUILDER_CODE),
   auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", allowedOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : (env.GARUDA_CORS_ORIGIN ?? "").split(",").map((o) => o.trim()).filter(Boolean), privy }),
   trustProxy: env.GARUDA_TRUST_PROXY === "1",
@@ -202,6 +253,7 @@ const app = buildApp({
     storage,
     worker: worker.metrics().running,
     market: market.name,
+    early: earlyLabel,
     chain: chainOn ? { cluster: "devnet", collection: knights!.collection, usdcMint: usdc!.mint, treasury: usdc!.treasury, dirtyKnights: service.dirtyKnightIds().length } : "off",
   }),
   metrics: () => worker.metrics(),
@@ -221,5 +273,5 @@ process.on("SIGTERM", () => void shutdown());
 
 await app.listen({ port, host: "0.0.0.0" });
 console.log(
-  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | payouts ${payouts ? `${payoutExecutor!.name} split ${payoutPolicy.split} auto<=$${payoutPolicy.autoMaxUsd}${adminToken ? " admin on" : " admin OFF"}` : "off"} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | routing ${router?.healthLabel() ?? "disabled"}${router?.modeReason && router.mode === "disabled" && router.config.enabled ? ` (${router.modeReason})` : ""} | SIMULATED accounts`,
+  `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | payouts ${payouts ? `${payoutExecutor!.name} split ${payoutPolicy.split} auto<=$${payoutPolicy.autoMaxUsd}${adminToken ? " admin on" : " admin OFF"}` : "off"} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | early ${earlyLabel} | routing ${router?.healthLabel() ?? "disabled"}${router?.modeReason && router.mode === "disabled" && router.config.enabled ? ` (${router.modeReason})` : ""} | SIMULATED accounts`,
 );

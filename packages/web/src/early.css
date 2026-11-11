@@ -1,0 +1,45 @@
+/* /early: Garuda Beta Access mint. Dark, dot-matrix, matches the landing hero. */
+.pg-early{max-width:1240px;margin:0 auto;padding:56px 40px 96px;min-height:calc(100vh - 64px);background:var(--landing-ink,#08090a)}
+.early-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;align-items:center}
+.early-art{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#08090a;aspect-ratio:1/1;box-shadow:0 30px 80px -30px rgba(255,95,1,.35)}
+.early-art img{display:block;width:100%;height:100%;object-fit:cover;user-select:none;pointer-events:none}
+.early-eyebrow{font-size:13px;color:var(--fire);letter-spacing:.02em;margin-bottom:18px;display:inline-flex;align-items:center;gap:8px}
+.early-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--fire);box-shadow:0 0 8px var(--fire)}
+.early-title{font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);font-weight:400;font-size:clamp(40px,6vw,76px);letter-spacing:-1px;line-height:1.02}
+.early-lead{color:var(--mute);font-size:19px;line-height:1.4;max-width:480px;margin-top:18px}
+.early-meta{display:flex;gap:0;margin-top:28px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.early-meta>div{padding:18px 28px 18px 0;margin-right:28px;border-right:1px solid var(--line)}
+.early-meta>div:last-child{border-right:0}
+.early-meta b{display:block;font-size:40px;font-weight:500;letter-spacing:-.04em;line-height:1}
+.early-price b{color:var(--fire)}
+.early-meta span{display:block;color:var(--mute);font-size:13px;margin-top:6px}
+.early-form{margin-top:28px;display:flex;flex-direction:column;gap:16px;max-width:520px}
+.early-soon{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bone);border:1px solid rgba(255,95,1,.4);background:rgba(255,95,1,.07);border-radius:12px;padding:12px 14px}
+.early-soon i{width:7px;height:7px;border-radius:50%;background:var(--fire);box-shadow:0 0 8px var(--fire);flex:none}
+.early-field{display:flex;flex-direction:column;gap:8px}
+.early-field>span{font-size:13px;color:var(--mute)}
+.early-field em{font-style:normal;font-size:13px;color:var(--red)}
+.early-input-row{display:flex;gap:8px}
+.early-field input{flex:1;min-width:0;height:52px;border-radius:12px;border:1px solid var(--line2);background:#111012;color:var(--bone);font:500 15px/1 Inter,ui-sans-serif,system-ui,sans-serif;padding:0 16px;outline:none;transition:border-color .2s}
+.early-field input::placeholder{color:var(--dim)}
+.early-field input:focus{border-color:var(--fire)}
+.early-field input[aria-invalid="true"]{border-color:var(--red)}
+.early-use{flex:none;height:52px;padding:0 16px;border-radius:12px;border:1px solid var(--line2);background:var(--panel);color:var(--bone);font:600 14px/1 Inter,sans-serif;cursor:pointer}
+.early-use:hover{border-color:var(--mute)}
+.early-submit{height:54px;font-size:16px;cursor:pointer;margin-top:4px}
+.early-submit:disabled{opacity:.6;cursor:wait}
+.early-error{font-size:14px;color:var(--red);border:1px solid rgba(255,95,109,.35);background:rgba(255,95,109,.06);border-radius:10px;padding:10px 12px}
+.early-fine{font-size:13px;color:var(--dim);line-height:1.5}
+.early-done{margin-top:28px;display:flex;flex-direction:column;gap:14px;max-width:520px;border:1px solid var(--line);background:var(--ink2);border-radius:18px;padding:26px}
+.early-done h2{font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);font-weight:400;font-size:40px;letter-spacing:-.5px}
+.early-done p{color:var(--mute);font-size:16px}
+.early-done .btn{align-self:flex-start}
+@media (max-width:900px){
+  .pg-early{padding:28px 20px 72px}
+  .early-grid{grid-template-columns:1fr;gap:28px}
+  .early-art{max-width:520px;width:100%;margin:0 auto}
+  .early-lead{font-size:17px}
+  .early-meta b{font-size:32px}
+  .early-meta>div{padding-right:20px;margin-right:20px}
+}
+.early-field>input{flex:none}

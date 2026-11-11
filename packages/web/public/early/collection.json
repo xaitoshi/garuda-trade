@@ -1,0 +1,16 @@
+{
+  "name": "Garuda Beta Access",
+  "symbol": "GARUDA",
+  "description": "Garuda Beta Access: one per early supporter, minted on Solana.",
+  "image": "https://garuda.markets/early/garuda-beta-access.png",
+  "external_url": "https://garuda.markets/early",
+  "properties": {
+    "files": [
+      {
+        "uri": "https://garuda.markets/early/garuda-beta-access.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "image"
+  }
+}
