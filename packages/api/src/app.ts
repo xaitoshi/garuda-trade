@@ -62,6 +62,28 @@ const payoutStatusEnum = z.enum(["pending_approval", "approved", "sending", "sub
 const rejectPayoutBody = z.object({ reason: z.string().trim().min(1).max(500) });
 const claimStatusQuery = z.enum(["kyc_pending", "under_review", "approved", "rejected"]).optional();
 const kycBody = z.object({ decision: z.enum(["approve", "reject"]), reason: z.string().trim().min(1).max(500).optional() });
+const routingTraderBody = z.object({
+  enabled: z.boolean(),
+  multiplier: z.number().positive().max(10).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Phase 2 Phoenix routing (packages/router), as seen by the admin API. Structural, so @garuda/api does not depend on the
+ * router package. There is deliberately NO route that turns routing on: ROUTING_ENABLED in the environment is the master
+ * switch, and ROUTING_DRY_RUN=false is a second, separate step.
+ */
+export interface RoutingAdmin {
+  healthLabel(): string;
+  status(): Promise<unknown>;
+  listOrders(f?: { challengeId?: string; limit?: number }): Promise<unknown[]>;
+  setTrader(challengeId: string, a: { enabled: boolean; multiplier?: number; note?: string; wallet?: string }, actor: string): Promise<unknown>;
+  haltRouting(actor: string): Promise<void>;
+  resumeRouting(actor: string): Promise<void>;
+  flatten(actor: string): Promise<number>;
+  reconcile(): Promise<unknown>;
+}
+
 /** The admin token must be long enough to be unguessable: refuse a weak one at startup instead of running with it. */
 export const MIN_ADMIN_TOKEN_LENGTH = 24;
 
@@ -108,6 +130,8 @@ export interface AppOptions {
   marketCacheMs?: number;
   /** Public tweet lookup behind GET /social/tweets/:id (the /calledit page). Default: X's public embed endpoint. */
   tweets?: TweetLookup;
+  /** Phase 2 Phoenix order routing. Absent = routing disabled (the /admin/routing routes answer 404). */
+  routing?: RoutingAdmin;
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -244,6 +268,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     marketDataReachable: await svc.market.ping(),
     // Phase 1 never routes orders, so the builder code is unused. Reported only as a configured flag.
     builderCodeConfigured: opts.builderCodeConfigured ?? Boolean(process.env.PHOENIX_BUILDER_CODE),
+    // Phase 2 A-book routing to Phoenix: "disabled" unless ROUTING_ENABLED=true ("dry_run", "live", or "<mode>:halted").
+    routing: opts.routing?.healthLabel() ?? "disabled",
   }));
 
   app.get("/rules", async () => ({
@@ -510,6 +536,38 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.post<{ Params: { id: string } }>("/admin/claims/:id/reject", async (req) =>
     svc.reviewClaim(req.params.id, { decision: "reject", reason: rejectPayoutBody.parse(req.body ?? {}).reason, actor: actorOf(req) }),
   );
+
+  // ------------------------------------------------------------ Phase 2: Phoenix routing admin (GARUDA_ADMIN_TOKEN)
+
+  const routing = () => opts.routing ?? (() => { throw new ServiceError(404, "not_found", "Not found"); })();
+  app.get("/admin/routing", async () => routing().status());
+  app.get<{ Querystring: { challengeId?: string; limit?: string } }>("/admin/routing/orders", async (req) => ({
+    orders: await routing().listOrders({ challengeId: req.query.challengeId || undefined, limit: req.query.limit ? Number(req.query.limit) : undefined }),
+  }));
+  /** Select or deselect a FUNDED account for A-book routing (per-trader opt-in). Evaluation and demo accounts are refused. */
+  app.put<{ Params: { challengeId: string } }>("/admin/routing/traders/:challengeId", async (req) => {
+    const r = routing();
+    const b = routingTraderBody.parse(req.body ?? {});
+    const st = await svc.getState(req.params.challengeId, { refresh: false });
+    if (b.enabled && (st.stage !== "funded" || st.demo || st.status !== "active")) {
+      throw new ServiceError(409, "not_routable", "Only live, non-demo FUNDED accounts can be selected for routing");
+    }
+    return { trader: await r.setTrader(req.params.challengeId, { ...b, wallet: st.wallet }, actorOf(req)) };
+  });
+  app.post("/admin/routing/halt", async (req) => {
+    await routing().haltRouting(actorOf(req));
+    return routing().status();
+  });
+  app.post("/admin/routing/resume", async (req) => {
+    try {
+      await routing().resumeRouting(actorOf(req));
+    } catch (e) {
+      throw new ServiceError(409, "routing_disabled", e instanceof Error ? e.message : String(e));
+    }
+    return routing().status();
+  });
+  app.post("/admin/routing/flatten", async (req) => ({ closed: await routing().flatten(actorOf(req)) }));
+  app.post("/admin/routing/reconcile", async () => ({ reconcile: await routing().reconcile() }));
 
   // ------------------------------------------------------------ M4: USDC checkout
 
