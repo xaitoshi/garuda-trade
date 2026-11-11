@@ -80,17 +80,19 @@ function Card({ k, selected, onPick }: { k: KnightCard; selected: boolean; onPic
   const v = knightView(k.c);
   return (
     <button className={`kc ${CLS[k.status] ?? ""} ${selected ? "sel" : ""}`} onClick={onPick} data-testid="knight-card">
+      <div className="stage">
+        <KnightImg level={v.level} state={artState(k.c)} fill alt="" />
+      </div>
       <div className="top2">
         <span className={`st ${stClass(k.status)}`}>{k.status}</span>
         <span className="mono dim" style={{ fontSize: 11 }}>{k.idLabel}</span>
       </div>
-      <div className="stage">
-        <KnightImg level={v.level} state={artState(k.c)} size={130} />
-      </div>
-      <div className="nm">{v.name}</div>
-      <div className="mt">
-        <span>{v.label}</span>
-        <span>{v.demo ? "Demo" : v.levelName} · {usd(k.c.risk.startingBalance / 1000)}k</span>
+      <div className="kc-foot">
+        <div className="nm">{v.name}</div>
+        <div className="mt">
+          <span>{v.label}</span>
+          <span>{v.demo ? "Demo" : v.levelName} · {usd(k.c.risk.startingBalance / 1000)}k</span>
+        </div>
       </div>
     </button>
   );
@@ -112,8 +114,8 @@ function Detail({ k }: { k: KnightCard }) {
         <span className={`st ${stClass(k.status)}`}>{k.status}</span>
       </div>
       <div className="dstage" style={{ marginTop: 14 }}>
-        <KnightImg level={v.level} state={artState(k.c)} size={190} />
-        <span className="slot-tag" style={{ left: 12, top: 12 }}>{artState(k.c)[0]!.toUpperCase() + artState(k.c).slice(1)}</span>
+        <KnightImg level={v.level} state={artState(k.c)} fill alt="" />
+        <span className="slot-tag" style={{ left: 12, top: 12, zIndex: 2 }}>{artState(k.c)[0]!.toUpperCase() + artState(k.c).slice(1)}</span>
       </div>
       <div className="stats">
         <div><b>{k.battles}</b><span>Battles</span></div>

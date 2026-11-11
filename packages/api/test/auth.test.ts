@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { ACCOUNT_CAPS, TIERS } from "@garuda/risk-engine";
 import type { FastifyInstance } from "fastify";
 import { base58Decode, base58Encode } from "../src/base58.js";
 import { AuthService, InMemoryAuthStore, buildApp, parseSignature, parseWallet, verifyWalletSignature } from "../src/index.js";
@@ -189,8 +190,8 @@ describe("HTTP: sign-in and ownership", () => {
     const w = newWallet();
     const t = await signIn(app, w);
     const make = (tier: string, stage?: string) => app.inject({ method: "POST", url: "/challenges", headers: bearer(t), payload: { tier, stage } });
-    expect((await make("ascended")).statusCode).toBe(201);
-    expect((await make("ascended")).statusCode).toBe(201);
+    const slots = Math.floor(ACCOUNT_CAPS.evaluationAggregateUsd / TIERS.ascended.accountSize);
+    for (let i = 0; i < slots; i++) expect((await make("ascended")).statusCode).toBe(201);
     const capped = await make("squire");
     expect(capped.statusCode).toBe(403);
     expect(capped.json().error).toBe("evaluation_cap_exceeded");

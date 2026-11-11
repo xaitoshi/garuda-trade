@@ -72,15 +72,18 @@ export function Ascension({ c }: { c: ChallengeState }) {
             {!k.demo && (
               <>
                 <div className="before">
-                  <KnightImg level={k.level} size={150} />
+                  <div className="art-box">
+                    <KnightImg level={k.level} fill alt="" />
+                  </div>
                   <div className="cap">Before<b>LV.{k.level} {k.levelName}</b></div>
                 </div>
                 <div className="arrow">›››</div>
               </>
             )}
             <div className="after">
-              <div className="halo" style={{ background: `radial-gradient(circle, ${LEVEL_COLOR[after]}55, transparent 68%)` }} />
-              <KnightImg level={after} state="victory" size={270} />
+              <div className="art-box after-box">
+                <KnightImg level={after} state="victory" fill alt="" />
+              </div>
               <div className="cap">
                 {k.demo ? "Demo cleared" : "AFTER"}
                 <b style={{ color: LEVEL_COLOR[after] }}>{k.demo ? k.name : `LV.${after} ${LEVELS[after - 1]!.name}`}</b>
@@ -112,7 +115,7 @@ export function Ascension({ c }: { c: ChallengeState }) {
           {unlocked && (
             <div className="panel un">
               <div className="un-ic">
-                <KnightImg level={(k.level + 1) as KnightLevel} size={50} />
+                <KnightImg level={(k.level + 1) as KnightLevel} fill alt="" />
               </div>
               <div>
                 <span className="lbl">Newly unlocked</span>
@@ -136,8 +139,8 @@ export function Ascension({ c }: { c: ChallengeState }) {
           </div>
           <div className="panel share">
             <div className="sc">
+              <KnightImg level={after} state="victory" fill alt="" />
               <small>GARUDA</small>
-              <KnightImg level={after} state="victory" size={92} />
             </div>
             <div>
               <div className="lbl">Share card</div>

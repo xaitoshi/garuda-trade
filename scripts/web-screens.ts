@@ -120,6 +120,15 @@ try {
   await page.getByTestId("tier-squire").waitFor();
   ok("ascended is locked for a fresh wallet", await page.getByTestId("pick-ascended").isDisabled());
   await shot("02-challenges", { full: true });
+  await page.getByTestId("challenges-menu").click();
+  await page.getByTestId("challenges-dropdown").waitFor();
+  await shot("09-challenges-dropdown");
+  for (const [name, path] of [["09b-rules", "/challenges/rules"], ["09c-markets", "/challenges/markets"], ["09d-faq", "/challenges/faq"]] as const) {
+    await go(path);
+    await shot(name, { full: true, settle: 800 });
+  }
+  await go("/challenges");
+  await page.getByTestId("tier-squire").waitFor();
 
   // ---- USDC checkout of a Squire through quote -> (stub) pay -> confirm -> reveal
   await page.getByTestId("pick-squire").click();

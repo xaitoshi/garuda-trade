@@ -9,6 +9,7 @@ import { PrivyApp } from "./lib/PrivyApp";
 import { TopBar } from "./components/TopBar";
 import { Landing } from "./pages/Landing";
 import { Challenges } from "./pages/Challenges";
+import { ChallengeFaq, ChallengeMarkets, ChallengeRules } from "./pages/ChallengeInfo";
 import { Terminal } from "./pages/Terminal";
 import { Barracks } from "./pages/Barracks";
 import { Revive } from "./pages/Revive";
@@ -42,6 +43,9 @@ function Shell() {
       <TopBar landing={landing} />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/challenges/rules" element={<ChallengeRules />} />
+        <Route path="/challenges/markets" element={<ChallengeMarkets />} />
+        <Route path="/challenges/faq" element={<ChallengeFaq />} />
         <Route path="/challenges" element={<Challenges />} />
         <Route path="/terminal" element={<Terminal />} />
         <Route path="/terminal/:id" element={<Terminal />} />

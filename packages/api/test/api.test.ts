@@ -44,8 +44,8 @@ describe("POST /challenges", () => {
     const { status, body } = await create();
     expect(status).toBe(201);
     expect(body).toMatchObject({ simulated: true, tier: "knight", knight: "Sir Pudding", status: "active" });
-    expect(body.account).toMatchObject({ startingBalance: 25_000, balance: 25_000, equity: 25_000 });
-    expect(body.risk).toMatchObject({ dailyFloor: 24_250, drawdownFloor: 23_500, targetEquity: 27_500, effectiveFloor: 24_250 });
+    expect(body.account).toMatchObject({ startingBalance: 10_000, balance: 10_000, equity: 10_000 });
+    expect(body.risk).toMatchObject({ dailyFloor: 9_700, drawdownFloor: 9_400, targetEquity: 11_000, effectiveFloor: 9_700 });
   });
 
   it("rejects bad input and unknown tiers with 400", async () => {
@@ -140,8 +140,9 @@ describe("orders", () => {
 describe("rule engine through the API", () => {
   it("pass: +10% flattens the book, locks the challenge and logs the boss kill", async () => {
     const { body: c } = await create();
-    await order(c.id, { symbol: "SOL", side: "buy", size: 2400, type: "market" }); // ~9x
-    market.setMove("SOL", 0.014); // ~ +$3,100 floating
+    const passSize = Math.round((c.account.startingBalance * 2400) / 25_000);
+    await order(c.id, { symbol: "SOL", side: "buy", size: passSize, type: "market" });
+    market.setMove("SOL", 0.014);
     const st = (await app.inject({ method: "POST", url: `/challenges/${c.id}/tick` })).json();
     expect(st.status).toBe("passed");
     expect(st.positions).toHaveLength(0);
@@ -153,8 +154,9 @@ describe("rule engine through the API", () => {
 
   it("daily loss breach: warnings at 50/80%, then Wounded, positions closed, no more trading", async () => {
     const { body: c } = await create();
-    await order(c.id, { symbol: "SOL", side: "buy", size: 2400, type: "market" });
-    market.setMove("SOL", -0.0018); // ~ -$400 floating + costs: past 50%
+    const sz = Math.round((c.account.startingBalance * 2400) / 25_000);
+    await order(c.id, { symbol: "SOL", side: "buy", size: sz, type: "market" });
+    market.setMove("SOL", -0.0018);
     let st = (await app.inject({ method: "POST", url: `/challenges/${c.id}/tick` })).json();
     expect(st.status).toBe("active");
     expect(st.combatLog.some((e: any) => e.kind === "warning")).toBe(true);
@@ -173,8 +175,8 @@ describe("rule engine through the API", () => {
 
   it("a breach caught by the pre-order refresh locks the challenge (409)", async () => {
     const { body: c } = await create({ tier: "squire", knight: "Sir Oops" });
-    // $10k Squire: 3% = $300. 900 SOL ~ $84k at ~8.4x, then -0.5% = -$420
-    await order(c.id, { symbol: "SOL", side: "buy", size: 900, type: "market" });
+    const sz = Math.round((c.account.startingBalance * 900) / 10_000);
+    await order(c.id, { symbol: "SOL", side: "buy", size: sz, type: "market" });
     market.setMove("SOL", -0.005);
     const r = await order(c.id, { symbol: "SOL", side: "buy", size: 1, type: "market" });
     expect(r.status).toBe(409); // the refresh before the order breached the account
@@ -211,7 +213,7 @@ describe("meta endpoints", () => {
   it("/rules exposes tiers, caps and the 46-market whitelist", async () => {
     const r = (await app.inject({ method: "GET", url: "/rules" })).json();
     expect(r.markets).toHaveLength(46);
-    expect(r.tiers.knight.fee).toBe(275);
+    expect(r.tiers.knight.fee).toBe(79);
     expect(r.common.dailyLossPct).toBe(0.03);
   });
 

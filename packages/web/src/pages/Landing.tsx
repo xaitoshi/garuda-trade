@@ -11,7 +11,7 @@ const LANDING_INK = "#08090a";
 /** Used until /rules answers, so the landing page never depends on the API being up. */
 const FALLBACK = {
   common: { profitTargetPct: 0.1, dailyLossPct: 0.03, maxDrawdownPct: 0.06, profitSplit: 0.8 },
-  tiers: { squire: { fee: 119, accountSize: 10_000 }, knight: { fee: 275, accountSize: 25_000 }, paladin: { fee: 499, accountSize: 50_000 }, ascended: { fee: 899, accountSize: 100_000 } },
+  tiers: { squire: { fee: 39, accountSize: 5_000 }, knight: { fee: 79, accountSize: 10_000 }, paladin: { fee: 119, accountSize: 15_000 }, ascended: { fee: 200, accountSize: 25_000 } },
 };
 const kfmt = (n: number) => `$${Math.round(n / 1000)}k`;
 const SUB = ["Mint any challenge", "Pass a challenge", "Level up again", "Funded and thriving"];
@@ -103,7 +103,7 @@ export function Landing() {
         <div className="tiers rv">
           {paid.map((p) => (
             <article className="tier" data-lv={p.level} key={p.tier}>
-              <div className="tier-art"><KnightImg level={p.level as KnightLevel} size={110} /></div>
+              <div className="tier-art"><KnightImg level={p.level as KnightLevel} fill alt="" /></div>
               <div className="tier-name">{p.name} Trial</div>
               <div className="tier-size">{kfmt(p.accountSize)}<span>account</span></div>
               <dl>
@@ -131,8 +131,7 @@ export function Landing() {
           {LEVELS.map((l, i) => (
             <div className="lvl" style={{ ["--i" as string]: i }} key={l.tier}>
               <div className="lvl-art">
-                <KnightImg level={l.level as KnightLevel} size={150} className="knight" />
-                <div className="plinth" />
+                <KnightImg level={l.level as KnightLevel} fill alt="" />
               </div>
               <div className="lvl-meta"><span className="mono">LV.{l.level}</span><h3>{l.name}</h3><p>{SUB[i]}</p></div>
             </div>

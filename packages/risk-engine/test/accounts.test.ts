@@ -80,10 +80,10 @@ describe("revive rules (rulebook section 17)", () => {
   const ok = { tier: "knight" as const, status: "wounded" as const, alreadyRevived: false, revivesUsed: 0, breachAt: T0 };
   const H24 = 24 * 3_600_000;
   it("prices a revive at 20% off the same tier", () => {
-    expect(checkRevive({ ...ok, tier: "squire", now: T0 + H24 }).fee).toBe(95.2);
-    expect(checkRevive({ ...ok, tier: "knight", now: T0 + H24 }).fee).toBe(220);
-    expect(checkRevive({ ...ok, tier: "paladin", now: T0 + H24 }).fee).toBe(399.2);
-    expect(checkRevive({ ...ok, tier: "ascended", now: T0 + H24 }).fee).toBe(719.2);
+    expect(checkRevive({ ...ok, tier: "squire", now: T0 + H24 }).fee).toBe(31.2);
+    expect(checkRevive({ ...ok, tier: "knight", now: T0 + H24 }).fee).toBe(63.2);
+    expect(checkRevive({ ...ok, tier: "paladin", now: T0 + H24 }).fee).toBe(95.2);
+    expect(checkRevive({ ...ok, tier: "ascended", now: T0 + H24 }).fee).toBe(160);
   });
   it("waits out the 24h cooldown from the breach", () => {
     expect(checkRevive({ ...ok, now: T0 + H24 - 1 })).toMatchObject({ eligible: false, reason: "revive_cooldown", availableAt: T0 + H24 });

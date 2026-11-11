@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ACCOUNT_CAPS, TIERS } from "@garuda/risk-engine";
 import { ServiceError, StubPaymentProvider } from "../src/index.js";
 import { DAY, HOUR, breach, makeRig } from "./helpers.js";
 
@@ -15,14 +16,17 @@ const failsWith = async (p: Promise<unknown>, code: string) => {
   return err as ServiceError;
 };
 
+const evalSlots = Math.floor(ACCOUNT_CAPS.evaluationAggregateUsd / TIERS.ascended.accountSize);
+const fundedSlots = Math.floor(ACCOUNT_CAPS.fundedAggregateUsd / TIERS.ascended.accountSize);
+
 describe("account caps (rulebook 20)", () => {
   it("caps aggregate evaluation size at $200k per wallet and counts only live accounts", async () => {
     const { svc } = makeRig();
-    await svc.create({ tier: "ascended", wallet: W });
+    for (let i = 0; i < evalSlots - 1; i++) await svc.create({ tier: "ascended", wallet: W });
     const b = await svc.create({ tier: "ascended", wallet: W });
     const e = await failsWith(svc.create({ tier: "squire", wallet: W }), "evaluation_cap_exceeded");
     expect(e.status).toBe(403);
-    expect(e.detail).toMatchObject({ cap: 200_000, used: 200_000, requested: 10_000 });
+    expect(e.detail).toMatchObject({ cap: ACCOUNT_CAPS.evaluationAggregateUsd, used: evalSlots * TIERS.ascended.accountSize, requested: TIERS.squire.accountSize });
     // another wallet is unaffected
     await svc.create({ tier: "ascended", wallet: W2 });
     expect(b.tier).toBe("ascended");
@@ -31,7 +35,7 @@ describe("account caps (rulebook 20)", () => {
   it("frees cap room when an account is breached", async () => {
     const rig = makeRig();
     const { svc } = rig;
-    await svc.create({ tier: "ascended", wallet: W });
+    for (let i = 0; i < evalSlots - 1; i++) await svc.create({ tier: "ascended", wallet: W });
     const k = await svc.create({ tier: "ascended", wallet: W });
     await failsWith(svc.create({ tier: "knight", wallet: W }), "evaluation_cap_exceeded");
     await breach(rig, k.id, 3000);
@@ -41,7 +45,7 @@ describe("account caps (rulebook 20)", () => {
 
   it("caps aggregate funded size at $300k, separately from evaluation", async () => {
     const { svc } = makeRig();
-    for (let i = 0; i < 3; i++) await svc.create({ tier: "ascended", stage: "funded", wallet: W });
+    for (let i = 0; i < fundedSlots; i++) await svc.create({ tier: "ascended", stage: "funded", wallet: W });
     await failsWith(svc.create({ tier: "squire", stage: "funded", wallet: W }), "funded_cap_exceeded");
     // evaluation room is independent
     expect((await svc.create({ tier: "ascended", wallet: W })).stage).toBe("evaluation");
@@ -49,7 +53,7 @@ describe("account caps (rulebook 20)", () => {
 
   it("archived funded accounts stop counting toward the funded cap", async () => {
     const { svc, clock } = makeRig();
-    for (let i = 0; i < 3; i++) await svc.create({ tier: "ascended", stage: "funded", wallet: W });
+    for (let i = 0; i < fundedSlots; i++) await svc.create({ tier: "ascended", stage: "funded", wallet: W });
     await failsWith(svc.create({ tier: "squire", stage: "funded", wallet: W }), "funded_cap_exceeded");
     clock.t += 90 * DAY + 1;
     await svc.sweepLifecycle();
@@ -60,8 +64,8 @@ describe("account caps (rulebook 20)", () => {
 
   it("serialises concurrent creates for one wallet so the cap cannot be raced", async () => {
     const { svc } = makeRig();
-    const results = await Promise.allSettled(Array.from({ length: 4 }, () => svc.create({ tier: "ascended", wallet: W })));
-    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
+    const results = await Promise.allSettled(Array.from({ length: evalSlots + 2 }, () => svc.create({ tier: "ascended", wallet: W })));
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(evalSlots);
     expect(results.filter((r) => r.status === "rejected")).toHaveLength(2);
   });
 });
@@ -207,7 +211,7 @@ describe("revive (rulebook 17)", () => {
   it("is locked for 24 hours after the breach", async () => {
     const { rig, k } = await knightWounded();
     const info = await rig.svc.reviveInfo(k.id);
-    expect(info).toMatchObject({ eligible: false, reason: "revive_cooldown", fee: 220, revivesLeft: 3 });
+    expect(info).toMatchObject({ eligible: false, reason: "revive_cooldown", fee: 63.2, revivesLeft: 3 });
     expect(info.availableAt).toBe(rig.clock.t + 24 * HOUR);
     const e = await failsWith(rig.svc.revive(k.id), "revive_cooldown");
     expect(e.status).toBe(429);
@@ -222,12 +226,12 @@ describe("revive (rulebook 17)", () => {
     const { rig, k } = await knightWounded(makeRig({ payments }));
     rig.clock.t += 25 * HOUR;
     const res = await rig.svc.revive(k.id);
-    expect(res.feeUsd).toBe(220); // 275 * 0.8
+    expect(res.feeUsd).toBe(63.2); // 79 * 0.8
     expect(payments.charges).toHaveLength(1);
-    expect(payments.charges[0]).toMatchObject({ amountUsd: 220, kind: "revive", wallet: W });
+    expect(payments.charges[0]).toMatchObject({ amountUsd: 63.2, kind: "revive", wallet: W });
     expect(res.state).toMatchObject({ tier: "knight", stage: "evaluation", status: "active", knight: "Sir Lance", knightId: k.knightId, reviveOf: k.id, scars: 1 });
     expect(res.state.id).not.toBe(k.id);
-    expect(res.state.account.balance).toBe(25_000);
+    expect(res.state.account.balance).toBe(10_000);
     const old = await rig.svc.getState(k.id, { refresh: false });
     expect(old.status).toBe("wounded");
     expect(old.revivedBy).toBe(res.state.id);
@@ -235,7 +239,7 @@ describe("revive (rulebook 17)", () => {
   });
 
   it("charges the discounted fee for each tier", async () => {
-    for (const [tier, fee] of [["squire", 95.2], ["paladin", 399.2], ["ascended", 719.2]] as const) {
+    for (const [tier, fee] of [["squire", 31.2], ["paladin", 95.2], ["ascended", 160]] as const) {
       const rig = makeRig();
       const c = await rig.svc.create({ tier, wallet: W });
       await breach(rig, c.id, 600);
@@ -311,9 +315,8 @@ describe("revive (rulebook 17)", () => {
   it("respects the evaluation cap for the replacement account", async () => {
     const rig = makeRig();
     const a = await rig.svc.create({ tier: "ascended", wallet: W });
-    await breach(rig, a.id, 3500);
-    await rig.svc.create({ tier: "ascended", wallet: W });
-    await rig.svc.create({ tier: "ascended", wallet: W });
+    await breach(rig, a.id);
+    for (let i = 0; i < evalSlots; i++) await rig.svc.create({ tier: "ascended", wallet: W });
     rig.clock.t += 25 * HOUR;
     await failsWith(rig.svc.revive(a.id), "evaluation_cap_exceeded");
   });

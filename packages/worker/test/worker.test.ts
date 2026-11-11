@@ -69,13 +69,13 @@ describe("RiskWorker: replay with zero missed breaches", () => {
     const s = await setup();
     const rand = mulberry32(20261104);
     const cases = [
-      { side: "buy" as const, size: 1000 },
-      { side: "sell" as const, size: 1000 },
       { side: "buy" as const, size: 400 },
       { side: "sell" as const, size: 400 },
-      { side: "buy" as const, size: 120 },
-      { side: "sell" as const, size: 120 },
-      { side: "buy" as const, size: 2000 },
+      { side: "buy" as const, size: 160 },
+      { side: "sell" as const, size: 160 },
+      { side: "buy" as const, size: 48 },
+      { side: "sell" as const, size: 48 },
+      { side: "buy" as const, size: 800 },
     ];
     const accounts = [] as { id: string; signed: number; entry: number; balance0: number }[];
     for (const c of cases) {
@@ -102,8 +102,8 @@ describe("RiskWorker: replay with zero missed breaches", () => {
       for (const r of results) if (r.status === "wounded" && !detectedAt.has(r.challengeId)) detectedAt.set(r.challengeId, step);
     }
 
-    const floor = 25_000 - 1_500; // static max drawdown floor; the daily floor (24,250) is higher and binds first
-    const dailyFloor = 24_250;
+    const floor = 10_000 - 600; // static max drawdown floor; the daily floor (9,700) is higher and binds first
+    const dailyFloor = 9_700;
     let breachedCount = 0;
     for (const a of accounts) {
       const eq = mids.map((m) => a.balance0 + a.signed * (m - a.entry));

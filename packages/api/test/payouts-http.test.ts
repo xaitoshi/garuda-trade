@@ -149,7 +149,7 @@ describe("payout routes", () => {
       expect(rj.json().payout).toMatchObject({ status: "rejected", rejectedReason: "wash trading suspected" });
       const mine = (await app.inject({ method: "GET", url: `/payouts/${p.id}`, headers: bearer(ta) })).json();
       expect(mine).toMatchObject({ status: "rejected", rejectedReason: "wash trading suspected" });
-      expect((await rig.svc.getState(id)).account.balance).toBeGreaterThan(25_000);
+      expect((await rig.svc.getState(id)).account.balance).toBeGreaterThan(10_000);
     });
 
     it("retry puts a failed payout back in the queue", async () => {
