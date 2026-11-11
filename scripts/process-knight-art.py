@@ -9,7 +9,7 @@ Outputs:
   packages/web/public/art/nft/{1-4}.png
   packages/web/public/art/knights/{1-4}-{active,dormant,victory,wounded}.png
   packages/web/public/art/cards/{1-4}.png   portrait crops for tall challenge / landing cards
-  packages/web/public/art/steps/{2,4}.png   landscape crops for landing How-it-works panels
+  packages/web/public/art/steps/{1,2,4}.png landscape crops for landing How-it-works panels
   packages/web/public/art/icons/icon-{1-4}.png
   packages/web/public/art/landing/hero-knight-dotted.png  (Paladin square)
 """
@@ -188,7 +188,7 @@ def main() -> int:
         for state in ("active", "dormant", "victory", "wounded"):
             save(square, ROOT / "packages/web/public/art/knights" / f"{level}-{state}.png")
         save(card, ROOT / "packages/web/public/art/cards" / f"{level}.png")
-        if level in (2, 4):
+        if level in (1, 2, 4):
             step = edge_fit_crop(trimmed, STEP_ASPECT, STEP_MAX_W)
             save(step, ROOT / "packages/web/public/art/steps" / f"{level}.png")
             srep = edge_report(step)
