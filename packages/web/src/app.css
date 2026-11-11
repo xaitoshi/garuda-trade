@@ -200,7 +200,8 @@ button.wallet{cursor:pointer}
   main.pg-landing .hero-headline{font-size:clamp(32px,8vw,48px);max-width:none}
   main.pg-landing .hero-copy{padding:0 20px}
   main.pg-landing .hero-art{height:320px;min-height:280px;margin:0}
-  main.pg-landing .hero-knight{object-position:center center;max-width:420px}
+  main.pg-landing .hero-knight{object-fit:cover;object-position:center center;max-width:none}
+  main.pg-landing .steps{grid-template-columns:1fr}
   main.pg-landing .strip{grid-template-columns:repeat(2,1fr);margin:0 20px}
   main.pg-landing .strip div:nth-child(3){border-left:0;padding-left:0}
   main.pg-landing section.s{padding:90px 20px 0}

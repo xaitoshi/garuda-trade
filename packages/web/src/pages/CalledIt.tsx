@@ -23,6 +23,7 @@ import {
   type TweetInfo,
 } from "../lib/calledit";
 import { renderCard } from "../lib/calledit-card";
+import { XMarketsButton } from "../components/XMarkets";
 
 const EXAMPLES: { label: string; tweet: string; ticker: string; side: Side }[] = [
   { label: "@pedrosilva shorts $SOL", tweet: "https://x.com/pedrosilva/status/2111427300243693614", ticker: "SOL", side: "short" },
@@ -140,8 +141,8 @@ export function CalledIt() {
     const won = res.stats.callPct >= 0;
     const what = res.stats.side === "short" ? "the top" : "the bottom";
     const text = won
-      ? `${who} called ${what} on $${res.asset.symbol}. ${fmtPct(res.stats.callPct)} since the post.\n\nReceipts pinned to the exact candle on Garuda:`
-      : `${who} tried to call ${what} on $${res.asset.symbol}. ${fmtPct(res.stats.callPct)} since the post.\n\nReceipts pinned to the exact candle on Garuda:`;
+      ? `${who} called ${what} on $${res.asset.symbol}. ${fmtPct(res.stats.callPct)} since the post.\n\nReceipts pinned to the exact candle on Garuda (@garuda_markets):`
+      : `${who} tried to call ${what} on $${res.asset.symbol}. ${fmtPct(res.stats.callPct)} since the post.\n\nReceipts pinned to the exact candle on Garuda (@garuda_markets):`;
     return `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl())}`;
   }, [res]);
 
@@ -317,7 +318,10 @@ export function CalledIt() {
             <span className="up">Free</span>
           </Link>
         </div>
-        <Link to="/challenges" className="btn btn-fire">Start a challenge</Link>
+        <div className="cta-row">
+          <Link to="/challenges" className="btn btn-fire">Start a challenge</Link>
+          <XMarketsButton />
+        </div>
       </section>
     </main>
   );

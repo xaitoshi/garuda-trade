@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
 import { LEVELS, type KnightLevel } from "../lib/knight";
 import { pct, usd } from "../lib/format";
-import { BossImg, KnightImg } from "../components/Art";
+import { KnightImg } from "../components/Art";
+import { XMarketsButton } from "../components/XMarkets";
 
 /** Near-black sampled from the dotted hero artwork edges (~#08090a). */
 const LANDING_INK = "#08090a";
@@ -53,6 +54,7 @@ export function Landing() {
           </h1>
           <div className="cta-row">
             <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
+            <XMarketsButton />
           </div>
         </div>
         <div className="hero-art">
@@ -81,15 +83,21 @@ export function Landing() {
         </div>
         <div className="steps">
           <article className="step rv">
-            <div className="art"><KnightImg level={2} state="dormant" size={190} /></div>
+            <div className="art">
+              <img className="knight knight-fill" src="/art/steps/2.png" alt="" draggable={false} />
+            </div>
             <div className="step-body"><span className="step-n">01</span><h3>Mint a knight</h3><p>Every challenge mints a knight NFT.</p></div>
           </article>
           <article className="step rv">
-            <div className="art"><KnightImg level={2} size={160} /><span className="vs">VS</span><BossImg state="hurt" size={170} /></div>
-            <div className="step-body"><span className="step-n">02</span><h3>Battle the Phoenix</h3><p>Profit chips the boss. Losses hurt your knight.</p></div>
+            <div className="art">
+              <img className="knight knight-fill" src="/art/steps/2.png" alt="" draggable={false} />
+            </div>
+            <div className="step-body"><span className="step-n">02</span><h3>Tame the Phoenix</h3><p>Profit chips the boss. Losses hurt your knight.</p></div>
           </article>
           <article className="step rv">
-            <div className="art"><KnightImg level={4} state="victory" size={190} /></div>
+            <div className="art">
+              <img className="knight knight-fill" src="/art/steps/4.png" alt="" draggable={false} />
+            </div>
             <div className="step-body"><span className="step-n">03</span><h3>Ascend, get funded</h3><p>Hit {pct(c.profitTargetPct, 0)} inside the limits and claim a funded account.</p></div>
           </article>
         </div>
@@ -179,6 +187,7 @@ export function Landing() {
         <h2 className="rv">Face the<br />Phoenix.</h2>
         <div className="cta-row rv">
           <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
+          <XMarketsButton />
           <span className="cta-note">From <b>{usd(t.squire.fee)}</b></span>
         </div>
       </section>
