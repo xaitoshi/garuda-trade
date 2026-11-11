@@ -73,7 +73,7 @@ export function Challenges() {
   return (
     <main className="pg-challenges" data-testid="challenges">
       <button className="promo" onClick={() => { setTab("challenges"); setSel("ascended"); }}>
-        <KnightImg level={4} fill alt="" />
+        <KnightImg level={4} variant="card" fill alt="" />
         <div className="promo-shade" />
         <div className="promo-copy">
           <h3>Ascended Trial: our biggest account</h3>
@@ -180,7 +180,7 @@ function TierCard({ id, spec, rules, pill, note, btn, locked, selected, onPick, 
   const demo = id === "demo";
   return (
     <div className={`cd ${locked ? "lk" : ""} ${selected ? "sel" : ""} ${demo ? "demo" : "bleed"}`} style={{ ["--t" as string]: TINT[id] }} data-testid={`tier-${id}`}>
-      {!demo && <KnightImg level={lvl(id)} fill alt="" />}
+      {!demo && <KnightImg level={lvl(id)} variant="card" fill alt="" />}
       <div className="cd-shade" />
       <div className="cd-body">
       <div className="ic">
