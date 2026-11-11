@@ -14,7 +14,8 @@ export interface SimAccountOptions {
  */
 export class SimAccount {
   readonly id: string;
-  readonly startingBalance: number;
+  /** Current reference size. Starts at the opening size; a funded level-up adjustment (kind `level_up`) moves it. */
+  startingBalance: number;
   balance: number;
   realizedPnl = 0;
   feesPaid = 0;
@@ -23,7 +24,7 @@ export class SimAccount {
   readonly orders = new Map<string, Order>();
   readonly fills: Fill[] = [];
   readonly fundingPayments: FundingPayment[] = [];
-  /** Payout sweeps and reversals: the only non-trading balance changes. Append-only. */
+  /** Payout sweeps and reversals, and funded level-ups: the only non-trading balance changes. Append-only. */
   readonly adjustments: BalanceAdjustment[] = [];
   /** Latest mark price per symbol. */
   readonly marks = new Map<string, number>();
@@ -93,6 +94,9 @@ export class SimAccount {
   applyAdjustment(adj: BalanceAdjustment): boolean {
     if (this.adjustments.some((a) => a.id === adj.id)) return false;
     this.balance += adj.amount;
+    // Funded scaling: a level-up grows the balance AND the reference size by the same step, so profit above the
+    // size is unchanged and the ledger replay (opening size + adjustments) rebuilds the current size exactly.
+    if (adj.kind === "level_up") this.startingBalance = Math.round((this.startingBalance + adj.amount) * 100) / 100;
     this.adjustments.push({ ...adj });
     return true;
   }
@@ -104,7 +108,7 @@ export class SimAccount {
   /** Net USD swept out of the account by payouts (sweeps minus reversals). */
   payoutsSwept(): number {
     let n = 0;
-    for (const a of this.adjustments) n -= a.amount;
+    for (const a of this.adjustments) if (a.kind !== "level_up") n -= a.amount;
     return n;
   }
 

@@ -50,7 +50,7 @@ describe("challenge purchase", () => {
     expect(out.status).toBe("fulfilled");
     const o = out.order;
     expect(o.knightId).toBeDefined();
-    expect(await s.knights.get(o.knightId!)).toMatchObject({ owner: A, level: "squire", frozen: true });
+    expect(await s.knights.get(o.knightId!)).toMatchObject({ owner: A, tier: "squire", level: 1, frozen: true });
     const ch = await s.svc.getState(o.challengeId!, { refresh: false });
     expect(ch).toMatchObject({ tier: "squire", wallet: A, knightId: o.knightId });
   });
@@ -183,22 +183,22 @@ describe("challenge purchase", () => {
     expect((await s.purchases.get(q.orderId)).status).toBe("fulfilled");
   });
 
-  it("fails BEFORE payment when the buyer could not use the purchase (gated tier without the knight)", async () => {
-    const s = shop({ enforceGating: true });
-    expect(await err(s.purchases.quoteChallenge({ wallet: A, tier: "paladin" }))).toBe("403:tier_locked");
+  it("fails BEFORE payment when the buyer could not use the purchase (aggregate evaluation cap)", async () => {
+    const s = shop();
+    for (let i = 0; i < 8; i++) {
+      const q = await s.purchases.quoteChallenge({ wallet: A, tier: "ascended" });
+      await s.purchases.confirm(q.orderId, { signature: s.pay(q) });
+    }
+    expect(await err(s.purchases.quoteChallenge({ wallet: A, tier: "squire" }))).toBe("403:evaluation_cap_exceeded");
   });
 
-  it("a Paladin purchase levels the knight the buyer holds instead of minting another", async () => {
+  it("every tier is open: a Paladin purchase with no knight mints a Paladin knight at Lv.1", async () => {
     const s = shop({ enforceGating: true });
-    const q1 = await s.purchases.quoteChallenge({ wallet: A, tier: "squire" });
-    const o1 = (await s.purchases.confirm(q1.orderId, { signature: s.pay(q1) })).order;
-    // pass the squire evaluation
-    expect((await passEvaluation(s, o1.challengeId!)).status).toBe("passed");
-    const q2 = await s.purchases.quoteChallenge({ wallet: A, tier: "paladin", knightAsset: o1.knightId });
-    const o2 = (await s.purchases.confirm(q2.orderId, { signature: s.pay(q2) })).order;
-    expect(o2.knightId).toBe(o1.knightId);
+    const q = await s.purchases.quoteChallenge({ wallet: A, tier: "paladin" });
+    const o = (await s.purchases.confirm(q.orderId, { signature: s.pay(q) })).order;
+    expect(o.knightId).toBeDefined();
     expect(s.knights.mintCalls).toBe(1);
-    expect(await s.knights.get(o1.knightId!)).toMatchObject({ tier: "paladin", frozen: true });
+    expect(await s.knights.get(o.knightId!)).toMatchObject({ tier: "paladin", level: 1, status: "active", frozen: true });
   });
 });
 
@@ -303,7 +303,7 @@ describe("HTTP", () => {
     const kn = await app.inject({ method: "GET", url: `/knights?wallet=${A}` });
     expect(kn.json().knights).toHaveLength(1);
     const one = await app.inject({ method: "GET", url: `/knights/${cr.json().order.knightId}` });
-    expect(one.json()).toMatchObject({ level: "squire", frozen: true });
+    expect(one.json()).toMatchObject({ tier: "squire", level: 1, frozen: true });
   });
 
   it("202 while the transfer is not visible yet", async () => {

@@ -11,6 +11,7 @@ import { CANDLE_TF, TF_MS, TF_BARS } from "../lib/timeframes";
 import type { ChallengeState } from "../lib/types";
 import { Gate, Notice } from "../components/Gate";
 import { BattleSlot, HudTiles } from "../components/Hud";
+import { LevelUpCelebration } from "../components/LevelUp";
 import { PriceChart, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
@@ -142,6 +143,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
           {err && <span className="dn">{err}</span>}
         </div>
       )}
+      <LevelUpCelebration c={c} />
       <div className="t-top">
         <BattleSlot c={c} symbol={symbol} />
         <HudTiles c={c} />

@@ -1,26 +1,31 @@
 import { TIERS, type TierId } from "@garuda/risk-engine";
 
-/** Knight levels, lowest to highest (rulebook section 16): Squire L1, Knight L2, Paladin L3, Ascended L4. */
-export const KNIGHT_LEVELS = ["squire", "knight", "paladin", "ascended"] as const;
-export type KnightLevel = (typeof KNIGHT_LEVELS)[number];
+/**
+ * Knight tiers, lowest to highest (rulebook section 16). A knight's tier is the tier of the challenge it was minted
+ * for, and moves up only when its funded account graduates (Squire Lv.3 levelling up becomes Knight Lv.1, and so on).
+ */
+export const KNIGHT_TIERS = ["squire", "knight", "paladin", "ascended"] as const;
+export type KnightTier = (typeof KNIGHT_TIERS)[number];
 
 /**
- * Status lives onchain in the Attributes plugin. The rulebook lists Active, Wounded, Ascended, Funded. `idle` is the
- * one addition: a knight with no live account (between challenges), which is transferable.
+ * Status lives onchain in the Attributes plugin: active (live challenge), funded (live funded account), wounded
+ * (latest fight breached) or idle (nothing live, transferable). `ascended` is a legacy value from the old level model;
+ * it still parses but is no longer written.
  */
 export const KNIGHT_STATUSES = ["active", "funded", "wounded", "ascended", "idle"] as const;
 export type KnightStatus = (typeof KNIGHT_STATUSES)[number];
 
-export const levelIndex = (l: KnightLevel): number => KNIGHT_LEVELS.indexOf(l);
-export const isKnightLevel = (x: string): x is KnightLevel => (KNIGHT_LEVELS as readonly string[]).includes(x);
-export const isKnightTier = (t: TierId): t is KnightLevel => t !== "demo";
+export const tierIndex = (t: KnightTier): number => KNIGHT_TIERS.indexOf(t);
+export const isKnightTierName = (x: string): x is KnightTier => (KNIGHT_TIERS as readonly string[]).includes(x);
+export const isKnightTier = (t: TierId): t is KnightTier => t !== "demo";
 
 /** Everything the platform keeps in a knight's onchain Attributes plugin, plus what the chain says about the asset. */
 export interface KnightAttrs {
-  level: KnightLevel;
+  /** The knight's tier: the tier of its live (or latest) account. Art and metadata follow the tier. */
+  tier: KnightTier;
+  /** Funded level within the tier (Funded scaling): 1 until the funded account levels up; 1 again after a breach. */
+  level: number;
   status: KnightStatus;
-  /** Tier of the most recent (or live) challenge the knight fought. */
-  tier: KnightLevel;
   /** Id of that challenge. */
   challengeId: string;
   /** Challenges passed. */
@@ -64,7 +69,7 @@ export interface UpdateKnightInput {
   asset: string;
   attrs: KnightAttrs;
   frozen: boolean;
-  /** Knight name stays as minted; only the per-level metadata URI changes with the level. */
+  /** Knight name stays as minted; only the per-tier metadata URI changes when the knight graduates. */
   name?: string;
 }
 

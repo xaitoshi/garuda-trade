@@ -99,6 +99,8 @@ export interface ChallengeState {
   payoutsEnabled: boolean;
   /** Evaluation accounts: Path to Funded progress and claim. Null on funded accounts (absent on older servers). */
   pathToFunded?: PathToFunded | null;
+  /** Funded accounts: funded level within the tier and progress to the next one. Null otherwise (absent on older servers). */
+  scaling?: FundedScaling | null;
   reviveOf?: string;
   revivedBy?: string;
   scars: number;
@@ -161,6 +163,49 @@ export interface PathToFunded {
   next: "trade" | "claim" | "verify_identity" | "under_review" | "funded" | "rejected" | "none";
 }
 
+export type ScalingTier = Exclude<TierId, "demo">;
+
+export interface LevelUpRecord {
+  ts: number;
+  fromTier: TierId;
+  fromLevel: number;
+  fromSize: number;
+  toTier: TierId;
+  toLevel: number;
+  toSize: number;
+  profit: number;
+  payouts: number;
+}
+
+/** Funded scaling (rulebook section 16): "Knight Lv.2", its size, and progress on the flat level-up rule. */
+export interface FundedScaling {
+  tier: ScalingTier;
+  level: number;
+  label: string;
+  size: number;
+  profitSinceLevel: number;
+  profitTarget: number;
+  profitMet: boolean;
+  payoutsSinceLevel: number;
+  payoutsNeeded: number;
+  payoutsMet: boolean;
+  eligible: boolean;
+  next?: { tier: ScalingTier; level: number; size: number; graduates: boolean; label: string };
+  atCap: boolean;
+  levelSince: number;
+  history: LevelUpRecord[];
+  capHeld: boolean;
+  waitingForFlat: boolean;
+}
+
+export interface ScalingRules {
+  levelUpProfitPct: number;
+  levelUpPayouts: number;
+  ascendedStepUsd: number;
+  ascendedMaxUsd: number;
+  table: { tier: ScalingTier; name: string; levels: { level: number; size: number }[]; graduatesTo?: ScalingTier }[];
+}
+
 export interface PlaceOrderResult {
   accepted: boolean;
   reason?: string;
@@ -177,7 +222,6 @@ export interface TierSpec {
   accountSize: number;
   fee: number;
   reviveFee: number;
-  requires?: TierId;
   payouts: boolean;
 }
 
@@ -188,6 +232,8 @@ export interface Rules {
   fees: { takerFeeRate: number; makerFeeRate: number };
   markets: { symbol: string; class: string; maxLeverage: number }[];
   revive: { discount: number; maxPerKnight: number; cooldownHours: number };
+  /** Funded scaling ladder and rule (absent on older servers). */
+  scaling?: ScalingRules;
   /** The configured payout policy (absent on older servers). */
   payouts?: { split: number; minUsd: number; autoApproveUpToUsd: number; enabled: boolean };
 }
@@ -317,9 +363,11 @@ export interface KnightInfo {
   asset: string;
   owner: string;
   name: string;
-  level: "squire" | "knight" | "paladin" | "ascended";
-  status: "active" | "funded" | "wounded" | "ascended" | "idle";
+  /** The knight's tier (art follows it). */
   tier: "squire" | "knight" | "paladin" | "ascended";
+  /** Funded level within the tier (1 until the funded account levels up). */
+  level: number;
+  status: "active" | "funded" | "wounded" | "ascended" | "idle";
   wins: number;
   revives: number;
   frozen: boolean;

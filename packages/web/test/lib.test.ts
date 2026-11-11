@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { breachPrice, estSlippagePct, roundSize, sizeForPct, sizeStep, walkBook, applyTick } from "../src/lib/trade";
 import { clamp, hms, msToUtcReset, pct, pctSigned, shortAddr, usd, usdSigned } from "../src/lib/format";
-import { artState, displayName, knightView, tierOfLevel, uiStatus } from "../src/lib/knight";
+import { artState, displayName, fallbackScalingTable, knightView, tierLevelLabel, tierOfLevel, uiStatus } from "../src/lib/knight";
 import { buildBreachSeries } from "../src/lib/breach";
 import { groupKnights, matches, summary } from "../src/lib/barracks";
-import { bestKnight, eligibilityFor } from "../src/lib/eligibility";
+import { eligibilityFor } from "../src/lib/eligibility";
+import { pendingCelebration } from "../src/components/LevelUp";
 import { explorerTxUrl, isOpenPayout, notEligibleText, openPayout, payoutStatusText, totalPaid } from "../src/lib/payout";
-import type { ChallengeState, KnightInfo, MarketView, PayoutView, Position } from "../src/lib/types";
+import type { ChallengeState, MarketView, PayoutView, Position } from "../src/lib/types";
 
 const ch = (o: Record<string, unknown> = {}): ChallengeState =>
   ({
@@ -93,8 +94,13 @@ describe("format", () => {
 
 describe("knights", () => {
   it("name and level are one fact: the same view feeds every screen", () => {
-    expect(knightView(ch({ tier: "squire" })).title).toBe("Sir Pudding · LV.1");
-    expect(knightView(ch({ tier: "knight" })).label).toBe("LV.2 Knight");
+    // a challenge shows the tier; a funded account shows tier and funded level
+    expect(knightView(ch({ tier: "squire" })).title).toBe("Sir Pudding · Squire");
+    expect(knightView(ch({ tier: "knight" })).label).toBe("Knight");
+    expect(knightView(ch({ tier: "knight", stage: "funded" })).label).toBe("Knight Lv.1");
+    expect(knightView(ch({ tier: "squire", stage: "funded", scaling: { level: 2 } })).title).toBe("Sir Pudding · Squire Lv.2");
+    expect(knightView(ch({ tier: "paladin", stage: "funded", scaling: { level: 3 } })).level).toBe(3); // art number of the tier
+    expect(tierLevelLabel("ascended", 16)).toBe("Ascended Lv.16");
     expect(displayName(undefined, true)).toBe("Demo recruit");
     expect(displayName("Sir Unnamed")).toBe("Sir Unnamed");
     expect(tierOfLevel(9)).toBe("ascended");
@@ -104,7 +110,7 @@ describe("knights", () => {
     expect(uiStatus(ch({ status: "wounded" }))).toBe("wounded");
     expect(uiStatus(ch({ status: "passed" }))).toBe("passed");
     expect(uiStatus(ch({ stage: "funded" }))).toBe("funded");
-    expect(uiStatus(ch({ stage: "funded", tier: "ascended" }))).toBe("ascended");
+    expect(uiStatus(ch({ stage: "funded", tier: "ascended" }))).toBe("funded");
     expect(uiStatus(ch({ lifecycle: "dormant" }))).toBe("dormant");
     expect(artState(ch({ status: "wounded" }))).toBe("wounded");
     expect(artState(ch({ status: "passed" }))).toBe("victory");
@@ -149,29 +155,28 @@ describe("barracks", () => {
 });
 
 describe("tier eligibility", () => {
-  const knights = (o: Partial<KnightInfo>): KnightInfo[] => [{ asset: "A1", owner: "w", name: "k", level: "knight", status: "idle", tier: "knight", wins: 1, revives: 0, frozen: false, genuine: true, ...o } as KnightInfo];
-
-  it("uses onchain knights when the chain is on: not wounded, not busy, genuine", () => {
-    expect(bestKnight(knights({}), [])).toEqual({ level: 2, asset: "A1" });
-    expect(bestKnight(knights({ status: "wounded" }), []).level).toBe(0);
-    expect(bestKnight(knights({ status: "active" }), []).level).toBe(0);
-    expect(bestKnight(knights({ genuine: false }), []).level).toBe(0);
+  it("every tier is open to buy", () => {
+    for (const t of ["squire", "knight", "paladin", "ascended"] as const) expect(eligibilityFor(t)).toEqual({ locked: false, pill: { kind: "", text: "Open to all" } });
   });
 
-  it("without a chain it infers from the player's own passed accounts", () => {
-    expect(bestKnight(null, []).level).toBe(0);
-    expect(bestKnight(null, [ch({ tier: "squire", status: "passed" })]).level).toBe(2);
-    expect(bestKnight(null, [ch({ tier: "knight", status: "wounded" })]).level).toBe(0);
-    expect(bestKnight(null, [ch({ tier: "demo", demo: true, status: "passed" })]).level).toBe(0);
+  it("the fallback scaling table matches the rulebook ladder", () => {
+    const t = fallbackScalingTable();
+    expect(t[0]!.levels.map((l) => l.size)).toEqual([5_000, 6_666.67, 8_333.33]);
+    expect(t[2]!.levels.map((l) => l.size)).toEqual([15_000, 18_333.33, 21_666.67]);
+    expect(t[3]!.levels).toHaveLength(16);
+    expect(t[3]!.levels[15]!.size).toBe(100_000);
   });
+});
 
-  it("locks Paladin until a Knight-level knight is held, and says why", () => {
-    const locked = eligibilityFor("paladin", "knight", { level: 1 });
-    expect(locked.locked).toBe(true);
-    expect(locked.pill.text).toBe("Needs Knight NFT");
-    const open = eligibilityFor("paladin", "knight", { level: 2, asset: "A1" });
-    expect(open).toMatchObject({ locked: false, asset: "A1" });
-    expect(eligibilityFor("squire", undefined, { level: 0 }).pill.text).toBe("Open to all");
+describe("level up celebration", () => {
+  const rec = (ts: number) => ({ ts, fromTier: "squire", fromLevel: 3, fromSize: 8_333.33, toTier: "knight", toLevel: 1, toSize: 10_000, profit: 420, payouts: 1 });
+  it("shows the newest unseen, recent level up only", () => {
+    const now = 10 * 86_400_000;
+    const c = { id: "f1", scaling: { history: [rec(now - 1000)] } } as unknown as ChallengeState;
+    expect(pendingCelebration(c, 0, now)?.toTier).toBe("knight");
+    expect(pendingCelebration(c, 1, now)).toBeUndefined();
+    expect(pendingCelebration({ ...c, scaling: { history: [rec(0)] } } as unknown as ChallengeState, 0, now)).toBeUndefined();
+    expect(pendingCelebration({ id: "x" } as ChallengeState, 0, now)).toBeUndefined();
   });
 });
 

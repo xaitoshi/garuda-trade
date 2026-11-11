@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, errorText } from "../lib/api";
 import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
-import { LEVELS, knightView, tierOfLevel, type KnightLevel } from "../lib/knight";
+import { knightView, tierLevelLabel } from "../lib/knight";
 import { pct, usd, usdSigned } from "../lib/format";
 import type { ChallengeState } from "../lib/types";
 import { BossImg, KnightImg, Spark } from "../components/Art";
@@ -16,8 +16,8 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
   const { rules, wallet } = useSession();
   const nav = useNavigate();
   const k = knightView(c);
-  const after = (k.demo ? 1 : Math.min(4, k.level + 1)) as KnightLevel;
-  const unlocked = !k.demo && k.level < 4 ? rules?.tiers[tierOfLevel(k.level + 1)] : undefined;
+  // Passing never changes the knight's tier: it earns a funded account at Lv.1 of the same tier.
+  const fundedLabel = tierLevelLabel(c.tier, 1);
   const spec = rules?.tiers[c.tier];
   const list = usePoll(() => api.challenges(), 10_000, "asc-list");
   const funded = (list.data ?? []).find((x) => x.stage === "funded" && x.knightId && x.knightId === c.knightId && x.lifecycle !== "archived");
@@ -76,18 +76,18 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
                   <div className="art-box">
                     <KnightImg level={k.level} fill alt="" />
                   </div>
-                  <div className="cap">Before<b>LV.{k.level} {k.levelName}</b></div>
+                  <div className="cap">Challenge<b>{k.levelName} trial</b></div>
                 </div>
                 <div className="arrow">›››</div>
               </>
             )}
             <div className="after">
               <div className="art-box after-box">
-                <KnightImg level={after} state="victory" fill alt="" />
+                <KnightImg level={k.level} state="victory" fill alt="" />
               </div>
-              <div className="cap">
-                {k.demo ? "Demo cleared" : "AFTER"}
-                <b style={{ color: LEVEL_COLOR[after] }}>{k.demo ? k.name : `LV.${after} ${LEVELS[after - 1]!.name}`}</b>
+              <div className="cap" data-testid="passed-funded-label">
+                {k.demo ? "Demo cleared" : "Funded"}
+                <b style={{ color: LEVEL_COLOR[k.level] }}>{k.demo ? k.name : fundedLabel}</b>
               </div>
             </div>
             <Spark color="#8fd3ff" size={26} style={{ position: "absolute", left: 480, top: 40 }} />
@@ -113,24 +113,13 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
           </div>
         </div>
         <div className="rc">
-          {unlocked && (
-            <div className="panel un">
-              <div className="un-ic">
-                <KnightImg level={(k.level + 1) as KnightLevel} fill alt="" />
-              </div>
-              <div>
-                <span className="lbl">Newly unlocked</span>
-                <b style={{ marginTop: 4 }}>{unlocked.name} Trial</b>
-                <span>{usd(unlocked.accountSize)} account</span>
-              </div>
-            </div>
-          )}
           <div className="panel">
             <div className="ph">
               <b>{k.demo ? "Demo account" : "Funded account"}</b>
               <span className={`st ${k.demo ? "active" : "funded"}`}>{k.demo ? "Demo" : c.pathToFunded?.next === "funded" ? "Funded" : "Eligible"}</span>
             </div>
             <div className="acc">
+              {!k.demo && <div className="rw"><span>Starts at</span><b>{fundedLabel}</b></div>}
               <div className="rw"><span>Account size</span><b>{usd(start)}</b></div>
               <div className="rw"><span>Profit split</span><b className="fire">{k.demo ? "none" : pct(rules?.common.profitSplit ?? 0.8, 0)}</b></div>
               <div className="rw"><span>Daily loss</span><b>{pct(rules?.common.dailyLossPct ?? 0.03, 0)}</b></div>
@@ -140,12 +129,12 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
           </div>
           <div className="panel share">
             <div className="sc">
-              <KnightImg level={after} state="victory" fill alt="" />
+              <KnightImg level={k.level} state="victory" fill alt="" />
               <small>GARUDA</small>
             </div>
             <div>
               <div className="lbl">Share card</div>
-              <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-.03em", margin: "6px 0 4px" }}>{k.name} {k.demo ? "cleared the demo" : "ascended"}</div>
+              <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-.03em", margin: "6px 0 4px" }}>{k.name} {k.demo ? "cleared the demo" : "passed"}</div>
               <div className="mute" style={{ fontSize: 13.5 }}>{k.levelName} · {pct(c.risk.profitLoss / start)} · Boss slain</div>
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => void share()}>
                 {copied ? "Copied" : "Copy"}
@@ -168,7 +157,7 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
               {busy ? "Claiming..." : "Claim funded account"}
             </button>
           )}
-          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Challenge profit is never paid out or carried over: the funded account starts fresh at {usd(start)}. Payouts go to your signed-in wallet.</div>}
+          {spec && !k.demo && <div className="dim note mono">Funded accounts are simulated too. Challenge profit is never paid out or carried over: the funded account starts fresh at {fundedLabel}, {usd(start)}. Make 5% of the account size and take a payout to level it up. Payouts go to your signed-in wallet.</div>}
           {err && <div className="dn note">{err}</div>}
         </div>
       </div>

@@ -48,6 +48,8 @@ function Shell() {
         <Route path="/challenges/markets" element={<ChallengeMarkets />} />
         <Route path="/challenges/faq" element={<ChallengeFaq />} />
         <Route path="/challenges" element={<Challenges />} />
+        {/* The Demo tab is gone; the free Demo card lives on /challenges. Old links land there. */}
+        <Route path="/demo" element={<Navigate to="/challenges" replace />} />
         <Route path="/terminal" element={<Terminal />} />
         <Route path="/terminal/:id" element={<Terminal />} />
         <Route path="/barracks" element={<Barracks />} />

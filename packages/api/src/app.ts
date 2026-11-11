@@ -3,6 +3,8 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   ACCOUNT_CAPS,
+  SCALING_RULES,
+  scalingTable,
   CIRCUIT_BREAKER,
   COMMON_RULES,
   LEVERAGE_CAP_BY_CLASS,
@@ -18,7 +20,7 @@ import { PHOENIX_FEES } from "@garuda/sim-engine";
 import { CANDLE_TIMEFRAMES, type CandleTimeframe, type MarketSnapshot } from "@garuda/market-data";
 import type { AuthService } from "./auth.js";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitConfig } from "./rate-limit.js";
-import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, readArt } from "@garuda/chain";
+import { DEFAULT_ART_DIR, collectionMetadata, isKnightTierName, readArt, tierMetadata } from "@garuda/chain";
 import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "./payouts.js";
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
@@ -289,6 +291,21 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       riskReview: svc.fundedReview,
       riskReviewTarget: "about 1 business day",
       payoutWaitingPeriodDays: 0,
+    },
+    // Funded scaling (rulebook section 16): every tier open to buy; funded accounts level up on one flat rule.
+    scaling: {
+      tiersOpenToAll: true,
+      levelUpProfitPct: SCALING_RULES.levelUpProfitPct,
+      levelUpProfitBasis: "realized_since_last_level_up_including_paid_out",
+      levelUpPayouts: SCALING_RULES.levelUpPayouts,
+      appliedWhen: "flat",
+      graduation: "Lv.3 of Squire, Knight or Paladin levels up into Lv.1 of the next tier",
+      limitsResetToNewSize: true,
+      profitSplit: svc.payoutPolicy.split,
+      resetOnBreach: true,
+      ascendedStepUsd: SCALING_RULES.ascendedStepUsd,
+      ascendedMaxUsd: SCALING_RULES.ascendedMaxUsd,
+      table: scalingTable(),
     },
     accountCaps: ACCOUNT_CAPS,
     circuitBreaker: CIRCUIT_BREAKER,
@@ -612,9 +629,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     const dir = nft.artDir ?? DEFAULT_ART_DIR;
     app.get("/nft/collection.json", async () => collectionMetadata(nft.baseUrl));
     app.get<{ Params: { file: string } }>("/nft/metadata/:file", async (req) => {
-      const level = req.params.file.replace(/\.json$/, "");
-      if (!isKnightLevel(level) || !req.params.file.endsWith(".json")) throw new ServiceError(404, "not_found");
-      return levelMetadata(nft.baseUrl, level);
+      const tier = req.params.file.replace(/\.json$/, "");
+      if (!isKnightTierName(tier) || !req.params.file.endsWith(".json")) throw new ServiceError(404, "not_found");
+      return tierMetadata(nft.baseUrl, tier);
     });
     app.get<{ Params: { file: string } }>("/nft/images/:file", async (req, reply) => {
       const bytes = readArt(dir, req.params.file);

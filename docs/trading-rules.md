@@ -29,36 +29,37 @@ Garuda offers one challenge type (one-step) across five account sizes. **(Garuda
 
 ### One-Step Challenge
 
-| Tier | Account Size | Fee | Profit Target | Max Daily Loss | Max Drawdown | Split | Unlock |
+| Tier | Account Size | Fee | Profit Target | Max Daily Loss | Max Drawdown | Split | Access |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Demo | $5,000 | Free | $500 (10%) | 3% | 6% (static) | None (no payouts) | Open to all |
 | Squire | $5,000 | $39 | $500 (10%) | 3% | 6% (static) | 80% | Open to all |
 | Knight | $10,000 | $79 | $1,000 (10%) | 3% | 6% (static) | 80% | Open to all |
-| Paladin | $15,000 | $119 | $1,500 (10%) | 3% | 6% (static) | 80% | Requires a Knight-level NFT |
-| Ascended | $25,000 | $200 | $2,500 (10%) | 3% | 6% (static) | 80% | Requires a Paladin-level NFT |
+| Paladin | $15,000 | $119 | $1,500 (10%) | 3% | 6% (static) | 80% | Open to all |
+| Ascended | $25,000 | $200 | $2,500 (10%) | 3% | 6% (static) | 80% | Open to all |
 
-- Demo is a free practice account with the same rules. It has no funding, no payout, no knight NFT and does not count toward any unlock. **(Garuda-specific; Propr has no demo)**
+- Demo is a free practice account with the same rules. It has no funding, no payout and no knight NFT. **(Garuda-specific; Propr has no demo)**
 - All challenge fees are non-refundable once the account is activated, regardless of outcome. **(mirrors Propr)**
 - Fees are paid in USDC on Solana. **(Garuda-specific)**
+- The sizes above are challenge sizes and the Lv.1 funded size. Funded accounts then scale by level (Section 10A). **(Garuda-specific)**
 
 ## 3. How It Works
 
 STEP 1 Purchase · STEP 2 Trade · STEP 3 Pass · STEP 4 Claim, verify, review · STEP 5 Get Funded
 
 ### Step 1: Purchase
-Choose your tier and pay the challenge fee in USDC. A knight NFT is minted (Section 16). Demo needs no payment. **(Garuda-specific)**
+Choose your tier and pay the challenge fee in USDC. A knight NFT of that tier is minted (Section 16). Every tier is open to buy. Demo needs no payment. **(Garuda-specific)**
 
 ### Step 2: Trade
 Reach the profit target on closed trades over at least 3 trading days while staying within the drawdown limits. No time limit. **(Path to Funded, Section 9; in line with FTMO, OWNIT and HyroTrader)**
 
 ### Step 3: Pass
-Meet all four pass requirements (Section 9) without breaching any equity limit: closed profit target, flat book, 3 trading days, best-day rule. The challenge passes and your knight levels up at that moment. Nothing is closed for you. **(Path to Funded; leveling is Garuda-specific)**
+Meet all four pass requirements (Section 9) without breaching any equity limit: closed profit target, flat book, 3 trading days, best-day rule. The challenge passes. Nothing is closed for you, and the knight's tier and level do not change. **(Path to Funded)**
 
 ### Step 4: Claim, verify, review
 Press Claim on the passed challenge. Verify your identity (government ID and live selfie), then Garuda runs a risk review that takes about one business day. **(Path to Funded; mirrors FTMO, Propr, Breakout and HyroTrader identity checks)**
 
 ### Step 5: Get Funded
-On approval you receive a funded account with the same starting balance and no profit target, bound to your knight. Sign in with the wallet that holds the knight (Section 19), trade freely and request on-demand payouts. Challenge profit is never paid or carried over. **(mirrors Propr)**
+On approval you receive a funded account at **Lv.1** of your tier, with the same starting balance and no profit target, bound to your knight. It then scales by level (Section 10A). Sign in with the wallet that holds the knight (Section 19), trade freely and request on-demand payouts. Challenge profit is never paid or carried over. **(mirrors Propr)**
 
 One-Step Challenge: Reach the 10% profit target on closed trades, end flat, trade on at least 3 UTC days and keep your best day at or under 50% of your profitable days, all while staying within the drawdown limits (3% daily loss, 6% max drawdown). There is no time limit. **(Path to Funded, Section 9)**
 
@@ -82,7 +83,7 @@ One-Step Challenge: Reach the 10% profit target on closed trades, end flat, trad
 
 **Start-of-Day Balance (SOD)** Your balance snapshot at 00:00 UTC. **(mirrors Propr)**
 
-**Wounded** Knight status after a breach. The knight keeps its level, art and history and can be revived. **(Garuda-specific)**
+**Wounded** Knight status after a breach. The knight keeps its tier, art and history and can be revived. **(Garuda-specific)**
 
 **Combat Log** A public text feed of risk events and closed trades derived from your P&L, for example "Sir Pudding strikes for +$312". It is cosmetic and never changes results. **(Garuda-specific)**
 
@@ -175,7 +176,7 @@ To pass the challenge you must grow the **closed** balance by the profit target 
 2. **Be flat to pass.** You must have no open positions. Garuda never closes positions for you on a pass, and the funded account never opens on its own. **(in line with peers)**
 3. **At least 3 trading days.** A UTC day counts when at least one position is opened or closed. Days do not need to be consecutive. Hitting +10% on day one is not enough. **(mirrors HyroTrader's 3 days)**
 4. **Best-day rule.** Your best single UTC day's realized profit may be at most **50%** of the sum of all your profitable days' realized profit; losing days are ignored. It is a soft gate, never a breach: if one day is too big you simply keep trading until the profit is spread out. It applies to the pass and to payout requests. **(mirrors OWNIT)**
-5. **Claim the funded account.** When rules 1 to 4 are met the challenge passes, your knight levels up, and the dashboard shows "Eligible: claim funded account". You press Claim; nothing opens automatically. **(Garuda-specific flow)**
+5. **Claim the funded account.** When rules 1 to 4 are met the challenge passes and the dashboard shows "Eligible: claim funded account". You press Claim; nothing opens automatically. **(Garuda-specific flow)**
 6. **Identity check (KYC) before funded trading starts.** A government ID and a live selfie are verified. **(mirrors FTMO, Propr, Breakout and HyroTrader)** *Implementation note: no KYC vendor is integrated yet; Garuda ops approve the check manually. Vendor integration (for example Sumsub) is a TODO.*
 7. **Risk review, target about 1 business day.** The claim goes under review. Checks: hedging across Garuda accounts or with external venues, collusion or third-party coordination, feed or latency exploits, account sharing, and all-in lottery-style account cycling (Section 15). Approval opens the funded account. **(in line with FTMO and HyroTrader reviews)**
 8. **First payout on demand.** Once funded and in profit, with all positions closed, at least $20 due to you and the best-day rule met for the payout cycle, you can request a payout immediately. There is no waiting period. Challenge profit is never paid out or carried over. **(in line with crypto peers; tighter option of a 14-day first payout like FTMO was not adopted)**
@@ -186,7 +187,7 @@ To pass the challenge you must grow the **closed** balance by the profit target 
 
 ## 10. Funded Account Rules
 
-After passing the challenge, claiming it, verifying your identity and clearing the risk review (Section 9), you receive a funded account with the same starting balance. **(mirrors Propr; claim, KYC and review per Path to Funded)**
+After passing the challenge, claiming it, verifying your identity and clearing the risk review (Section 9), you receive a funded account at Lv.1 of your tier, with the same starting balance. **(mirrors Propr; claim, KYC and review per Path to Funded)**
 
 ### Rules That Carry Over
 - ✓ Maximum daily loss (3% of start-of-day balance) **(mirrors Propr)**
@@ -200,6 +201,46 @@ After passing the challenge, claiming it, verifying your identity and clearing t
 - Payouts become available as soon as the account is funded and in profit, subject to Section 11 (including the best-day rule). No waiting period. **(Path to Funded rule 8)**
 - A funded breach makes the knight Wounded. Reviving it returns you to a **challenge** at the same tier, not straight to a funded account. **(Garuda-specific)**
 - A funded account is bound to its knight NFT. **(Garuda-specific)**
+- The account grows by level: 5% profit of the current size plus 1 paid payout since the last level up (Section 10A). **(Garuda-specific)**
+
+## 10A. Funded Scaling
+
+All of this section is **Garuda-specific** (owner decision 2026-11-11). Every funded account has a **tier** and a **level**, shown together, for example **Squire Lv.2**.
+
+### The level up rule (the same at every level and tier)
+
+A funded account levels up when **both** are true since its last level up (or since it opened):
+
+1. **Profit:** closed profit of at least **5% of the current account size**. Realized PnL net of fees and funding counts; open profit does not. Profit that was later paid out still counts, because each payout sweeps the balance back to the account size.
+2. **Payout:** at least **1 payout** requested on or after the last level up has been **paid**.
+
+The level up is **applied automatically**, normally the moment the qualifying payout is paid. If a position is open at that time, it is applied as soon as the account is **flat**. It is never applied to a breached, dormant or archived account.
+
+### Sizes
+
+| Tier | Lv.1 | Lv.2 | Lv.3 | Level up from Lv.3 |
+| --- | --- | --- | --- | --- |
+| Squire | $5,000 | $6,666.67 | $8,333.33 | Graduates to Knight Lv.1 ($10,000) |
+| Knight | $10,000 | $11,666.67 | $13,333.33 | Graduates to Paladin Lv.1 ($15,000) |
+| Paladin | $15,000 | $18,333.33 | $21,666.67 | Graduates to Ascended Lv.1 ($25,000) |
+| Ascended | $25,000 | +$5,000 per level | | Up to $100,000 at Lv.16 (cap) |
+
+Ascended levels: Lv.1 $25,000, Lv.4 $40,000, Lv.7 $55,000, Lv.10 $70,000, Lv.13 $85,000, Lv.16 $100,000.
+
+### What a level up changes
+
+- **Account size** moves to the next size in the table. The account keeps its ID, its history and any profit above the old size.
+- **Max drawdown** resets to 6% static of the new size (floor = new size × 0.94).
+- **Daily loss** resets to 3% of the new size, measured from the balance at the moment of the level up, then resets at 00:00 UTC as usual.
+- **Graduation** (a level up from Lv.3) moves the account to Lv.1 of the next tier. The knight NFT's tier, and its art, change with it.
+- **Unchanged:** the 80% split, the $20 minimum payout, the best day rule per payout cycle, leverage caps and markets.
+- Every level up is kept in the account history and the combat log.
+
+### Caps and breaches
+
+- A level up that would take the trader over the **$300,000 funded aggregate** (Section 20) is **held** until there is room. The largest single account is $100,000.
+- A breach ends the funded account (Section 8) and the knight becomes Wounded. A revive (Section 17) starts a **challenge at the knight's current tier**. The next funded account starts at **Lv.1** of that tier.
+- Accounts that were funded before scaling started are treated as **Lv.1** of their tier.
 
 ## 11. Payouts
 
@@ -220,9 +261,9 @@ You keep 80% of all profits generated on your funded account. Garuda retains 20%
 | Identity checks | Completed once, before the funded account opens (Section 9, rule 6). A payout is sent to the authenticated wallet only. | Path to Funded |
 | Best-day rule | Best UTC day's realized profit at most 50% of the profitable days' total, counted over the current payout cycle (since the funded account opened or since the last payout) | Path to Funded (mirrors OWNIT) |
 
-Payout = (Current Balance − Starting Balance) × 0.80
+Payout = (Current Balance − Account Size) × 0.80
 
-Each payout sweeps all available profit. After a payout, your account balance resets to the starting balance. Drawdown limits are static, so they are unchanged. No partial withdrawals. **(mirrors Propr)**
+Each payout sweeps all available profit. After a payout, your account balance resets to the current account size. Drawdown limits are static, so a payout does not change them; a level up (Section 10A) resets them to the new size. No partial withdrawals. **(mirrors Propr)**
 
 ### Payout Restrictions
 - All positions must be closed before requesting a payout. **(mirrors Propr)**
@@ -324,17 +365,17 @@ While trading strategies are unrestricted, the following conduct is prohibited a
 ### Detection & Enforcement
 Garuda uses automated monitoring: cross-account correlation, wallet-graph clustering, IP and device fingerprinting, trade-pattern and payout-pattern analysis, and Phoenix onchain analysis. On suspicion Garuda may request information, suspend trading or payouts pending investigation, terminate the account with no payout, and ban the individual from future challenges. Decisions are final. **(mirrors Propr)**
 
-## 16. Knight Levels, Gating & Transfers
+## 16. Knights, Tiers & Transfers
 
 All of this section is **Garuda-specific**.
 
-- **Mint:** every paid challenge in Squire or Knight tier mints a new Squire-level knight NFT (Metaplex Core). Rarity is cosmetic only and never changes rules, size or payout.
-- **Levels:** Squire (L1) → Knight (L2) → Paladin (L3) → Ascended (L4). Passing a Squire or Knight challenge promotes the knight to Knight (L2). Passing the Paladin challenge makes it Paladin (L3). Passing the Ascended challenge makes it Ascended (L4).
-- **When the level changes:** the knight levels up the moment the challenge passes, that is when all four Path to Funded pass requirements are met (Section 9). The claim, identity check and review do not change the level; the funded account opened on approval is bound to the same knight.
-- **Gating:** the Paladin challenge requires a non-Wounded knight of level Knight or higher. The Ascended challenge requires a non-Wounded Paladin or higher. The qualifying knight itself enters the battle and levels up; no new NFT is minted for gated tiers. **(interpretation of the PRD, flagged in Appendix B)**
-- **Status:** Active, Wounded, Ascended, Funded. Level and status live onchain; history and combat log live offchain.
+- **All tiers open:** Squire, Knight, Paladin and Ascended can all be bought directly. There is no gating and no knight is needed to buy a challenge.
+- **Mint:** every paid challenge mints a new knight NFT (Metaplex Core) of the purchased tier: a Paladin challenge mints a Paladin knight. Rarity is cosmetic only and never changes rules, size or payout.
+- **Passing does not change the knight.** Meeting the Path to Funded requirements (Section 9) earns the right to claim a funded account at **Lv.1 of the same tier**. The claim, identity check and review do not change the tier or level.
+- **Onchain attributes:** **tier** (Squire, Knight, Paladin, Ascended), **level** (the funded level, 1 when there is no funded account) and **status** (Active, Funded, Wounded, Idle), plus wins and revives. The art follows the tier.
+- **Scaling:** when the funded account levels up (Section 10A), the knight's level follows. When it graduates, the knight's tier and art change to the next tier.
 - **Transfers:** locked while Active or Funded. Allowed only while Wounded or when the knight has no live or funded account. Funded accounts belong to the knight; because the knight is locked, the funded account stays with the wallet that earned it.
-- **Demo:** no NFT, no gating credit.
+- **Demo:** no NFT.
 
 ## 17. Revive
 
@@ -342,7 +383,7 @@ All of this section is **Garuda-specific**; Propr has no resets.
 
 - A Wounded knight can be **revived** for **20% off** the challenge fee of the tier it fell in. Revive prices: Squire $31.20, Knight $63.20, Paladin $95.20, Ascended $160.00.
 - Revive starts a **new challenge** with a fresh balance, new limits and a new challenge ID. The breached account is not restored.
-- The knight **revives at the same level** it fell at. It keeps its history and gains a scar. A funded breach revives into a challenge at that tier, then re-earns funded status through the full Path to Funded (Section 9).
+- The knight **revives at its current tier**, that is the tier it fell at, including any graduation earned on a funded account. It keeps its history and gains a scar. A funded breach revives into a challenge at that tier, then re-earns funded status through the full Path to Funded (Section 9). The new funded account starts at **Lv.1** (Section 10A).
 - Cap: **3 revives per knight**. After that the knight is retired as a collectible and a new challenge must be bought.
 - Cooldown: revive is available **24 hours** after the breach.
 - The discount does not stack with other promotions. Revive needs the same payment conditions as a new challenge.
@@ -380,7 +421,7 @@ Your account follows your wallet address. If you sign in with email, keep access
 A trader may hold multiple active accounts, aggregated per wallet (and across wallets Garuda can tie together, for example by shared funding):
 
 - Evaluation accounts: up to **$200,000** aggregate account size **(mirrors Propr)**
-- Funded accounts: up to **$300,000** aggregate balance **(mirrors Propr)**
+- Funded accounts: up to **$300,000** aggregate balance **(mirrors Propr)**. A funded level up that would exceed it is held until there is room (Section 10A). **(Garuda-specific)**
 - Duplicate sizes: allowed, within the caps **(mirrors Propr v1.0.1)**
 - Demo: one active Demo per wallet **(Garuda-specific)**
 
@@ -388,7 +429,7 @@ Example: eight $25,000 evaluations at once, or twelve $25,000 funded accounts. *
 
 ## 21. Transparency
 
-- Phase 1: every order, fill and risk event is written to an append-only log, and the combat log is public per knight. Level and status are onchain in the knight's Attributes. **(Garuda-specific)**
+- Phase 1: every order, fill and risk event is written to an append-only log, and the combat log is public per knight. Tier, level and status are onchain in the knight's Attributes. **(Garuda-specific)**
 - Phase 2: periodic Merkle-root commitment of challenge results onchain; payout transactions published; aggregate transparency stats (challenges sold, pass rate, payouts, treasury). **(mirrors Propr's transparency goals)**
 - Rules changelog is public and never retroactive (Section 27). **(mirrors Propr)**
 
@@ -452,7 +493,8 @@ By purchasing a Garuda challenge, you acknowledge and accept:
 | Funded activation | Claim, identity check, risk review (about 1 business day) | |
 | Inactivity | None | Dormant at 90 days, free reactivation |
 | Breach | Permanent for the account; knight Wounded | Same |
-| Revive | 20% off, same level, 3 per knight, 24h cooldown | Revives into a challenge |
+| Scaling | N/A | Lv.1 at the challenge size; +1 level at 5% profit and 1 paid payout; Lv.3 graduates to the next tier; Ascended to $100k |
+| Revive | 20% off, current tier, 3 per knight, 24h cooldown | Revives into a challenge; re-funded at Lv.1 |
 | Caps | $200k evaluation / $300k funded aggregate | |
 
 ## 26. Support & Contact
@@ -462,6 +504,16 @@ Support channel: Discord (to be set up). **(mirrors Propr; handle TBD)**
 ## 27. Changelog
 
 Every rule change is documented here with the date it took effect. We never change rules retroactively. **(mirrors Propr)**
+
+**2026-11-11 · v1.2 Funded scaling**
+- ✓ All four tiers open to buy; no knight gating. Every paid challenge mints a knight of the purchased tier
+- ✓ Passing no longer promotes the knight; the funded account opens at Lv.1 of the tier
+- ✓ Funded level up: 5% profit of the current size and 1 paid payout since the last level up, applied automatically when flat
+- ✓ Sizes: Squire $5k / $6,666.67 / $8,333.33, Knight $10k / $11,666.67 / $13,333.33, Paladin $15k / $18,333.33 / $21,666.67, then the next tier's Lv.1; Ascended +$5k per level to $100k at Lv.16
+- ✓ Drawdown floor and daily limit reset to the new size on each level up; split stays 80%, $20 minimum payout
+- ✓ Knight NFT attributes are tier, funded level and status; graduation changes the tier and art
+- ✓ Breach revives into a challenge at the current tier; re-funding starts at Lv.1
+- ✓ Existing funded accounts start at Lv.1
 
 **2026-11-11 · v1.1 Path to Funded**
 - ✓ Profit target counts closed (realized) balance only; open profit does not pass

@@ -175,11 +175,13 @@ describe("the sweep does not trip the risk rules", () => {
     await rig.payouts.idle();
     const st = await rig.svc.getState(f.id);
     expect(st.status).toBe("active");
-    expect(st.account.balance).toBe(10_000);
     expect(st.risk.status).toBe("active");
-    // static drawdown floor unchanged: 94% of 25k
-    expect(st.risk.drawdownFloor).toBe(9_400);
-    expect(st.risk.startOfDayBalance).toBe(10_000);
+    // the completed payout plus +45% realized also levels the account (Funded scaling): Knight Lv.2 at $11,666.67, and
+    // the static floor and the daily baseline move to the NEW size (never to the swept-out profit)
+    expect(st.scaling).toMatchObject({ level: 2, size: 11_666.67 });
+    expect(st.account.balance).toBeCloseTo(11_666.67, 6);
+    expect(st.risk.drawdownFloor).toBe(10_966.67);
+    expect(st.risk.startOfDayBalance).toBeCloseTo(11_666.67, 6);
     // and a real loss still counts
     expect((await breach(rig, f.id, 1000)).status).toBe("wounded");
   });

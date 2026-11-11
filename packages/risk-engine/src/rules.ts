@@ -36,8 +36,6 @@ export interface TierSpec {
   fee: number;
   /** §17: 20% off, same tier. */
   reviveFee: number;
-  /** NFT level required to buy, if any (§16). */
-  requires?: TierId;
   /** Demo has no payouts / NFT. */
   payouts: boolean;
 }
@@ -46,24 +44,9 @@ export const TIERS: Record<TierId, TierSpec> = {
   demo: { id: "demo", name: "Demo", accountSize: 5_000, fee: 0, reviveFee: 0, payouts: false },
   squire: { id: "squire", name: "Squire", accountSize: 5_000, fee: 39, reviveFee: 31.2, payouts: true },
   knight: { id: "knight", name: "Knight", accountSize: 10_000, fee: 79, reviveFee: 63.2, payouts: true },
-  paladin: {
-    id: "paladin",
-    name: "Paladin",
-    accountSize: 15_000,
-    fee: 119,
-    reviveFee: 95.2,
-    requires: "knight",
-    payouts: true,
-  },
-  ascended: {
-    id: "ascended",
-    name: "Ascended",
-    accountSize: 25_000,
-    fee: 200,
-    reviveFee: 160,
-    requires: "paladin",
-    payouts: true,
-  },
+  // §16: every tier is open to buy; there is no knight-level gate (the old Paladin/Ascended lock is gone).
+  paladin: { id: "paladin", name: "Paladin", accountSize: 15_000, fee: 119, reviveFee: 95.2, payouts: true },
+  ascended: { id: "ascended", name: "Ascended", accountSize: 25_000, fee: 200, reviveFee: 160, payouts: true },
 };
 
 export const TIER_IDS = Object.keys(TIERS) as TierId[];
@@ -87,10 +70,14 @@ export interface RiskLimits {
   warningLevels: readonly number[];
 }
 
-export function limitsForTier(tier: TierId, stage: Stage = "evaluation"): RiskLimits {
+/**
+ * Risk limits for an account. `size` overrides the tier's account size: a funded account that has levelled up
+ * (Funded scaling) measures its 6% floor and 3% daily limit from its CURRENT level's size.
+ */
+export function limitsForTier(tier: TierId, stage: Stage = "evaluation", size?: number): RiskLimits {
   const spec = TIERS[tier];
   return {
-    startingBalance: spec.accountSize,
+    startingBalance: size ?? spec.accountSize,
     dailyLossPct: COMMON_RULES.dailyLossPct,
     maxDrawdownPct: COMMON_RULES.maxDrawdownPct,
     profitTargetPct: stage === "evaluation" ? COMMON_RULES.profitTargetPct : null,

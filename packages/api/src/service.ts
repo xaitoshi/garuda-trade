@@ -1,13 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  deriveKnightState,
-  isLive,
-  levelIndex,
-  type KnightHistoryRow,
-  type KnightInfo,
-  type KnightLevel,
-  type KnightNft,
-} from "@garuda/chain";
+import { deriveKnightState, isLive, type KnightHistoryRow, type KnightInfo, type KnightNft, type KnightTier } from "@garuda/chain";
 import type { MarketDataProvider, MarketSnapshot } from "@garuda/market-data";
 import {
   CIRCUIT_BREAKER,
@@ -16,7 +8,10 @@ import {
   DORMANCY,
   REVIVE_RULES,
   TIERS,
+  cents,
   checkAccountCaps,
+  isScalingTier,
+  levelProgress,
   checkOrderLeverage,
   checkRevive,
   dailyLedger,
@@ -38,6 +33,7 @@ import {
   type DailyLedger,
   type FundedProgress,
   type HeldAccount,
+  type LevelProgress,
   type Lifecycle,
   type PayoutPolicy,
   type PayoutQuote,
@@ -58,7 +54,18 @@ import {
   type RestingFillGate,
 } from "@garuda/sim-engine";
 import { StubPaymentProvider, type PaymentProvider } from "./payments.js";
-import { InMemoryChallengeStore, summarize, type Challenge, type ChallengeStore, type ChallengeSummary, type FundedClaim, type KycStatus } from "./store.js";
+import {
+  InMemoryChallengeStore,
+  defaultScaling,
+  summarize,
+  type Challenge,
+  type ChallengeStore,
+  type ChallengeSummary,
+  type FundedClaim,
+  type FundedScaling,
+  type KycStatus,
+  type LevelUpRecord,
+} from "./store.js";
 
 export type { Challenge, ChallengeStore } from "./store.js";
 export { InMemoryChallengeStore } from "./store.js";
@@ -80,16 +87,16 @@ export interface ServiceDeps {
   /** Challenge clock (ms). Injectable so demos/tests can simulate days. */
   now?: () => number;
   engine?: EngineOptions;
-  /** Enforce Paladin/Ascended NFT gating on create. Default true. */
+  /** Legacy knob from the old Paladin/Ascended knight-level gate. Every tier is open to buy now (rulebook section 16); ignored. */
   enforceGating?: boolean;
   /** Revive checkout. Default: StubPaymentProvider (always succeeds; real USDC checkout is roadmap M4). */
   payments?: PaymentProvider;
   /** Refuse an anonymous Demo (no wallet). Default false for library use; the HTTP server turns it on. */
   requireWalletForDemo?: boolean;
   /**
-   * Knight NFTs (Metaplex Core, M3). When set: a paid Squire/Knight challenge mints a knight, Paladin/Ascended need a
-   * knight the wallet OWNS onchain (`knightAsset`, `nftLevels` is ignored), the knight is transfer-locked while it has a
-   * live challenge, and level/status/wins/revives are written back onchain.
+   * Knight NFTs (Metaplex Core, M3). When set: every paid challenge mints a knight whose tier is the purchased tier,
+   * a funded account opens on the knight that passed (`knightAsset`, verified onchain), the knight is transfer-locked
+   * while it has a live account, and tier/funded level/status/wins/revives are written back onchain.
    */
   knights?: KnightNft;
   /**
@@ -150,9 +157,9 @@ export interface CreateChallengeInput {
   stage?: Stage;
   knight?: string;
   wallet?: string;
-  /** Knight NFT levels held by the wallet. TRUSTED INPUT, honoured ONLY when no `knights` chain is configured (dev and legacy tests). */
+  /** Legacy: knight levels from the old tier gate. Ignored (every tier is open to buy). */
   nftLevels?: TierId[];
-  /** Paladin/Ascended (and funded) accounts: the knight's asset address. Its owner, level and status are read onchain. */
+  /** Funded accounts: the knight's asset address. Its owner and history are read onchain and from the ledger. */
   knightAsset?: string;
 }
 
@@ -199,6 +206,8 @@ export interface ChallengeState {
   payoutsEnabled: boolean;
   /** Evaluation accounts: progress on the Path to Funded requirements and the claim state. Null on funded accounts. */
   pathToFunded: PathToFunded | null;
+  /** Funded accounts: funded level, progress to the next level, and level-up history (Funded scaling). Null otherwise. */
+  scaling: ScalingView | null;
   reviveOf?: string;
   revivedBy?: string;
   scars: number;
@@ -232,6 +241,16 @@ export interface ChallengeState {
   openOrders: Order[];
   recentFills: Fill[];
   combatLog: CombatLogEntry[];
+}
+
+/** Funded scaling as the API shows it: "Knight Lv.2", current size, progress to the next level, history. */
+export interface ScalingView extends LevelProgress {
+  levelSince: number;
+  history: LevelUpRecord[];
+  /** A level-up is earned but held: it would push the wallet's funded accounts over the aggregate cap. */
+  capHeld: boolean;
+  /** Level-ups are applied when the book is flat; true while the level-up waits for open positions to close. */
+  waitingForFlat: boolean;
 }
 
 export interface ReviveInfo extends ReviveCheck {
@@ -346,10 +365,7 @@ export class ChallengeService {
     if (!isDemo && stage === "evaluation" && this.requirePayment && !opts.paid) {
       throw new ServiceError(402, "payment_required", "Paid tiers are bought with USDC: POST /purchases/challenge, pay, then confirm", { quote: "/purchases/challenge" });
     }
-    // Legacy gating from trusted client input. With a knight chain configured the knight is verified onchain instead.
-    if (!isDemo && !this.knights && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
-      throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight NFT`);
-    }
+    // Every tier is open to buy (rulebook section 16): no knight-level gate.
     return this.withCreateLock(input.wallet, async () => {
       if (opts.id) {
         const existing = await this.store.get(opts.id);
@@ -373,58 +389,41 @@ export class ChallengeService {
     });
   }
 
-  /** Everything `create` checks that does not change anything (caps, tier gating, knight ownership): lets a checkout fail BEFORE the user pays. */
+  /** Everything `create` checks that does not change anything (caps, knight ownership for funded): lets a checkout fail BEFORE the user pays. */
   async assertCanCreate(input: CreateChallengeInput): Promise<void> {
     const spec = TIERS[input.tier];
     if (!spec || input.tier === "demo") throw new ServiceError(400, "unknown_tier");
     const stage = input.stage ?? "evaluation";
     if (stage === "funded" && this.claimGate) throw new ServiceError(403, "claim_required", "Funded accounts open through the Path to Funded claim");
-    if (!this.knights && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
-      throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight NFT`);
-    }
     await this.assertCanOpen({ tier: input.tier, stage, wallet: input.wallet });
-    if (this.knights && input.wallet && (stage === "funded" || (spec.requires && this.enforceGating))) await this.verifyKnight(input, stage);
+    if (this.knights && input.wallet && stage === "funded") await this.verifyKnight(input);
   }
 
   // ----------------------------------------------------------------- knights
 
   /**
-   * Read the knight behind a gated or funded account OFFCHAIN-trust-free: it must be a genuine asset of our collection,
-   * owned by the wallet right now, high enough, not Wounded and not already in a live evaluation.
+   * Read the knight behind a funded account trust-free: it must be a genuine asset of our collection, owned by the
+   * wallet right now, with a passed evaluation of the same tier and no live funded account.
    */
-  private async verifyKnight(input: CreateChallengeInput, stage: Stage): Promise<KnightInfo> {
+  private async verifyKnight(input: CreateChallengeInput): Promise<KnightInfo> {
     const knights = this.knights!;
-    const spec = TIERS[input.tier];
     if (!input.wallet) throw new ServiceError(403, "wallet_required", "Sign in with the wallet that holds the knight");
-    if (!input.knightAsset) {
-      throw new ServiceError(403, "tier_locked", `${spec.name} needs a knight: pass knightAsset (the knight NFT address you hold)`);
-    }
+    if (!input.knightAsset) throw new ServiceError(403, "knight_required", "A funded account needs the knight that passed: pass knightAsset");
     const info = await knights.get(input.knightAsset);
     if (!info || !info.genuine) throw new ServiceError(403, "knight_not_genuine", "That asset is not a Garuda knight");
     if (info.owner !== input.wallet) throw new ServiceError(403, "not_knight_owner", "The signed-in wallet does not hold that knight");
     const rows = await this.store.summaries({ knightId: info.asset });
-    if (stage === "funded") {
-      const passed = rows.some((r) => r.tier === input.tier && r.stage === "evaluation" && r.status === "passed");
-      if (!passed) throw new ServiceError(403, "evaluation_not_passed", "A funded account needs a passed evaluation of the same tier on this knight");
-      if (rows.some((r) => r.stage === "funded" && r.tier === input.tier && isLive(r))) throw new ServiceError(409, "funded_exists", "This knight already has a live funded account at that tier");
-      return info;
-    }
-    if (spec.requires && levelIndex(info.level) < levelIndex(spec.requires as KnightLevel)) {
-      throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight (this one is ${info.level})`);
-    }
-    if (info.status === "wounded" || deriveKnightState(rows.map((r) => this.toRow(r))).attrs.status === "wounded") {
-      throw new ServiceError(403, "knight_wounded", "A Wounded knight cannot enter a gated tier: revive it first");
-    }
-    if (rows.some((r) => r.stage === "evaluation" && isLive(r))) throw new ServiceError(409, "knight_busy", "This knight is already in a live challenge");
+    const passed = rows.some((r) => r.tier === input.tier && r.stage === "evaluation" && r.status === "passed");
+    if (!passed) throw new ServiceError(403, "evaluation_not_passed", "A funded account needs a passed evaluation of the same tier on this knight");
+    if (rows.some((r) => r.stage === "funded" && isLive(r))) throw new ServiceError(409, "funded_exists", "This knight already has a live funded account");
     return info;
   }
 
-  /** Bind a knight to a new challenge: mint a Squire-level knight, or verify and transfer-lock the one passed in. */
+  /** Bind a knight to a new account: a paid challenge mints a knight of the purchased tier; a funded account verifies and transfer-locks the knight that passed. */
   private async attachKnight(ch: Challenge, input: CreateChallengeInput, stage: Stage, opts: CreateOpts): Promise<void> {
     const knights = this.knights!;
-    const spec = TIERS[input.tier];
-    if (stage === "funded" || (spec.requires && this.enforceGating)) {
-      const info = await this.verifyKnight(input, stage);
+    if (stage === "funded") {
+      const info = await this.verifyKnight(input);
       ch.knightId = info.asset;
       // The knight keeps its name across accounts: reuse the onchain one unless the caller picked a name.
       if (!input.knight?.trim()) ch.knight = info.name.replace(/^Knight /, "").trim() || ch.knight;
@@ -438,7 +437,7 @@ export class ChallengeService {
         name: `Knight ${ch.knight}`.slice(0, 32),
         orderId: opts.paid?.orderId ?? ch.id,
         frozen: true,
-        attrs: { level: "squire", status: "active", tier: input.tier as KnightLevel, challengeId: ch.id, wins: 0, revives: 0 },
+        attrs: { tier: input.tier as KnightTier, level: 1, status: "active", challengeId: ch.id, wins: 0, revives: 0 },
       });
       ch.knightId = res.asset;
     } catch (e) {
@@ -466,7 +465,7 @@ export class ChallengeService {
   }
 
   private toRow(s: ChallengeSummary): KnightHistoryRow {
-    return { id: s.id, tier: s.tier, stage: s.stage, status: s.status, lifecycle: s.lifecycle, createdAt: s.createdAt, reviveOf: s.reviveOf };
+    return { id: s.id, tier: s.tier, stage: s.stage, status: s.status, lifecycle: s.lifecycle, createdAt: s.createdAt, reviveOf: s.reviveOf, fundedLevel: s.fundedLevel };
   }
 
   private knightQueue<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -481,8 +480,8 @@ export class ChallengeService {
   }
 
   /**
-   * Write the knight's derived state onchain: level, status, wins, revives, current tier and challenge, the per-level
-   * metadata URI, and the transfer lock (frozen while any challenge is live). Idempotent: nothing is sent when the chain
+   * Write the knight's derived state onchain: tier, funded level, status, wins, revives and current challenge, the
+   * per-tier metadata URI, and the transfer lock (frozen while any challenge is live). Idempotent: nothing is sent when the chain
    * already matches. `extra` is a challenge not saved yet (so a lock can land before the row exists).
    */
   async syncKnight(knightId: string, o: { extra?: ChallengeSummary } = {}): Promise<string | undefined> {
@@ -571,6 +570,8 @@ export class ChallengeService {
       scars: a.scars ?? 0,
       account: new SimAccount({ id, startingBalance: spec.accountSize }),
       risk: new RiskMonitor({ limits: limitsForTier(a.tier, a.stage), createdAt: t }),
+      // Funded accounts open at Lv.1 of their tier (Funded scaling); the tier's account size IS the Lv.1 size.
+      scaling: a.stage === "funded" ? defaultScaling(t) : undefined,
       combatLog: [],
       riskEvents: [],
       books: new Map(),
@@ -635,14 +636,14 @@ export class ChallengeService {
   /** Serialise on the challenge, then persist and re-index it whatever happened (a rejected order may still have refreshed marks). */
   private mutate<T>(ch: Challenge, fn: () => Promise<T>): Promise<T> {
     return this.locked(ch, async () => {
-      const before = ch.risk.status;
+      const before = `${ch.risk.status}|${ch.tier}|${ch.scaling?.level ?? ""}`;
       try {
         return await fn();
       } finally {
         await this.store.save(ch);
         this.reindex(ch);
-        // A breach or pass changes the knight (Wounded / level up) and releases the transfer lock.
-        if (ch.risk.status !== before) await this.syncKnightSafe(ch.knightId);
+        // A breach or pass (Wounded, transfer lock released) or a funded level-up / graduation changes the knight.
+        if (`${ch.risk.status}|${ch.tier}|${ch.scaling?.level ?? ""}` !== before) await this.syncKnightSafe(ch.knightId);
       }
     });
   }
@@ -751,6 +752,7 @@ export class ChallengeService {
     }
     this.logFills(ch, newFills);
     this.evaluateRisk(ch, t);
+    await this.maybeLevelUp(ch, t);
     return snaps;
   }
 
@@ -886,6 +888,7 @@ export class ChallengeService {
           const fills = this.applySnapshot(ch, snap, t);
           this.logFills(ch, fills);
           const risk = this.evaluateRisk(ch, t);
+          await this.maybeLevelUp(ch, t);
           out.push({ challengeId: id, events: risk.events, fills, status: ch.risk.status });
         });
       }),
@@ -1342,6 +1345,97 @@ export class ChallengeService {
     });
   }
 
+  /**
+   * A payout reached `paid` (called by the PayoutService). Logs the note, counts the payout toward the next level-up
+   * when it was REQUESTED after the last level-up, then applies the level-up if both conditions now hold (on a flat
+   * book; otherwise at the next flat refresh). Idempotent per payout id.
+   */
+  async payoutPaid(id: string, a: { payoutId: string; requestedAt: number; note?: string }): Promise<ChallengeState> {
+    const ch = await this.get(id);
+    return this.mutate(ch, async () => {
+      const t = this.now();
+      if (a.note) ch.combatLog.push({ ts: t, kind: "tribute", text: a.note });
+      if (ch.stage === "funded" && ch.tier !== "demo") {
+        const sc = (ch.scaling ??= defaultScaling(ch.createdAt));
+        if (a.requestedAt >= sc.levelSince && !sc.payoutsSinceLevel.includes(a.payoutId)) sc.payoutsSinceLevel.push(a.payoutId);
+        await this.maybeLevelUp(ch, t);
+      }
+      return this.view(ch);
+    });
+  }
+
+  // --------------------------------------------------------- funded scaling
+
+  /** Realized profit since the last level-up: fills net of fees, minus funding, from the ledger. Payouts do not reduce it. */
+  private profitSinceLevel(ch: Challenge, sc: FundedScaling): number {
+    let n = 0;
+    for (const f of ch.account.fills.slice(sc.fillsFrom ?? 0)) n += f.realizedPnl - f.fee;
+    for (const p of ch.account.fundingPayments.slice(sc.fundingFrom ?? 0)) n -= p.amount;
+    return n;
+  }
+
+  private levelProgressOf(ch: Challenge): LevelProgress | undefined {
+    if (ch.stage !== "funded" || !isScalingTier(ch.tier)) return undefined;
+    const sc = ch.scaling ?? defaultScaling(ch.createdAt);
+    return levelProgress({ tier: ch.tier, level: sc.level, profitSinceLevel: this.profitSinceLevel(ch, sc), payoutsSinceLevel: sc.payoutsSinceLevel.length });
+  }
+
+  /**
+   * Funded scaling (rulebook section 16): when realized profit since the last level-up is at least 5% of the current
+   * size AND at least one payout requested since then has been paid, move the account to the next size. Applied only
+   * on a flat, live account. Resize method: a `level_up` balance adjustment adds the size step to the balance and the
+   * reference size together (profit above the size is unchanged), then the 6% static floor and the 3% daily limit are
+   * re-measured from the NEW size. From Lv.3 of Squire, Knight or Paladin the account graduates to the next tier at
+   * Lv.1 (the account's tier and the knight's tier and art change). Ascended stops at Lv.16 ($100,000). A level-up that
+   * would push the wallet's live funded accounts over the $300,000 aggregate cap is held until there is room.
+   */
+  private async maybeLevelUp(ch: Challenge, t: number): Promise<boolean> {
+    if (ch.stage !== "funded" || !isScalingTier(ch.tier) || ch.risk.status !== "active" || ch.lifecycle === TERMINAL_LIFECYCLE) return false;
+    if (ch.account.positions.size > 0) return false;
+    const sc = (ch.scaling ??= defaultScaling(ch.createdAt));
+    const p = this.levelProgressOf(ch);
+    if (!p?.eligible || !p.next) return false;
+    if (ch.wallet) {
+      const held = (await this.store.summaries({ wallet: ch.wallet })).filter((s) => s.id !== ch.id).map(toHeld);
+      const cap = checkAccountCaps({ held, stage: "funded", tier: p.next.tier, size: p.next.size });
+      if (!cap.ok) {
+        if (!sc.capHeld) ch.combatLog.push({ ts: t, kind: "warning", text: `${ch.knight} earned ${p.next.label} but it is held: your funded accounts would pass the $${cap.cap.toLocaleString("en-US")} cap` });
+        sc.capHeld = true;
+        return false;
+      }
+    }
+    delete sc.capHeld;
+    const fromSize = ch.account.startingBalance;
+    const step = cents(p.next.size - fromSize);
+    const applied = ch.account.applyAdjustment({ id: `level_up:${sc.history.length + 1}`, kind: "level_up", amount: step, ref: `${p.next.tier}:${p.next.level}`, ts: t });
+    if (!applied) return false;
+    const rec: LevelUpRecord = { ts: t, fromTier: ch.tier, fromLevel: sc.level, fromSize, toTier: p.next.tier, toLevel: p.next.level, toSize: p.next.size, profit: p.profitSinceLevel, payouts: p.payoutsSinceLevel };
+    ch.tier = p.next.tier;
+    ch.risk.rescale(p.next.size, ch.account.balance, ch.account.equity(), t);
+    sc.history.push(rec);
+    sc.level = p.next.level;
+    sc.levelSince = t;
+    sc.fillsFrom = ch.account.fills.length;
+    sc.fundingFrom = ch.account.fundingPayments.length;
+    sc.payoutsSinceLevel = [];
+    const floor = cents(p.next.size * (1 - COMMON_RULES.maxDrawdownPct));
+    ch.combatLog.push({
+      ts: t,
+      kind: "dawn",
+      text: p.next.graduates
+        ? `${ch.knight} graduates from ${p.label} to ${p.next.label}: account ${usd(p.next.size)}, drawdown floor ${usd(floor)}`
+        : `${ch.knight} levels up to ${p.next.label}: account ${usd(p.next.size)}, drawdown floor ${usd(floor)}`,
+    });
+    return true;
+  }
+
+  private scalingView(ch: Challenge): ScalingView | null {
+    const p = this.levelProgressOf(ch);
+    if (!p) return null;
+    const sc = ch.scaling ?? defaultScaling(ch.createdAt);
+    return { ...p, levelSince: sc.levelSince, history: sc.history, capHeld: Boolean(sc.capHeld), waitingForFlat: p.eligible && ch.account.positions.size > 0 };
+  }
+
   /** Put a line in the account's combat log (payout paid, and so on). */
   async payoutNote(id: string, text: string): Promise<void> {
     const ch = await this.get(id);
@@ -1494,6 +1588,7 @@ export class ChallengeService {
       archivedAt: ch.archivedAt,
       payoutsEnabled: TIERS[ch.tier].payouts && ch.stage === "funded" && ch.risk.status !== "wounded",
       pathToFunded: this.pathView(ch),
+      scaling: this.scalingView(ch),
       reviveOf: ch.reviveOf,
       revivedBy: ch.revivedBy,
       scars: ch.scars,

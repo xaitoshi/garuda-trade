@@ -6,3 +6,4 @@ export * from "./payout.js";
 export * from "./combat-log.js";
 export * from "./accounts.js";
 export * from "./path-to-funded.js";
+export * from "./scaling.js";

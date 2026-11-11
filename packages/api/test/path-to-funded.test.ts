@@ -107,13 +107,13 @@ describe("Path to Funded: claim, KYC and risk review", () => {
     expect(await code(r.svc.claimFunded(c.id, { actorWallet: A }))).toBe("409:not_eligible");
   });
 
-  it("claim -> KYC pending -> under review -> funded on approval; the knight levels at the pass and is bound to the funded account", async () => {
+  it("claim -> KYC pending -> under review -> funded on approval; the pass never promotes the knight; the funded account opens at Lv.1 of its tier on the same knight", async () => {
     const r = manual();
     const c = await r.svc.create({ tier: "squire", wallet: A });
     const passed = await passEvaluation(r, c.id);
     expect(passed.pathToFunded).toMatchObject({ eligible: true, next: "claim" });
-    // levelled at the pass (rules 1 to 4 met), unlocked until the funded account opens
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ level: "knight", wins: 1, frozen: false });
+    // passed (rules 1 to 4 met): a win, no promotion, unlocked until the funded account opens
+    expect(await r.knights.get(c.knightId!)).toMatchObject({ tier: "squire", level: 1, wins: 1, frozen: false });
     // no direct door to a funded account
     expect(await code(r.svc.create({ tier: "squire", stage: "funded", wallet: A, knightAsset: c.knightId }))).toBe("403:claim_required");
 
@@ -136,7 +136,7 @@ describe("Path to Funded: claim, KYC and risk review", () => {
     expect(f).toMatchObject({ stage: "funded", status: "active", knightId: c.knightId, wallet: A, pathToFunded: null });
     expect(f.account.balance).toBe(5_000);
     expect(f.risk.targetEquity).toBeNull();
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ status: "funded", frozen: true, level: "knight" });
+    expect(await r.knights.get(c.knightId!)).toMatchObject({ status: "funded", frozen: true, tier: "squire", level: 1 });
   });
 
   it("KYC rejection and review rejection end the claim", async () => {

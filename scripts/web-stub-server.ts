@@ -44,7 +44,8 @@ const service = new ChallengeService({
 });
 const purchases = new PurchaseService({ service, usdc });
 // Payouts run for real through the service and ledger; only the USDC transfer is a fake (instant, no chain).
-const payouts = new PayoutService({ service, executor: new FakePayoutExecutor({ name: "stub-treasury" }) });
+// Same skewed clock as the service, so a payout requested now counts toward the funded level up (rulebook 10A).
+const payouts = new PayoutService({ service, executor: new FakePayoutExecutor({ name: "stub-treasury" }), now: () => Date.now() + skewMs });
 
 const feed = new PollingFeed({ provider: market, intervalMs: 1000 });
 const worker = new RiskWorker({ service, feed, onError: (e, ctx) => console.error(`[stub-worker] ${ctx}:`, e instanceof Error ? e.message : e) });

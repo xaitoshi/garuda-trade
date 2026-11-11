@@ -30,12 +30,15 @@ const code = async (p: Promise<unknown>) => {
 };
 
 describe("knight NFT on challenge", () => {
-  it("mints a frozen Squire knight to the buyer with attributes that match the challenge", async () => {
+  it("mints a frozen knight of the purchased tier at Lv.1, for every tier", async () => {
     const r = nftRig();
-    const c = await r.svc.create({ tier: "squire", wallet: A });
-    expect(c.knightId).toBeDefined();
-    const k = (await r.knights.get(c.knightId!))!;
-    expect(k).toMatchObject({ owner: A, level: "squire", status: "active", tier: "squire", challengeId: c.id, wins: 0, revives: 0, frozen: true, genuine: true });
+    for (const tier of ["squire", "knight", "paladin", "ascended"] as const) {
+      const c = await r.svc.create({ tier, wallet: A });
+      expect(c.knightId).toBeDefined();
+      const k = (await r.knights.get(c.knightId!))!;
+      expect(k).toMatchObject({ owner: A, tier, level: 1, status: "active", challengeId: c.id, wins: 0, revives: 0, frozen: true, genuine: true });
+    }
+    expect(r.knights.mintCalls).toBe(4);
   });
 
   it("demo challenges mint nothing", async () => {
@@ -52,13 +55,13 @@ describe("knight NFT on challenge", () => {
     expect(await r.svc.list({ wallet: A })).toHaveLength(0);
   });
 
-  it("the knight is transfer-locked while the challenge is live, then unlocked and levelled on pass", async () => {
+  it("the knight is transfer-locked while the challenge is live, then unlocked on pass (passing never changes tier or level)", async () => {
     const r = nftRig();
     const c = await r.svc.create({ tier: "squire", wallet: A });
     expect(() => r.knights.transfer(c.knightId!, B)).toThrow(/frozen/i);
     await pass(r, c.id);
     const k = (await r.knights.get(c.knightId!))!;
-    expect(k).toMatchObject({ level: "knight", wins: 1, status: "idle", frozen: false });
+    expect(k).toMatchObject({ tier: "squire", level: 1, wins: 1, status: "idle", frozen: false });
     r.knights.transfer(c.knightId!, B); // free to sell after the fight
     expect((await r.knights.get(c.knightId!))!.owner).toBe(B);
   });
@@ -67,44 +70,24 @@ describe("knight NFT on challenge", () => {
     const r = nftRig();
     const c = await r.svc.create({ tier: "squire", wallet: A });
     await breach(r, c.id);
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ status: "wounded", frozen: false, level: "squire", wins: 0 });
+    expect(await r.knights.get(c.knightId!)).toMatchObject({ status: "wounded", frozen: false, tier: "squire", level: 1, wins: 0 });
   });
 
-  it("gating reads the chain, not the client: a forged nftLevels claim is worthless", async () => {
+  it("every tier is open to buy: Paladin and Ascended need no knight, and a forged nftLevels claim changes nothing", async () => {
     const r = nftRig();
-    // paladin needs a Knight-level knight; the client claims it has one
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, nftLevels: ["knight"] }))).toBe("403:tier_locked");
+    const p = await r.svc.create({ tier: "paladin", wallet: A });
+    const a = await r.svc.create({ tier: "ascended", wallet: A, nftLevels: [] });
+    expect(p.knightId).toBeDefined();
+    expect(a.knightId).not.toBe(p.knightId);
+    expect(await r.knights.get(a.knightId!)).toMatchObject({ tier: "ascended", level: 1 });
   });
 
-  it("gated tier: needs a genuine knight held by the signed-in wallet, at the right level", async () => {
-    const r = nftRig();
-    const c = await r.svc.create({ tier: "squire", wallet: A });
-    // still a Squire-level knight and busy
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId }))).toBe("403:tier_locked");
-    await pass(r, c.id); // now level Knight
-    expect(await code(r.svc.create({ tier: "paladin", wallet: B, knightAsset: c.knightId }))).toBe("403:not_knight_owner");
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A }))).toBe("403:tier_locked");
-    const p = await r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId });
-    expect(p.knightId).toBe(c.knightId);
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ frozen: true, status: "active", tier: "paladin", challengeId: p.id });
-    // one live challenge per knight
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId }))).toBe("409:knight_busy");
-  });
-
-  it("a forged lookalike asset (not in the collection) is refused", async () => {
+  it("a forged lookalike asset (not in the collection) cannot open a funded account", async () => {
     const r = nftRig();
     r.knights.forge("ForgedKnight11111111111111111111111111111111", A, "knight");
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: "ForgedKnight11111111111111111111111111111111" }))).toBe("403:knight_not_genuine");
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: "NoSuchAsset11111111111111111111111111111111" }))).toBe("403:knight_not_genuine");
-  });
-
-  it("a Wounded knight cannot enter a gated tier until revived", async () => {
-    const r = nftRig();
-    const c = await r.svc.create({ tier: "squire", wallet: A });
-    await pass(r, c.id);
-    const p = await r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId });
-    await breach(r, p.id, 3000);
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId }))).toBe("403:knight_wounded");
+    expect(await code(r.svc.create({ tier: "knight", stage: "funded", wallet: A, knightAsset: "ForgedKnight11111111111111111111111111111111" }))).toBe("403:knight_not_genuine");
+    expect(await code(r.svc.create({ tier: "knight", stage: "funded", wallet: A, knightAsset: "NoSuchAsset11111111111111111111111111111111" }))).toBe("403:knight_not_genuine");
+    expect(await code(r.svc.create({ tier: "knight", stage: "funded", wallet: A }))).toBe("403:knight_required");
   });
 
   it("revive relocks the knight, counts the scar, and the new challenge sits on the same asset", async () => {
@@ -162,7 +145,7 @@ describe("knight NFT on challenge", () => {
       if (k && ++n === 2) return { ...k, owner: B };
       return k;
     };
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId }))).toBe("409:knight_moved");
+    expect(await code(r.svc.create({ tier: "squire", stage: "funded", wallet: A, knightAsset: c.knightId }))).toBe("409:knight_moved");
   });
 
   it("an RPC failure on sync does not lose the state: the knight is marked dirty and reconcile heals it", async () => {
@@ -171,20 +154,20 @@ describe("knight NFT on challenge", () => {
     r.knights.failUpdates = 1;
     await pass(r, c.id); // sync fails here
     expect(r.svc.dirtyKnightIds()).toContain(c.knightId);
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ level: "squire", frozen: true }); // stale
+    expect(await r.knights.get(c.knightId!)).toMatchObject({ wins: 0, frozen: true }); // stale
     const out = await r.svc.reconcileKnights();
     expect(out).toEqual({ synced: 1, failed: 0 });
-    expect(await r.knights.get(c.knightId!)).toMatchObject({ level: "knight", wins: 1, frozen: false });
+    expect(await r.knights.get(c.knightId!)).toMatchObject({ tier: "squire", level: 1, wins: 1, frozen: false });
     expect(r.svc.dirtyKnightIds()).toEqual([]);
   });
 
-  it("a failed freeze refuses to open a gated account (never live and unlocked)", async () => {
+  it("a failed freeze refuses to open a funded account (never live and unlocked)", async () => {
     const r = nftRig();
     const c = await r.svc.create({ tier: "squire", wallet: A });
     await pass(r, c.id);
     r.knights.failUpdates = 1;
-    expect(await code(r.svc.create({ tier: "paladin", wallet: A, knightAsset: c.knightId }))).toBe("502:knight_lock_failed");
-    expect((await r.svc.list({ wallet: A })).filter((x) => x.tier === "paladin")).toHaveLength(0);
+    expect(await code(r.svc.create({ tier: "squire", stage: "funded", wallet: A, knightAsset: c.knightId }))).toBe("502:knight_lock_failed");
+    expect((await r.svc.list({ wallet: A })).filter((x) => x.stage === "funded")).toHaveLength(0);
   });
 
   it("sync is idempotent: a second run sends nothing", async () => {
@@ -204,9 +187,10 @@ describe("knight NFT on challenge", () => {
     expect((await r.svc.payoutQuote(f.id)).destination).toBe(A);
   });
 
-  it("legacy mode (no knight chain) still trusts nftLevels", async () => {
+  it("no knight chain: every tier opens too (nftLevels is ignored)", async () => {
     const rig = makeRig({ enforceGating: true });
-    expect(await code(rig.svc.create({ tier: "paladin", wallet: A, nftLevels: ["knight"] }))).toBe("ok");
+    expect(await code(rig.svc.create({ tier: "paladin", wallet: A }))).toBe("ok");
+    expect(await code(rig.svc.create({ tier: "ascended", wallet: B, nftLevels: ["squire"] }))).toBe("ok");
   });
 
   it("requirePayment: a direct paid create is 402, demo and funded are free", async () => {

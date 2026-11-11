@@ -110,7 +110,7 @@ export interface OrderResult {
  */
 export interface BalanceAdjustment {
   id: string;
-  kind: "payout_sweep" | "payout_reversal";
+  kind: "payout_sweep" | "payout_reversal" | "level_up";
   amount: number;
   /** What caused it (the payout id). */
   ref: string;

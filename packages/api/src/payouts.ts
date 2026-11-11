@@ -688,6 +688,9 @@ export class PayoutService {
     const t = this.now();
     const next: Payout = { ...p, status: "paid", signature, paidAt: t, nextAttemptAt: undefined, sendingSince: undefined, lastError: undefined, lastErrorCode: undefined, updatedAt: t };
     await this.store.update(next, [{ type: "paid", ts: t, data: { signature, alreadySent, amountUsd: p.amountUsd, destination: p.wallet } }]);
-    await this.svc.payoutNote(p.challengeId, `$${p.amountUsd.toFixed(2)} in USDC was sent to ${p.wallet.slice(0, 4)}...${p.wallet.slice(-4)}`).catch((e) => this.onError(e, `payout note ${p.id}`));
+    // Completed payout: note it and count it toward the next funded level-up (Funded scaling), which applies here when due.
+    await this.svc
+      .payoutPaid(p.challengeId, { payoutId: p.id, requestedAt: p.createdAt, note: `$${p.amountUsd.toFixed(2)} in USDC was sent to ${p.wallet.slice(0, 4)}...${p.wallet.slice(-4)}` })
+      .catch((e) => this.onError(e, `payout paid ${p.id}`));
   }
 }

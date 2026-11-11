@@ -115,10 +115,10 @@ try {
   ok("session records the wallet-signature path", (JSON.parse(await page.evaluate(() => sessionStorage.getItem("garuda.session")!)) as { via?: string }).via === "wallet");
   const wallet = session.wallet;
 
-  // ---- 02 challenges: Demo + 4 tiers, Ascended locked
+  // ---- 02 challenges: Demo + 4 tiers, every tier open
   await go("/challenges");
   await page.getByTestId("tier-squire").waitFor();
-  ok("ascended is locked for a fresh wallet", await page.getByTestId("pick-ascended").isDisabled());
+  ok("ascended is open to a fresh wallet", await page.getByTestId("pick-ascended").isEnabled());
   await shot("02-challenges", { full: true });
   await page.getByTestId("challenges-menu").click();
   await page.getByTestId("challenges-dropdown").waitFor();

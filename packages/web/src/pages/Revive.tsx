@@ -123,7 +123,7 @@ function ReviveView({ id }: { id: string }) {
         <div className="panel rv">
           <div className="lbl">Revive</div>
           <h2 className="pt" style={{ marginTop: 6 }}>{k.name}, {spec?.name ?? k.levelName} Trial.</h2>
-          <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>{c.knightId ? `#${c.knightId.slice(-6)} · ` : ""}{usd(c.risk.startingBalance)} account</div>
+          <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>{c.knightId ? `#${c.knightId.slice(-6)} · ` : ""}{usd(spec?.accountSize ?? c.risk.startingBalance)} {spec?.name ?? k.levelName} challenge</div>
           <div className="price">
             {list > fee && <s>{usd(list)}</s>}
             <b data-testid="revive-price">{usd(fee, fee % 1 ? 2 : 0)}</b>
@@ -131,9 +131,9 @@ function ReviveView({ id }: { id: string }) {
           </div>
           <span className="off">{Math.round((rules?.revive.discount ?? 0.2) * 100)}% OFF · REVIVE</span>
           <div className="keep">
-            <div><Check /><b>Keeps history and level</b></div>
+            <div><Check /><b>Keeps your knight and its history</b></div>
             <div><Check /><b>Adds a scar to your knight</b></div>
-            <div><Check /><span>Fresh <b>{usd(c.risk.startingBalance)}</b> simulated account</span></div>
+            <div><Check /><span>Fresh <b>{usd(spec?.accountSize ?? c.risk.startingBalance)}</b> {spec?.name ?? k.levelName} challenge; a new funded account starts at Lv.1</span></div>
             <div><Check /><span>Same rules: {Math.round((rules?.common.profitTargetPct ?? 0.1) * 100)}% target, {Math.round((rules?.common.dailyLossPct ?? 0.03) * 100)}% daily, {Math.round((rules?.common.maxDrawdownPct ?? 0.06) * 100)}% DD</span></div>
           </div>
           <button className="btn btn-fire" style={{ width: "100%", padding: 18 }} disabled={!eligible || busy} onClick={() => void go()} data-testid="revive-btn">
@@ -145,7 +145,7 @@ function ReviveView({ id }: { id: string }) {
           <div className="dim" style={{ fontSize: 12, marginTop: 16, fontFamily: "GM, monospace" }}>{paid ? "Paid in USDC from your wallet." : "No payment is taken on this server."}</div>
           <div className="hr2" />
           <div className="lbl" style={{ marginBottom: 6 }}>Knight record</div>
-          <div className="kr"><span>Level</span><b>{k.level} · {k.levelName}</b></div>
+          <div className="kr"><span>Tier</span><b>{k.label}</b></div>
           <div className="kr"><span>Revives used</span><b>{i ? `${i.revivesUsed} of ${i.revivesUsed + i.revivesLeft}` : "-"}</b></div>
           <div className="kr"><span>Equity at breach</span><b className="dn">{series ? usd(series.equity) : "-"}</b></div>
           <div className="kr"><span>Scars</span><b>{c.scars} → {c.scars + 1}</b></div>
