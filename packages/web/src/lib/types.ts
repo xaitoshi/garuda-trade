@@ -97,6 +97,8 @@ export interface ChallengeState {
   lifecycle: Lifecycle;
   lastActivityAt: number;
   payoutsEnabled: boolean;
+  /** Evaluation accounts: Path to Funded progress and claim. Null on funded accounts (absent on older servers). */
+  pathToFunded?: PathToFunded | null;
   reviveOf?: string;
   revivedBy?: string;
   scars: number;
@@ -121,6 +123,44 @@ export interface ChallengeState {
   combatLog: CombatEntry[];
 }
 
+export interface BestDayCheck {
+  bestDay: number;
+  bestDayKey?: string;
+  profitableTotal: number;
+  share: number | null;
+  maxShare: number;
+  ok: boolean;
+}
+
+export type ClaimStatus = "kyc_pending" | "under_review" | "approved" | "rejected";
+
+export interface FundedClaim {
+  status: ClaimStatus;
+  kyc: "pending" | "approved" | "rejected";
+  claimedAt: number;
+  kycAt?: number;
+  reviewedAt?: number;
+  reason?: string;
+  fundedId?: string;
+}
+
+/** Path to Funded (rulebook section 9): the four pass requirements, then claim, identity check and risk review. */
+export interface PathToFunded {
+  targetBalance: number;
+  closedProfit: number;
+  targetProfit: number;
+  targetMet: boolean;
+  openPositions: number;
+  flat: boolean;
+  tradingDays: number;
+  minTradingDays: number;
+  daysMet: boolean;
+  bestDay: BestDayCheck;
+  eligible: boolean;
+  claim?: FundedClaim;
+  next: "trade" | "claim" | "verify_identity" | "under_review" | "funded" | "rejected" | "none";
+}
+
 export interface PlaceOrderResult {
   accepted: boolean;
   reason?: string;
@@ -142,7 +182,8 @@ export interface TierSpec {
 }
 
 export interface Rules {
-  common: { profitTargetPct: number; dailyLossPct: number; maxDrawdownPct: number; profitSplit: number; minPayoutUsd: number };
+  common: { profitTargetPct: number; dailyLossPct: number; maxDrawdownPct: number; profitSplit: number; minPayoutUsd: number; minTradingDays?: number; bestDayMaxShare?: number };
+  pathToFunded?: { minTradingDays: number; bestDayMaxShare: number; kyc: "auto" | "manual"; riskReview: "auto" | "manual"; riskReviewTarget: string; payoutWaitingPeriodDays: number };
   tiers: Record<TierId, TierSpec>;
   fees: { takerFeeRate: number; makerFeeRate: number };
   markets: { symbol: string; class: string; maxLeverage: number }[];
@@ -238,8 +279,10 @@ export interface PayoutQuote {
   traderShare: number;
   firmShare: number;
   eligible: boolean;
-  reason?: "no_profit" | "below_minimum" | "open_positions";
+  reason?: "no_profit" | "below_minimum" | "open_positions" | "best_day_rule";
   newBalance: number;
+  /** Best-day rule over the current payout cycle. */
+  bestDay?: BestDayCheck;
   destination?: string;
   split?: number;
   minUsd?: number;

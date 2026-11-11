@@ -366,3 +366,29 @@ img.knight.knight-victory{filter:brightness(1.08) contrast(1.06) drop-shadow(0 0
 .faq-list summary{cursor:pointer;list-style:none;padding:18px 0;font-size:18px;letter-spacing:-.02em}
 .faq-list summary::-webkit-details-marker{display:none}
 .faq-list details p{padding:0 0 18px;max-width:720px}
+
+/* Path to Funded (rulebook section 9) */
+.ptf{margin-bottom:16px}
+.ptf-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+.ptf-req{display:flex;gap:12px;padding:14px 18px;border-right:1px solid var(--line);align-items:flex-start;min-width:0}
+.ptf-req:last-child{border-right:0}
+.ptf-req>i{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--line2);display:grid;place-items:center;font-style:normal;font-size:12px;color:var(--green);margin-top:2px}
+.ptf-req.ok>i{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.1)}
+.ptf-req span{display:block;font-size:12px;color:var(--mute)}
+.ptf-req b{display:block;font-size:16px;font-weight:600;color:var(--bone);margin:3px 0 4px;letter-spacing:-.02em}
+.ptf-req.ok b{color:var(--green)}
+.ptf-req small{display:block;font-size:11.5px;color:var(--dim, #8a8586);line-height:1.35}
+@media (max-width:900px){.ptf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ptf-req:nth-child(2){border-right:0}.ptf-req:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.claim{padding-bottom:16px}
+.claim>p,.claim>div,.claim>a,.claim>button{margin-left:18px;margin-right:18px}
+.claim>a,.claim>button{width:calc(100% - 36px)!important}
+.claim>div>b{display:block;color:var(--bone);font-weight:600;margin:4px 0}
+.claim-steps{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:14px 18px;margin:0}
+.claim-steps li{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;color:var(--mute);text-align:center}
+.claim-steps li i{width:26px;height:26px;border-radius:50%;border:1px solid var(--line2);display:grid;place-items:center;font-style:normal;font-size:12px}
+.claim-steps li.on{color:var(--bone)}
+.claim-steps li.on i{border-color:var(--fire);color:var(--fire);background:rgba(255,95,1,.08)}
+.claim-steps li.done{color:var(--green)}
+.claim-steps li.done i{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.1);color:var(--green)}
+.pg-info ol.ptf-rules{margin:0 0 16px 22px;display:grid;gap:10px}
+.pg-info ol.ptf-rules b{color:var(--bone);font-weight:600}

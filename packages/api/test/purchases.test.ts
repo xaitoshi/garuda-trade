@@ -3,7 +3,7 @@ import { FakeKnights, FakeUsdc, usdToBaseUnits } from "@garuda/chain";
 import { TIERS } from "@garuda/risk-engine";
 import { createTestDb } from "@garuda/db";
 import { InMemoryOrderStore, PaymentRequiredProvider, PgOrderStore, PurchaseService, ServiceError, buildApp, type OrderStore } from "../src/index.js";
-import { HOUR, breach, makeRig } from "./helpers.js";
+import { HOUR, breach, makeRig, passEvaluation } from "./helpers.js";
 import { bearer, newWallet, signIn } from "./http-helpers.js";
 
 const A = "WalletA1111111111111111111111111111111111111";
@@ -193,11 +193,7 @@ describe("challenge purchase", () => {
     const q1 = await s.purchases.quoteChallenge({ wallet: A, tier: "squire" });
     const o1 = (await s.purchases.confirm(q1.orderId, { signature: s.pay(q1) })).order;
     // pass the squire evaluation
-    const start = (await s.svc.getState(o1.challengeId!, { refresh: false })).account.startingBalance;
-    await s.svc.placeOrder(o1.challengeId!, { symbol: "SOL", side: "buy", size: Math.round((start * 2400) / 25_000), type: "market" });
-    s.market.setMove("SOL", 0.014);
-    expect((await s.svc.tick(o1.challengeId!)).status).toBe("passed");
-    s.market.setMove("SOL", 0);
+    expect((await passEvaluation(s, o1.challengeId!)).status).toBe("passed");
     const q2 = await s.purchases.quoteChallenge({ wallet: A, tier: "paladin", knightAsset: o1.knightId });
     const o2 = (await s.purchases.confirm(q2.orderId, { signature: s.pay(q2) })).order;
     expect(o2.knightId).toBe(o1.knightId);

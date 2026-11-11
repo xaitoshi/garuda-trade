@@ -1,6 +1,6 @@
 /**
  * Garuda Trading Rules, as code. Source of truth for the numbers is the "Garuda Trading Rules"
- * Notion page (/workspace/garuda/rules.md). Section numbers below refer to that rulebook.
+ * Notion page (copy in docs/trading-rules.md). Section numbers below refer to that rulebook.
  */
 
 export type TierId = "demo" | "squire" | "knight" | "paladin" | "ascended";
@@ -12,8 +12,12 @@ export const COMMON_RULES = {
   dailyLossPct: 0.03,
   /** §7: static, from starting balance, never trails. */
   maxDrawdownPct: 0.06,
-  /** §9: 10% of starting balance, evaluation only, no minimum days, no time limit. */
+  /** §9: 10% of starting balance, evaluation only, counted on CLOSED (realized) balance, no time limit. */
   profitTargetPct: 0.1,
+  /** §9 Path to Funded: distinct UTC days with at least one position opened or closed (non-consecutive is fine). */
+  minTradingDays: 3,
+  /** §9 Path to Funded: best UTC day's realized profit may be at most this share of the profitable days' total. */
+  bestDayMaxShare: 0.5,
   /** §11: 80% of profit to the trader. */
   profitSplit: 0.8,
   /** §11: minimum payout in USDC. */
@@ -76,6 +80,10 @@ export interface RiskLimits {
   maxDrawdownPct: number;
   /** null in the funded stage (no target). */
   profitTargetPct: number | null;
+  /** Path to Funded (evaluation): minimum UTC trading days before a pass. */
+  minTradingDays: number;
+  /** Path to Funded: best-day consistency share (soft gate on pass and on payouts). */
+  bestDayMaxShare: number;
   warningLevels: readonly number[];
 }
 
@@ -86,6 +94,8 @@ export function limitsForTier(tier: TierId, stage: Stage = "evaluation"): RiskLi
     dailyLossPct: COMMON_RULES.dailyLossPct,
     maxDrawdownPct: COMMON_RULES.maxDrawdownPct,
     profitTargetPct: stage === "evaluation" ? COMMON_RULES.profitTargetPct : null,
+    minTradingDays: COMMON_RULES.minTradingDays,
+    bestDayMaxShare: COMMON_RULES.bestDayMaxShare,
     warningLevels: COMMON_RULES.warningLevels,
   };
 }
@@ -100,7 +110,7 @@ export function drawdownFloor(startingBalance: number, maxDrawdownPct: number = 
   return cents(startingBalance * (1 - maxDrawdownPct));
 }
 
-/** Profit-target equity (§9). */
+/** Profit-target balance (§9): the CLOSED balance must reach this. */
 export function targetEquity(startingBalance: number, profitTargetPct: number = COMMON_RULES.profitTargetPct): number {
   return cents(startingBalance * (1 + profitTargetPct));
 }

@@ -35,6 +35,8 @@ export interface Challenge {
   scars: number;
   reviveFeeUsd?: number;
   paymentRef?: string;
+  /** Path to Funded claim on a PASSED evaluation (rulebook section 9): KYC, then risk review, then the funded account. */
+  claim?: FundedClaim;
   account: SimAccount;
   risk: RiskMonitor;
   combatLog: CombatLogEntry[];
@@ -44,6 +46,24 @@ export interface Challenge {
   dataSource?: MarketSnapshot["source"];
   /** Serialises operations on one challenge. */
   queue: Promise<unknown>;
+}
+
+export type KycStatus = "pending" | "approved" | "rejected";
+export type ClaimStatus = "kyc_pending" | "under_review" | "approved" | "rejected";
+
+export interface FundedClaim {
+  status: ClaimStatus;
+  kyc: KycStatus;
+  claimedAt: number;
+  /** Who claimed (the signed-in wallet, or the knight holder). The funded account opens for this wallet. */
+  wallet?: string;
+  kycAt?: number;
+  kycBy?: string;
+  reviewedAt?: number;
+  reviewedBy?: string;
+  reason?: string;
+  /** The funded account opened when the review was approved. */
+  fundedId?: string;
 }
 
 /** Light row used for caps, revive counts and the worker's active list (no ledger load). */

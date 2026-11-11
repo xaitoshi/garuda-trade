@@ -38,9 +38,10 @@ export const openPayout = (payouts: PayoutView[], challengeId: string): PayoutVi
 export const totalPaid = (payouts: PayoutView[]): number => payouts.filter((p) => p.status === "paid").reduce((n, p) => n + p.amountUsd, 0);
 
 /** Why a payout cannot be requested right now, in words ("" when it can). */
-export function notEligibleText(q: { eligible: boolean; reason?: string } | null | undefined, minUsd: number): string {
+export function notEligibleText(q: { eligible: boolean; reason?: string; bestDay?: { share: number | null; maxShare: number } } | null | undefined, minUsd: number): string {
   if (!q || q.eligible) return "";
   if (q.reason === "open_positions") return "Close all open positions to request a payout.";
+  if (q.reason === "best_day_rule") return `Best day rule: no single day can be more than ${Math.round((q.bestDay?.maxShare ?? 0.5) * 100)}% of your profitable days this cycle${q.bestDay?.share != null ? ` (yours is ${Math.round(q.bestDay.share * 100)}%)` : ""}. Keep trading to spread the profit.`;
   if (q.reason === "below_minimum") return `Your share is below the $${minUsd} minimum payout.`;
   return "No profit above the starting balance yet.";
 }

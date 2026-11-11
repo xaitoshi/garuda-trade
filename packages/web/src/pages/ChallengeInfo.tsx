@@ -49,11 +49,13 @@ export function ChallengeRules() {
   const daily = pct(common.dailyLossPct, 0);
   const dd = pct(common.maxDrawdownPct, 0);
   const split = pct(common.profitSplit, 0);
+  const minDays = common.minTradingDays ?? 3;
+  const best = pct(common.bestDayMaxShare ?? 0.5, 0);
   return (
     <Shell
       kicker="Rules"
       title="Challenge rules."
-      lead="One step evaluation. The same percentages apply at every size. Hit the target without breaking either equity limit and you are funded."
+      lead="One step evaluation. The same percentages apply at every size. Meet the four Path to Funded requirements without breaking either equity limit, then claim your funded account."
     >
       <h2>Tiers</h2>
       <table className="rule-table">
@@ -62,7 +64,7 @@ export function ChallengeRules() {
             <th>Tier</th>
             <th>Account</th>
             <th>Fee</th>
-            <th>Target ({target})</th>
+            <th>Target ({target}, closed)</th>
             <th>Daily loss</th>
             <th>Max drawdown</th>
             <th>Split</th>
@@ -91,9 +93,22 @@ export function ChallengeRules() {
       <h2>How a challenge works</h2>
       <ul>
         <li>Pay the fee in USDC, or start the free demo. A paid Squire or Knight challenge mints a knight NFT.</li>
-        <li>Grow the account by {target} of the starting balance, measured on equity, including open positions.</li>
-        <li>There is no time limit and no minimum number of trading days. You can pass in a single trade.</li>
-        <li>Passing opens a funded account at the same starting balance, with no profit target.</li>
+        <li>There is no time limit. Trade until you meet every requirement below, or until a limit ends the account.</li>
+      </ul>
+      <h2 id="path-to-funded">Path to funded</h2>
+      <p>You pass when all four requirements are met at the same time. Your knight levels up the moment you pass.</p>
+      <ol className="ptf-rules" data-testid="path-to-funded-rules">
+        <li><b>Profit target on closed trades.</b> Your closed balance must reach {target} above the starting balance. Open profit does not count, so a floating spike never passes.</li>
+        <li><b>Be flat to pass.</b> Close every position. Garuda never closes positions for you on a pass.</li>
+        <li><b>At least {minDays} trading days.</b> A UTC day counts when you open or close at least one position. The days do not need to be in a row, so hitting {target} on day one is not enough.</li>
+        <li><b>Best day rule.</b> Your best single UTC day can be at most {best} of the total profit from all your profitable days. Losing days are ignored. This never ends the account: if one day is too big, keep trading until the profit is spread out.</li>
+        <li><b>Claim your funded account.</b> Once 1 to 4 are met, press Claim. Nothing opens on its own.</li>
+        <li><b>Verify your identity.</b> A government ID and a live selfie are checked before funded trading starts.</li>
+        <li><b>Risk review, about one business day.</b> Garuda checks for hedging across accounts or outside Garuda, collusion, feed or latency exploits, account sharing, and all in lottery style cycling. Approval opens the funded account.</li>
+        <li><b>First payout on demand.</b> Once funded and in profit, with every position closed, at least {usd(common.minPayoutUsd)} due to you, and the best day rule met for the payout cycle, request a payout. There is no waiting period.</li>
+      </ol>
+      <ul>
+        <li>The funded account opens at the same starting balance with no profit target, and stays bound to your knight. Challenge profit is never paid out or carried over.</li>
       </ul>
       <h2>The two limits</h2>
       <ul>
@@ -105,7 +120,7 @@ export function ChallengeRules() {
       <h2>Payouts and revive</h2>
       <ul>
         <li>Funded accounts keep {split} of profit, paid in USDC. The minimum payout is {usd(common.minPayoutUsd)}.</li>
-        <li>Requests up to $500 are approved automatically. Larger ones wait for review. All positions must be closed, and each payout sweeps the full profit.</li>
+        <li>Requests up to $500 are approved automatically. Larger ones wait for review. All positions must be closed, the best day rule must hold since your last payout, and each payout sweeps the full profit.</li>
         <li>A Wounded knight can be revived at 20% off the same tier fee, up to 3 times, 24 hours after the breach. Revive starts a new challenge, not the old account.</li>
         <li>Demo has the same risk rules, no NFT, no payouts, and no credit toward unlocks.</li>
       </ul>
@@ -177,7 +192,15 @@ export function ChallengeFaq() {
   const items: [string, string][] = [
     [
       "How do challenges work?",
-      `You pick a tier, pay the fee in USDC, and trade a simulated account against the live Phoenix book. Hit a ${pct(common.profitTargetPct, 0)} profit target without breaking the ${pct(common.dailyLossPct, 0)} daily loss or ${pct(common.maxDrawdownPct, 0)} static drawdown and you are funded. There is no time limit and no minimum number of trading days.`,
+      `You pick a tier, pay the fee in USDC, and trade a simulated account against the live Phoenix book. There is no time limit. Stay inside the ${pct(common.dailyLossPct, 0)} daily loss and ${pct(common.maxDrawdownPct, 0)} static drawdown, and pass by meeting the Path to Funded rules.`,
+    ],
+    [
+      "When do I get a funded account?",
+      `You pass when four things are true at once: your closed balance is up ${pct(common.profitTargetPct, 0)} (open profit does not count), you have no open positions, you traded on at least ${common.minTradingDays ?? 3} UTC days, and your best day is no more than ${pct(common.bestDayMaxShare ?? 0.5, 0)} of your profitable days. Then you claim the funded account, verify your identity, and Garuda runs a risk review that takes about one business day. Approval opens the funded account at the same starting balance.`,
+    ],
+    [
+      "Does passing pay me anything?",
+      `No. The challenge is the test, so challenge profit is never paid out or carried over. The ${pct(common.profitSplit, 0)} split applies to profit you make on the funded account, and you can request your first payout as soon as you are funded and in profit, with positions closed and the best day rule met. There is no waiting period.`,
     ],
     [
       "What is the difference between demo and paid?",
@@ -185,7 +208,7 @@ export function ChallengeFaq() {
     ],
     [
       "How do payouts work?",
-      `Funded accounts keep ${split} of profit, paid in USDC. The minimum payout is ${usd(min)}. Requests up to ${usd(auto)} are approved automatically; larger ones wait for review. All positions must be closed, and each payout sweeps the full profit and resets the balance to the starting size.`,
+      `Funded accounts keep ${split} of profit, paid in USDC. The minimum payout is ${usd(min)}. Requests up to ${usd(auto)} are approved automatically; larger ones wait for review. All positions must be closed, the best day rule must hold since your last payout, and each payout sweeps the full profit and resets the balance to the starting size.`,
     ],
     [
       "Is this live mainnet trading?",
@@ -197,7 +220,7 @@ export function ChallengeFaq() {
     ],
     [
       "How do I sign in?",
-      "Sign in with a Solana wallet, or with email through Privy. Email creates an embedded Solana wallet for you. There are no identity checks. Payouts go to the wallet you are signed in with.",
+      "Sign in with a Solana wallet, or with email through Privy. Email creates an embedded Solana wallet for you. Signing in needs no identity check; claiming a funded account does. Payouts go to the wallet you are signed in with.",
     ],
   ];
   return (

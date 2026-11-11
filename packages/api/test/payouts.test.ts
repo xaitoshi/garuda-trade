@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FakePayoutExecutor } from "@garuda/chain";
 import { PayoutService, ServiceError, type Payout } from "../src/index.js";
-import { DAY, HOUR, breach } from "./helpers.js";
+import { DAY, HOUR, breach, passEvaluation } from "./helpers.js";
 import { WALLET_A, WALLET_B, earn, fundedAccount, makePayoutRig } from "./payout-helpers.js";
 
 const SMALL = { size: 10 }; // about $45 of profit, $36 to the trader: above the $20 minimum, under the $500 ceiling
@@ -44,7 +44,7 @@ describe("payout request", () => {
   });
 
   it("the share is rounded down to the cent and the firm keeps the rest of the swept profit", async () => {
-    const rig = makePayoutRig({ deps: { payoutPolicy: { split: 0.9, minUsd: 20, autoMaxUsd: 500 } } });
+    const rig = makePayoutRig({ deps: { payoutPolicy: { split: 0.9, minUsd: 20, autoMaxUsd: 500, bestDayMaxShare: 1 } } });
     const f = await fundedAccount(rig);
     const bal = await earn(rig, f.id, SMALL);
     const out = await rig.payouts.request(f.id, { actorWallet: WALLET_A });
@@ -213,12 +213,12 @@ describe("approval threshold and admin", () => {
   });
 
   it("the ceiling is inclusive and configurable, 0 sends everything to review", async () => {
-    const strict = makePayoutRig({ deps: { payoutPolicy: { split: 0.8, minUsd: 20, autoMaxUsd: 0 } } });
+    const strict = makePayoutRig({ deps: { payoutPolicy: { split: 0.8, minUsd: 20, autoMaxUsd: 0, bestDayMaxShare: 1 } } });
     const f = await fundedAccount(strict);
     await earn(strict, f.id, SMALL);
     expect((await strict.payouts.request(f.id, { actorWallet: WALLET_A })).status).toBe("pending_approval");
 
-    const loose = makePayoutRig({ deps: { payoutPolicy: { split: 0.8, minUsd: 20, autoMaxUsd: 10_000 } } });
+    const loose = makePayoutRig({ deps: { payoutPolicy: { split: 0.8, minUsd: 20, autoMaxUsd: 10_000, bestDayMaxShare: 1 } } });
     const g = await fundedAccount(loose);
     await earn(loose, g.id, BIG);
     expect((await loose.payouts.request(g.id, { actorWallet: WALLET_A })).status).toBe("approved");
@@ -542,10 +542,7 @@ describe("knights chain", () => {
     const rig = makePayoutRig({ deps: { knights, enforceGating: true } });
     // an evaluation passed on a knight, then the funded account on the same knight
     const ev = await rig.svc.create({ tier: "knight", wallet: WALLET_A });
-    await rig.svc.placeOrder(ev.id, { symbol: "SOL", side: "buy", size: 1000, type: "market" });
-    rig.market.setMove("SOL", 0.06);
-    const passed = await rig.svc.tick(ev.id);
-    rig.market.setMove("SOL", 0);
+    const passed = await passEvaluation(rig, ev.id);
     expect(passed.status).toBe("passed");
     const f = await rig.svc.create({ tier: "knight", stage: "funded", wallet: WALLET_A, knightAsset: ev.knightId });
     await earn(rig, f.id, SMALL);

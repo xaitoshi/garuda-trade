@@ -80,12 +80,21 @@ describe("payout quote", () => {
     expect(quotePayout({ startingBalance: 25_000, balance: 24_000 })).toMatchObject({ eligible: false, reason: "no_profit" });
     expect(quotePayout({ startingBalance: 25_000, balance: 28_000, hasOpenPositions: true })).toMatchObject({ eligible: false, reason: "open_positions" });
   });
+
+  it("rule 8: the best-day rule gates a payout (soft, never a breach); no waiting period", () => {
+    const bad = { bestDay: 900, profitableTotal: 1000, share: 0.9, maxShare: 0.5, ok: false };
+    const good = { bestDay: 500, profitableTotal: 1000, share: 0.5, maxShare: 0.5, ok: true };
+    expect(quotePayout({ startingBalance: 25_000, balance: 26_000, bestDay: bad })).toMatchObject({ eligible: false, reason: "best_day_rule", newBalance: 26_000 });
+    expect(quotePayout({ startingBalance: 25_000, balance: 26_000, bestDay: good })).toMatchObject({ eligible: true, traderShare: 800, newBalance: 25_000 });
+    // open positions and the minimum are checked first
+    expect(quotePayout({ startingBalance: 25_000, balance: 26_000, hasOpenPositions: true, bestDay: bad }).reason).toBe("open_positions");
+  });
 });
 
 describe("payout policy", () => {
   it("defaults to the rulebook split and a $500 auto-approve ceiling", () => {
-    expect(payoutPolicyFromEnv({})).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500 });
-    expect(DEFAULT_PAYOUT_POLICY).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500 });
+    expect(payoutPolicyFromEnv({})).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500, bestDayMaxShare: 0.5 });
+    expect(DEFAULT_PAYOUT_POLICY).toEqual({ split: 0.8, minUsd: 20, autoMaxUsd: 500, bestDayMaxShare: 0.5 });
   });
   it("reads GARUDA_PAYOUT_SPLIT and GARUDA_PAYOUT_AUTO_MAX", () => {
     expect(payoutPolicyFromEnv({ GARUDA_PAYOUT_SPLIT: "0.9", GARUDA_PAYOUT_AUTO_MAX: "1500" })).toMatchObject({ split: 0.9, autoMaxUsd: 1500 });

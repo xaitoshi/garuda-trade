@@ -19,7 +19,9 @@ import {
   checkAccountCaps,
   checkOrderLeverage,
   checkRevive,
+  dailyLedger,
   demoRestartAt,
+  fundedProgress,
   fillsToCombat,
   isWhitelisted,
   leverageCap,
@@ -33,6 +35,8 @@ import {
   RiskMonitor,
   usd,
   type CombatLogEntry,
+  type DailyLedger,
+  type FundedProgress,
   type HeldAccount,
   type Lifecycle,
   type PayoutPolicy,
@@ -54,7 +58,7 @@ import {
   type RestingFillGate,
 } from "@garuda/sim-engine";
 import { StubPaymentProvider, type PaymentProvider } from "./payments.js";
-import { InMemoryChallengeStore, summarize, type Challenge, type ChallengeStore, type ChallengeSummary } from "./store.js";
+import { InMemoryChallengeStore, summarize, type Challenge, type ChallengeStore, type ChallengeSummary, type FundedClaim, type KycStatus } from "./store.js";
 
 export type { Challenge, ChallengeStore } from "./store.js";
 export { InMemoryChallengeStore } from "./store.js";
@@ -95,6 +99,25 @@ export interface ServiceDeps {
   requirePayment?: boolean;
   /** Payout split, minimum and auto-approve ceiling (M8). Default: the rulebook numbers. */
   payoutPolicy?: PayoutPolicy;
+  /**
+   * Path to Funded identity check (rulebook section 9, step 6). "manual": a claim waits in kyc_pending until ops
+   * approves it (POST /admin/claims/:id/kyc). "auto": KYC is approved on claim (dev and tests). Default "auto" for
+   * library use; the HTTP server defaults to "manual". TODO: vendor integration (e.g. Sumsub) replaces the manual step.
+   */
+  kycMode?: "auto" | "manual";
+  /**
+   * Path to Funded risk review (step 7, target about 1 business day). "manual": a claim waits in under_review until ops
+   * approves it (POST /admin/claims/:id/approve), which opens the funded account. "auto": approved at once (dev, tests).
+   * When either step is manual, a funded account can ONLY be opened through an approved claim.
+   */
+  fundedReview?: "auto" | "manual";
+}
+
+/** Path to Funded view of an account: progress on the four pass requirements plus the claim (KYC and review). */
+export interface PathToFunded extends FundedProgress {
+  claim?: FundedClaim;
+  /** What the trader should do next. */
+  next: "trade" | "claim" | "verify_identity" | "under_review" | "funded" | "rejected" | "none";
 }
 
 export interface CreateOpts {
@@ -102,6 +125,8 @@ export interface CreateOpts {
   id?: string;
   /** Set by the PurchaseService after a verified payment. */
   paid?: { orderId: string; ref: string; amountUsd?: number };
+  /** Internal: an approved Path to Funded claim is opening this funded account. */
+  claimApproved?: boolean;
 }
 
 export interface CreateChallengeInput {
@@ -156,6 +181,8 @@ export interface ChallengeState {
   dormantSince?: number;
   archivedAt?: number;
   payoutsEnabled: boolean;
+  /** Evaluation accounts: progress on the Path to Funded requirements and the claim state. Null on funded accounts. */
+  pathToFunded: PathToFunded | null;
   reviveOf?: string;
   revivedBy?: string;
   scars: number;
@@ -233,7 +260,9 @@ const payoutReasonText = (reason: PayoutQuote["reason"], p: PayoutPolicy): strin
     ? "Close all open positions before requesting a payout"
     : reason === "no_profit"
       ? "No profit above the starting balance to pay out"
-      : `Your share of the profit is below the $${p.minUsd} minimum payout`;
+      : reason === "best_day_rule"
+        ? `Best-day rule: no single day may be more than ${Math.round((p.bestDayMaxShare ?? COMMON_RULES.bestDayMaxShare) * 100)}% of your profitable days. Keep trading to spread the profit`
+        : `Your share of the profit is below the $${p.minUsd} minimum payout`;
 
 /** Challenge ids opened by a paid revive derive from the order id, so a retry can never open a second account. */
 export const reviveChallengeId = (orderId: string) => `ch_${orderId.replace(/^ord_/, "")}`;
@@ -259,6 +288,8 @@ export class ChallengeService {
   private liveIds = new Set<string>();
   private haltedSymbols = new Set<string>();
   private createChains = new Map<string, Promise<unknown>>();
+  readonly kycMode: "auto" | "manual";
+  readonly fundedReview: "auto" | "manual";
 
   constructor(deps: ServiceDeps) {
     this.market = deps.market;
@@ -271,6 +302,13 @@ export class ChallengeService {
     this.knights = deps.knights;
     this.requirePayment = deps.requirePayment ?? false;
     this.payoutPolicy = deps.payoutPolicy ?? DEFAULT_PAYOUT_POLICY;
+    this.kycMode = deps.kycMode ?? "auto";
+    this.fundedReview = deps.fundedReview ?? "auto";
+  }
+
+  /** True when funded accounts may only open through an approved claim (KYC or review is a manual step). */
+  get claimGate(): boolean {
+    return this.kycMode === "manual" || this.fundedReview === "manual";
   }
 
   // ------------------------------------------------------------------ create
@@ -282,6 +320,10 @@ export class ChallengeService {
     const isDemo = input.tier === "demo";
     if (isDemo && stage !== "evaluation") throw new ServiceError(400, "demo_evaluation_only", "Demo has no funded stage");
     if (isDemo && this.requireWalletForDemo && !input.wallet) throw new ServiceError(400, "wallet_required", "Demo needs a signed-in wallet");
+    // Path to Funded: with KYC or the risk review switched on, the only door to a funded account is an approved claim.
+    if (stage === "funded" && this.claimGate && !opts.claimApproved) {
+      throw new ServiceError(403, "claim_required", "Funded accounts open through the Path to Funded claim: POST /challenges/:id/claim on your passed challenge");
+    }
     // Real money mode: a paid evaluation only opens through a verified payment (PurchaseService passes `paid`).
     if (!isDemo && stage === "evaluation" && this.requirePayment && !opts.paid) {
       throw new ServiceError(402, "payment_required", "Paid tiers are bought with USDC: POST /purchases/challenge, pay, then confirm", { quote: "/purchases/challenge" });
@@ -318,6 +360,7 @@ export class ChallengeService {
     const spec = TIERS[input.tier];
     if (!spec || input.tier === "demo") throw new ServiceError(400, "unknown_tier");
     const stage = input.stage ?? "evaluation";
+    if (stage === "funded" && this.claimGate) throw new ServiceError(403, "claim_required", "Funded accounts open through the Path to Funded claim");
     if (!this.knights && this.enforceGating && spec.requires && !(input.nftLevels ?? []).includes(spec.requires)) {
       throw new ServiceError(403, "tier_locked", `${spec.name} requires a ${TIERS[spec.requires].name}-level knight NFT`);
     }
@@ -763,16 +806,29 @@ export class ChallengeService {
     return out;
   }
 
-  /** Evaluate rules; on breach or pass, flatten the book. Returns the events produced. */
+  /**
+   * Evaluate rules; on a breach, flatten the book. A pass needs every Path to Funded rule (closed-balance target, flat
+   * book, minimum trading days, best-day rule), so there is nothing to close on a pass. Returns the events produced.
+   */
   private evaluateRisk(ch: Challenge, t: number): { events: RiskEvent[]; combat: CombatLogEntry[] } {
-    const events = ch.risk.evaluate({ balance: ch.account.balance, equity: ch.account.equity(), now: t });
+    const flat = ch.account.positions.size === 0;
+    let gatesMet = true;
+    if (ch.stage === "evaluation" && flat && ch.risk.status === "active") {
+      const p = this.progressOf(ch);
+      gatesMet = p.daysMet && p.bestDay.ok;
+    }
+    const events = ch.risk.evaluate({ balance: ch.account.balance, equity: ch.account.equity(), now: t, flat, gatesMet });
     const ctx = { knight: ch.knight, startingBalance: ch.account.startingBalance };
     const combat: CombatLogEntry[] = [];
     for (const e of events) combat.push(riskEventToCombat(ctx, e));
     ch.combatLog.push(...combat);
     ch.riskEvents.push(...events);
     if (events.some((e) => e.type === "breach")) ch.breachAt = t;
-    if (events.some((e) => e.type === "breach" || e.type === "pass")) {
+    if (events.some((e) => e.type === "pass")) {
+      combat.push({ ts: t, kind: "dawn", text: `${ch.knight} may now claim a funded account: verify identity, then a risk review of about one business day` });
+      ch.combatLog.push(combat[combat.length - 1]!);
+    }
+    if (events.some((e) => e.type === "breach")) {
       const forced = this.engine.closeAll(ch.account, ch.books, t);
       combat.push(...this.logFills(ch, forced));
       ch.risk.syncFinal(ch.account.balance, ch.account.equity(), t);
@@ -998,13 +1054,184 @@ export class ChallengeService {
   }
 
   private quoteFor(ch: Challenge): PayoutQuote {
+    const share = this.payoutPolicy.bestDayMaxShare ?? COMMON_RULES.bestDayMaxShare;
     return quotePayout({
       startingBalance: ch.account.startingBalance,
       balance: ch.account.balance,
       hasOpenPositions: ch.account.positions.size > 0,
       split: this.payoutPolicy.split,
       minPayout: this.payoutPolicy.minUsd,
+      // Rule 8: the best-day rule over the current payout cycle (since the funded account opened or the last payout).
+      bestDay: share < 1 ? fundedProgress({ startingBalance: ch.account.startingBalance, balance: ch.account.balance, openPositions: 0, ledger: this.ledgerOf(ch, this.lastSweepAt(ch)), bestDayMaxShare: share }).bestDay : undefined,
     });
+  }
+
+  /** Time of the latest payout sweep that was not reversed: the start of the current payout cycle. */
+  private lastSweepAt(ch: Challenge): number | undefined {
+    const reversed = new Set(ch.account.adjustments.filter((a) => a.kind === "payout_reversal").map((a) => a.ref));
+    let at: number | undefined;
+    for (const a of ch.account.adjustments) if (a.kind === "payout_sweep" && !reversed.has(a.ref)) at = Math.max(at ?? 0, a.ts);
+    return at;
+  }
+
+  // ---------------------------------------------------------- path to funded
+
+  /** Per-UTC-day realized P&L and trading days, from the ledger (fills and funding). */
+  private ledgerOf(ch: Challenge, since?: number): DailyLedger {
+    return dailyLedger(ch.account.fills, ch.account.fundingPayments, since);
+  }
+
+  /** Progress on the four Path to Funded pass requirements (rulebook section 9). */
+  private progressOf(ch: Challenge): FundedProgress {
+    const l = ch.risk.limits;
+    return fundedProgress({
+      startingBalance: ch.account.startingBalance,
+      balance: ch.account.balance,
+      openPositions: ch.account.positions.size,
+      ledger: this.ledgerOf(ch),
+      profitTargetPct: l.profitTargetPct ?? COMMON_RULES.profitTargetPct,
+      minTradingDays: l.minTradingDays,
+      bestDayMaxShare: l.bestDayMaxShare,
+    });
+  }
+
+  private pathView(ch: Challenge): PathToFunded | null {
+    if (ch.stage !== "evaluation") return null;
+    const p = this.progressOf(ch);
+    const c = ch.claim;
+    let next: PathToFunded["next"] = "none";
+    if (ch.tier === "demo") next = ch.risk.status === "active" ? "trade" : "none";
+    else if (ch.risk.status === "active") next = "trade";
+    else if (ch.risk.status === "passed") {
+      if (!c) next = "claim";
+      else if (c.status === "kyc_pending") next = "verify_identity";
+      else if (c.status === "under_review") next = "under_review";
+      else if (c.status === "approved") next = "funded";
+      else next = "rejected";
+    }
+    // A passed account keeps showing the requirements as met even if the ledger view shifts later.
+    const shown = ch.risk.status === "passed" ? { ...p, eligible: true } : p;
+    return { ...shown, claim: c, next };
+  }
+
+  /**
+   * Step 5: the trader claims the funded account on a PASSED evaluation. Then step 6 (KYC) and step 7 (risk review,
+   * about one business day). In "auto" modes (dev, tests) those steps pass at once and the funded account opens now.
+   * Idempotent: a second claim returns the current state.
+   */
+  async claimFunded(id: string, opts: { actorWallet?: string } = {}): Promise<ChallengeState> {
+    const ch = await this.get(id);
+    if (ch.tier === "demo") throw new ServiceError(403, "demo_no_funded", "Demo has no funded stage");
+    if (ch.stage !== "evaluation") throw new ServiceError(409, "not_an_evaluation", "Only a passed challenge can be claimed");
+    if (ch.risk.status !== "passed") {
+      throw new ServiceError(409, "not_eligible", "Meet every Path to Funded requirement first: +10% closed, flat, 3 trading days, best-day rule", { pathToFunded: this.pathView(ch) });
+    }
+    let holder = ch.wallet;
+    if (this.knights && ch.knightId) {
+      const k = await this.knights.get(ch.knightId);
+      if (!k || !k.genuine) throw new ServiceError(409, "knight_not_genuine", "The knight NFT could not be verified onchain");
+      if (opts.actorWallet && k.owner !== opts.actorWallet) throw new ServiceError(403, "not_knight_owner", "Only the wallet holding this knight can claim");
+      holder = k.owner;
+    }
+    // An account funded before Path to Funded existed: record it as an approved claim instead of opening a second one.
+    if (!ch.claim) {
+      const legacy = (await this.store.summaries(ch.knightId ? { knightId: ch.knightId } : { wallet: ch.wallet })).find(
+        (r) => r.stage === "funded" && r.tier === ch.tier && r.createdAt >= ch.createdAt && (ch.knightId ? r.knightId === ch.knightId : true) && r.lifecycle !== "archived" && r.status === "active",
+      );
+      if (legacy) {
+        await this.locked(ch, async () => {
+          const t = this.now();
+          ch.claim = { status: "approved", kyc: "approved", claimedAt: t, wallet: ch.wallet, kycAt: t, kycBy: "legacy", reviewedAt: t, reviewedBy: "legacy", fundedId: legacy.id };
+          await this.store.save(ch);
+        });
+        return this.view(ch);
+      }
+    }
+    await this.locked(ch, async () => {
+      if (ch.claim && ch.claim.status !== "rejected") return;
+      if (ch.claim?.status === "rejected") throw new ServiceError(409, "claim_rejected", ch.claim.reason ? `Claim rejected: ${ch.claim.reason}` : "This claim was rejected");
+      const t = this.now();
+      const kyc: KycStatus = this.kycMode === "auto" ? "approved" : "pending";
+      ch.claim = { status: kyc === "approved" ? "under_review" : "kyc_pending", kyc, claimedAt: t, wallet: opts.actorWallet ?? holder, ...(kyc === "approved" ? { kycAt: t, kycBy: "auto" } : {}) };
+      ch.combatLog.push({ ts: t, kind: "dawn", text: `${ch.knight} claims a funded account: ${kyc === "approved" ? "risk review started" : "verify identity next"}` });
+      await this.store.save(ch);
+    });
+    if (ch.claim?.status === "under_review" && this.fundedReview === "auto") await this.reviewClaim(id, { decision: "approve", actor: "auto" });
+    return this.view((await this.store.get(id))!);
+  }
+
+  /** Step 6 (ops / KYC vendor webhook later): record the identity check result. TODO: Sumsub (or similar) integration. */
+  async setClaimKyc(id: string, a: { decision: "approve" | "reject"; actor?: string; reason?: string }): Promise<ChallengeState> {
+    const ch = await this.get(id);
+    await this.locked(ch, async () => {
+      const c = ch.claim;
+      if (!c) throw new ServiceError(404, "claim_not_found", "No funded claim on this challenge");
+      if (c.status !== "kyc_pending") throw new ServiceError(409, "claim_not_kyc_pending", `Claim is ${c.status}`);
+      const t = this.now();
+      c.kyc = a.decision === "approve" ? "approved" : "rejected";
+      c.kycAt = t;
+      c.kycBy = a.actor ?? "admin";
+      if (a.decision === "approve") c.status = "under_review";
+      else {
+        c.status = "rejected";
+        c.reason = a.reason ?? "identity check failed";
+      }
+      ch.combatLog.push({ ts: t, kind: "dawn", text: a.decision === "approve" ? `${ch.knight}'s identity is verified: risk review started` : `${ch.knight}'s identity check failed` });
+      await this.store.save(ch);
+    });
+    if (ch.claim?.status === "under_review" && this.fundedReview === "auto") return this.reviewClaim(id, { decision: "approve", actor: "auto" });
+    return this.view(ch);
+  }
+
+  /**
+   * Step 7: risk review decision. Approve opens the funded account on the same knight at the same starting balance
+   * (status under_review -> approved, the funded account is live). Checks done by ops: cross-account or external
+   * hedging, collusion, feed or latency exploits, account sharing, all-in lottery cycling.
+   */
+  async reviewClaim(id: string, a: { decision: "approve" | "reject"; actor?: string; reason?: string }): Promise<ChallengeState> {
+    const ch = await this.get(id);
+    const c = ch.claim;
+    if (!c) throw new ServiceError(404, "claim_not_found", "No funded claim on this challenge");
+    if (c.status === "approved") return this.view(ch);
+    if (c.status !== "under_review") throw new ServiceError(409, "claim_not_under_review", `Claim is ${c.status}`);
+    if (c.kyc !== "approved") throw new ServiceError(409, "kyc_not_approved", "Identity check must be approved first");
+    const t = this.now();
+    if (a.decision === "reject") {
+      await this.locked(ch, async () => {
+        c.status = "rejected";
+        c.reviewedAt = t;
+        c.reviewedBy = a.actor ?? "admin";
+        c.reason = a.reason ?? "risk review";
+        ch.combatLog.push({ ts: t, kind: "dawn", text: `${ch.knight}'s funded claim is rejected after risk review` });
+        await this.store.save(ch);
+      });
+      return this.view(ch);
+    }
+    const funded = await this.create(
+      { tier: ch.tier, stage: "funded", wallet: c.wallet ?? ch.wallet, knight: ch.knight, knightAsset: ch.knightId },
+      { claimApproved: true },
+    );
+    await this.locked(ch, async () => {
+      c.status = "approved";
+      c.reviewedAt = t;
+      c.reviewedBy = a.actor ?? "admin";
+      c.fundedId = funded.id;
+      ch.combatLog.push({ ts: t, kind: "dawn", text: `${ch.knight}'s funded account is live: ${usd(funded.account.startingBalance)}, 80% profit split` });
+      await this.store.save(ch);
+    });
+    return this.view(ch);
+  }
+
+  /** Ops queue: claims, optionally by status. */
+  async listClaims(status?: FundedClaim["status"]): Promise<{ challengeId: string; tier: TierId; knight: string; knightId?: string; wallet?: string; claim: FundedClaim; pathToFunded: PathToFunded | null }[]> {
+    const rows = (await this.store.summaries({ status: "passed" })).filter((r) => r.stage === "evaluation" && r.tier !== "demo");
+    const out = [];
+    for (const r of rows) {
+      const ch = await this.store.get(r.id);
+      if (!ch?.claim || (status && ch.claim.status !== status)) continue;
+      out.push({ challengeId: ch.id, tier: ch.tier, knight: ch.knight, knightId: ch.knightId, wallet: ch.wallet, claim: ch.claim, pathToFunded: this.pathView(ch) });
+    }
+    return out.sort((x, y) => x.claim.claimedAt - y.claim.claimedAt);
   }
 
   /**
@@ -1239,6 +1466,7 @@ export class ChallengeService {
       dormantSince: ch.dormantSince,
       archivedAt: ch.archivedAt,
       payoutsEnabled: TIERS[ch.tier].payouts && ch.stage === "funded" && ch.risk.status !== "wounded",
+      pathToFunded: this.pathView(ch),
       reviveOf: ch.reviveOf,
       revivedBy: ch.revivedBy,
       scars: ch.scars,

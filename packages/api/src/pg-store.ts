@@ -28,6 +28,7 @@ interface PersistedState {
   seq: number;
   dataSource?: Challenge["dataSource"];
   scars: number;
+  claim?: Challenge["claim"];
 }
 
 interface Cursor {
@@ -131,6 +132,7 @@ export class PgChallengeStore implements ChallengeStore {
       seq: c.account.seq,
       dataSource: c.dataSource,
       scars: c.scars,
+      ...(c.claim ? { claim: c.claim } : {}),
     };
     const row = {
       id: c.id,
@@ -247,6 +249,7 @@ export class PgChallengeStore implements ChallengeStore {
       reviveOf: optStr(row.revive_of),
       revivedBy: optStr(row.revived_by),
       scars: state.scars ?? 0,
+      claim: state.claim,
       reviveFeeUsd: optNum(row.revive_fee_usd),
       paymentRef: optStr(row.payment_ref),
       account,
