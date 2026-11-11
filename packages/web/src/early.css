@@ -93,3 +93,12 @@
   transition:background-color .42s cubic-bezier(.22,.7,.24,1),color .42s cubic-bezier(.22,.7,.24,1);
 }
 :root .pg-early .early-submit:disabled{opacity:.6;cursor:wait}
+.early-hero:has(.early-done){max-width:640px}
+.early-done{display:flex;flex-direction:column;align-items:center;gap:20px}
+.early-share-art{display:block;width:100%;height:auto;margin:0;user-select:none}
+.early-share-row{display:flex;gap:10px;width:100%}
+.early-share-row .early-submit{margin-top:0;flex:1;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+:root .pg-early .early-share-row .btn-ghost{border-radius:var(--r-control,10px);border:1px solid rgba(255,255,255,.125)}
+@media (max-width:600px){
+  .early-share-row{flex-direction:column}
+}
