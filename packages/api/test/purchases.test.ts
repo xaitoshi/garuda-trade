@@ -288,7 +288,7 @@ describe("PgOrderStore", () => {
 describe("HTTP", () => {
   async function api() {
     const s = shop();
-    const app = buildApp({ service: s.svc, purchases: s.purchases, auth: undefined, rateLimits: false, nft: { baseUrl: "http://localhost:8787", artDir: "/workspace/garuda-landing/knights" } });
+    const app = buildApp({ service: s.svc, purchases: s.purchases, auth: undefined, rateLimits: false, nft: { baseUrl: "http://localhost:8787", artDir: new URL("../../../art/knights", import.meta.url).pathname } });
     return { s, app };
   }
 

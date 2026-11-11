@@ -1,12 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { KNIGHT_LEVELS, KNIGHT_STATUSES, isKnightLevel, type KnightAttrs, type KnightLevel, type KnightStatus } from "./types.js";
 
 export const COLLECTION_NAME = "Garuda Knights";
 export const COLLECTION_SYMBOL = "KNIGHT";
-export const DEFAULT_ART_DIR = "/workspace/garuda-landing/knights";
+/** Repo-relative art folder (knight-1.png Squire through knight-4.png Ascended). Resolved from this module, then cwd. */
+const ART_FROM_MODULE = join(dirname(fileURLToPath(import.meta.url)), "../../../art/knights");
+const ART_FROM_CWD = join(process.cwd(), "art/knights");
+export const DEFAULT_ART_DIR = existsSync(ART_FROM_MODULE) ? ART_FROM_MODULE : ART_FROM_CWD;
 
-/** One art file per level (the landing art set: knight-1.png is the Squire, knight-4.png the Ascended). */
+/** One 1:1 PNG per level, served at /nft/images/knight-N.png. */
 export const LEVEL_IMAGE: Record<KnightLevel, string> = {
   squire: "knight-1.png",
   knight: "knight-2.png",

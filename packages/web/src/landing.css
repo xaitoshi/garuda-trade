@@ -117,7 +117,7 @@ section.s{padding:170px var(--pad) 0}
 
 
 .step .art{display:flex;justify-content:center;align-items:flex-end;gap:14px;height:290px;padding:24px 20px 22px;position:relative}
-.step .art img{display:block}
+.step .art img,.step .art .boss-mark{display:block}
 .step .art .vs{align-self:center;font-family:Inter,sans-serif;color:var(--dim);font-size:12px;letter-spacing:0}
 .tier-art img{display:block}
 .tier .btn{min-width:90px}

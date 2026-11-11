@@ -82,7 +82,7 @@ export function Landing() {
         <div className="steps">
           <article className="step rv">
             <div className="art"><KnightImg level={2} state="dormant" size={190} /></div>
-            <div className="step-body"><span className="step-n">01</span><h3>Mint a knight</h3><p>Every challenge mints a chibi knight NFT.</p></div>
+            <div className="step-body"><span className="step-n">01</span><h3>Mint a knight</h3><p>Every challenge mints a knight NFT.</p></div>
           </article>
           <article className="step rv">
             <div className="art"><KnightImg level={2} size={160} /><span className="vs">VS</span><BossImg state="hurt" size={170} /></div>
