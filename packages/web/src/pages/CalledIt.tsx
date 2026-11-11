@@ -3,17 +3,23 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ColorType, CrosshairMode, CandlestickSeries, LineStyle, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import {
   TIMEFRAMES,
+  UPLOAD_TYPES,
   cashtagOf,
+  checkUpload,
   fetchBars,
   fetchTweet,
   fmtAge,
   fmtPct,
   fmtPrice,
+  isUploadId,
+  mediaSrc,
   parseTweetUrl,
   pickTimeframe,
   priceAt,
   resolveAsset,
   statsFor,
+  uploadImage,
+  uploadSrc,
   windowFor,
   type Asset,
   type Bar,
@@ -60,6 +66,11 @@ export function CalledIt() {
   const [res, setRes] = useState<Result | null>(null);
   const [card, setCard] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const initialImg = params.get("img");
+  const [upload, setUpload] = useState<{ id?: string; src: string; busy?: boolean } | null>(isUploadId(initialImg) ? { id: initialImg, src: uploadSrc(initialImg) } : null);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [mediaBroken, setMediaBroken] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const run = useRef(0);
 
   const load = useCallback(async (tweetRaw: string, tickerRaw: string, sideIn: Side, tfId?: string) => {
@@ -88,6 +99,7 @@ export function CalledIt() {
       const stats = entry ? statsFor(bars, tweet.postedAt, entry, tf.ms, sideIn) : undefined;
       if (!stats) throw new Error("Could not price the call. Try another timeframe.");
       if (my !== run.current) return;
+      setMediaBroken(false);
       setRes({ tweet, handle: tweet.handle ?? parsed.handle, asset, tf, bars, stats, now });
       if (!tickerRaw.trim()) setTickerIn(asset.kind === "perp" ? asset.symbol : ticker);
       setParams((p) => {
@@ -117,18 +129,64 @@ export function CalledIt() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const tweetPhoto = res?.tweet.media?.[0];
+  const shownImage = upload?.src ?? (tweetPhoto && !mediaBroken ? mediaSrc(tweetPhoto.url) : undefined);
+
   useEffect(() => {
     if (!res) return;
     let live = true;
-    void renderCard({ ...res, tfMs: res.tf.ms, url: shareUrl() }).then((cv) => live && setCard(cv.toDataURL("image/png")));
+    void renderCard({ ...res, tfMs: res.tf.ms, url: shareUrl(), image: shownImage })
+      .then((cv) => live && setCard(cv.toDataURL("image/png")))
+      .catch(() => live && setCard(null));
     return () => {
       live = false;
     };
-  }, [res]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [res, shownImage, upload?.id]);
+
+  const setImgParam = (id: string | null) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (id) n.set("img", id);
+      else n.delete("img");
+      return n;
+    }, { replace: true });
+
+  const pickFile = (f: File | undefined) => {
+    if (!f) return;
+    setUploadErr(null);
+    const bad = checkUpload(f);
+    if (bad) {
+      setUploadErr(bad);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setUploadErr("Could not read that file.");
+    reader.onload = async () => {
+      const dataUrl = String(reader.result);
+      setUpload({ src: dataUrl, busy: true });
+      try {
+        const saved = await uploadImage(dataUrl);
+        setUpload({ id: saved.id, src: dataUrl });
+        setImgParam(saved.id);
+      } catch (e) {
+        setUpload({ src: dataUrl });
+        setUploadErr(`${(e as Error).message} The image is on your card, but shared links will not include it.`);
+      }
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const clearUpload = () => {
+    setUpload(null);
+    setUploadErr(null);
+    setImgParam(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   const shareUrl = () => {
     const u = new URL("/calledit", window.location.origin);
-    for (const k of ["tweet", "ticker", "side", "tf"]) {
+    for (const k of ["tweet", "ticker", "side", "tf", "img"]) {
       const v = new URLSearchParams(window.location.search).get(k);
       if (v) u.searchParams.set(k, v);
     }
@@ -148,6 +206,7 @@ export function CalledIt() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (tweetIn.trim() !== (params.get("tweet") ?? "")) clearUpload();
     void load(tweetIn, tickerIn, side);
   };
 
@@ -209,6 +268,7 @@ export function CalledIt() {
                 setTweetIn(x.tweet);
                 setTickerIn(x.ticker);
                 setSide(x.side);
+                clearUpload();
                 void load(x.tweet, x.ticker, x.side);
               }}
             >
@@ -252,6 +312,35 @@ export function CalledIt() {
                 </a>
               </div>
               {res.tweet.text ? <p className="ci-text">{res.tweet.text}</p> : <p className="ci-text mute">Could not load the post text. The time is still exact: it is baked into the post id.</p>}
+              {shownImage && (
+                <figure className="ci-media" data-testid="ci-media">
+                  <img
+                    key={shownImage}
+                    src={shownImage}
+                    alt={upload ? "Uploaded image" : tweetPhoto?.alt ?? "Image from the post"}
+                    onError={() => {
+                      if (upload) setUploadErr("That image could not be shown. Try another file.");
+                      else setMediaBroken(true);
+                    }}
+                  />
+                  {upload?.busy && <figcaption className="mono dim">Uploading...</figcaption>}
+                  {tweetPhoto?.type === "video" && !upload && <figcaption className="mono dim">Video thumbnail</figcaption>}
+                </figure>
+              )}
+              {mediaBroken && !upload && <p className="ci-media-note mute" data-testid="ci-media-broken">The image in this post did not load. Upload it here and it goes on your card.</p>}
+              <div className="ci-upload">
+                <button type="button" className="chip" onClick={() => fileRef.current?.click()} disabled={upload?.busy} data-testid="ci-upload">
+                  {upload ? "Replace image" : tweetPhoto && !mediaBroken ? "Use my own image" : "Upload image"}
+                </button>
+                {upload && !upload.busy && (
+                  <button type="button" className="chip" onClick={clearUpload}>
+                    {tweetPhoto ? "Use the post image" : "Remove image"}
+                  </button>
+                )}
+                <span className="dim">PNG, JPG, WEBP or GIF up to 5 MB</span>
+                <input ref={fileRef} type="file" accept={UPLOAD_TYPES.join(",")} hidden onChange={(e) => pickFile(e.target.files?.[0])} data-testid="ci-upload-input" />
+              </div>
+              {uploadErr && <div className="ci-err ci-upload-err" role="alert">{uploadErr}</div>}
               <div className="ci-when mono dim">
                 {new Date(res.tweet.postedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} · {fmtAge(res.now - res.tweet.postedAt)} ago
               </div>

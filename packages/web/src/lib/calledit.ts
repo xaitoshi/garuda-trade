@@ -23,7 +23,32 @@ export interface TweetInfo {
   handle?: string;
   avatar?: string;
   verified?: boolean;
-  source: "syndication" | "id";
+  /** Photos in the post (video and GIF posts give a thumbnail): pbs.twimg.com URLs, shown through the API proxy. */
+  media?: { url: string; type: "photo" | "video" | "gif"; width?: number; height?: number; alt?: string }[];
+  source: "syndication" | "fxtwitter" | "vxtwitter" | "id";
+}
+
+/** Post photos load through the Garuda API (same answer on every network, CORS open so the card can draw them). */
+export const mediaSrc = (url: string): string => `${API_URL}/social/media?u=${encodeURIComponent(url)}`;
+
+export const UPLOAD_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+export const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+export const uploadSrc = (id: string): string => `${API_URL}/social/uploads/${encodeURIComponent(id)}`;
+export const isUploadId = (s: string | null | undefined): s is string => Boolean(s && /^[A-Za-z0-9_-]{16,32}$/.test(s));
+
+/** Client side checks before upload. The API checks the real type again from the file's bytes. */
+export function checkUpload(f: { type: string; size: number }): string | null {
+  if (!(UPLOAD_TYPES as readonly string[]).includes(f.type)) return "Use a PNG, JPG, WEBP or GIF image.";
+  if (f.size > UPLOAD_MAX_BYTES) return "That image is over 5 MB. Try a smaller one.";
+  if (f.size === 0) return "That file is empty.";
+  return null;
+}
+
+export async function uploadImage(dataUrl: string): Promise<{ id: string; url: string; mime: string; size: number }> {
+  const r = await fetch(`${API_URL}/social/uploads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data: dataUrl }) });
+  const j = (await r.json().catch(() => ({}))) as { id?: string; url?: string; mime?: string; size?: number; message?: string };
+  if (!r.ok || !j.id) throw new Error(j.message ?? "Upload failed. Try again.");
+  return j as { id: string; url: string; mime: string; size: number };
 }
 
 export interface Asset {
