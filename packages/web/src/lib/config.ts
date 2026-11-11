@@ -23,4 +23,6 @@ export const PRIVY_PREVIEW: boolean = import.meta.env.VITE_PRIVY_PREVIEW === "1"
  * EARLY_ART is the one file to swap for new artwork (keep the same name so the onchain metadata keeps resolving).
  */
 export const EARLY_RPC: string = (import.meta.env.VITE_EARLY_RPC as string | undefined) ?? "https://api.mainnet-beta.solana.com";
-export const EARLY_ART = "/early/garuda-beta-access.png";
+export const EARLY_ART = "/early/garuda-beta-access.png?v=2";
+/** Lighter page preview of the same art (720px WebP). Bump ?v= when the art changes so caches refetch. */
+export const EARLY_ART_PREVIEW = "/early/garuda-beta-access-720.webp?v=2";

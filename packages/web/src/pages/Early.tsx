@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { api, ApiError, errorText } from "../lib/api";
-import { EARLY_ART, EARLY_RPC } from "../lib/config";
+import { EARLY_ART, EARLY_ART_PREVIEW, EARLY_RPC } from "../lib/config";
 import { useSession } from "../lib/session";
 import type { EarlyOutcome, EarlyPayment, EarlyStatus } from "../lib/types";
 import { XMarketsButton } from "../components/XMarkets";
@@ -125,7 +125,10 @@ export function Early() {
     <main className="pg-early" data-testid="early">
       <section className="early-grid">
         <div className="early-art">
-          <img src={EARLY_ART} alt="Garuda Beta Access NFT" width={1024} height={1024} decoding="async" />
+          <picture>
+            <source srcSet={EARLY_ART_PREVIEW} type="image/webp" />
+            <img src={EARLY_ART} alt="Garuda Beta Access NFT" width={1024} height={1024} decoding="async" />
+          </picture>
         </div>
 
         <div className="early-copy">
