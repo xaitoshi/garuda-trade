@@ -28,7 +28,7 @@ import {
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { base58 } from "@metaplex-foundation/umi/serializers";
 import { assertDevnetUrl } from "./cluster.js";
-import { COLLECTION_NAME, collectionMetadataUri, fromAttributeList, levelMetadataUri, sameAttrs, toAttributeList } from "./metadata.js";
+import { COLLECTION_NAME, collectionMetadataUri, fromAttributeList, tierMetadataUri, sameAttrs, toAttributeList } from "./metadata.js";
 import type { KnightInfo, KnightNft, MintKnightInput, MintKnightResult, UpdateKnightInput } from "./types.js";
 
 export interface MetaplexKnightsOptions {
@@ -144,7 +144,7 @@ export class MetaplexCoreKnights implements KnightNft {
       asset: signer,
       collection,
       name: input.name,
-      uri: levelMetadataUri(this.baseUrl, input.attrs.level),
+      uri: tierMetadataUri(this.baseUrl, input.attrs.tier),
       owner: publicKey(input.owner),
       plugins: [
         { type: "Attributes", attributeList: toAttributeList(input.attrs), authority: { type: "UpdateAuthority" } },
@@ -159,9 +159,12 @@ export class MetaplexCoreKnights implements KnightNft {
     const cur = this.toInfo(asset);
     if (!cur) throw new Error(`Knight ${input.asset} is not a Garuda knight`);
     const collection = await fetchCollectionV1(this.umi, publicKey(this.collection));
-    const wantUri = levelMetadataUri(this.baseUrl, input.attrs.level);
+    const wantUri = tierMetadataUri(this.baseUrl, input.attrs.tier);
     let b: TransactionBuilder = transactionBuilder();
-    if (!sameAttrs(cur, input.attrs)) {
+    // Compare the RAW list too: a knight minted before Funded scaling stores level as a tier name, which parses as
+    // Lv.1 (equal attrs) but must still be rewritten in the new shape.
+    const rawNow = JSON.stringify(asset.attributes?.attributeList ?? []);
+    if (!sameAttrs(cur, input.attrs) || rawNow !== JSON.stringify(toAttributeList(input.attrs))) {
       b = b.add(updatePlugin(this.umi, { asset: asset.publicKey, collection: collection.publicKey, plugin: { type: "Attributes", attributeList: toAttributeList(input.attrs) } }));
     }
     if (cur.frozen !== input.frozen) {

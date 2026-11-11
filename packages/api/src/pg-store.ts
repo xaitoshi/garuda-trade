@@ -11,7 +11,7 @@ import {
   type ChallengeStatus,
 } from "@garuda/risk-engine";
 import { SimAccount, type BalanceAdjustment, type Fill, type FundingPayment, type Order } from "@garuda/sim-engine";
-import type { Challenge, ChallengeStore, ChallengeSummary, ReviveRequestRecord, SummaryFilter } from "./store.js";
+import { defaultScaling, type Challenge, type ChallengeStore, type ChallengeSummary, type ReviveRequestRecord, type SummaryFilter } from "./store.js";
 
 type Row = Record<string, any>;
 const num = (v: unknown): number => Number(v);
@@ -29,6 +29,7 @@ interface PersistedState {
   dataSource?: Challenge["dataSource"];
   scars: number;
   claim?: Challenge["claim"];
+  scaling?: Challenge["scaling"];
 }
 
 interface Cursor {
@@ -86,7 +87,7 @@ export class PgChallengeStore implements ChallengeStore {
     if (filter.wallet !== undefined) where.push(`wallet = $${params.push(filter.wallet)}`);
     if (filter.knightId !== undefined) where.push(`knight_id = $${params.push(filter.knightId)}`);
     if (filter.status !== undefined) where.push(`status = $${params.push(filter.status)}`);
-    const sql = `SELECT id, tier, stage, status, lifecycle, wallet, knight_id, starting_balance, created_at, breach_at, revive_of, revived_by FROM challenges${
+    const sql = `SELECT id, tier, stage, status, lifecycle, wallet, knight_id, starting_balance, funded_level, created_at, breach_at, revive_of, revived_by FROM challenges${
       where.length ? ` WHERE ${where.join(" AND ")}` : ""
     } ORDER BY created_at, id`;
     return (await this.db.query<Row>(sql, params)).rows.map((r) => ({
@@ -98,6 +99,7 @@ export class PgChallengeStore implements ChallengeStore {
       wallet: optStr(r.wallet),
       knightId: optStr(r.knight_id),
       size: num(r.starting_balance),
+      ...(r.stage === "funded" ? { fundedLevel: optNum(r.funded_level) ?? 1 } : {}),
       createdAt: num(r.created_at),
       breachAt: optNum(r.breach_at),
       reviveOf: optStr(r.revive_of),
@@ -133,6 +135,7 @@ export class PgChallengeStore implements ChallengeStore {
       dataSource: c.dataSource,
       scars: c.scars,
       ...(c.claim ? { claim: c.claim } : {}),
+      ...(c.scaling ? { scaling: c.scaling } : {}),
     };
     const row = {
       id: c.id,
@@ -143,6 +146,7 @@ export class PgChallengeStore implements ChallengeStore {
       wallet: c.wallet ?? null,
       created_at: c.createdAt,
       starting_balance: c.account.startingBalance,
+      funded_level: c.stage === "funded" ? (c.scaling?.level ?? 1) : null,
       status: c.risk.status,
       lifecycle: c.lifecycle,
       last_activity_at: c.lastActivityAt,
@@ -224,7 +228,9 @@ export class PgChallengeStore implements ChallengeStore {
     const stage = row.stage as Stage;
     const account = SimAccount.restore({
       id,
-      startingBalance: num(row.starting_balance),
+      // starting_balance is the CURRENT size; the replay starts from the opening size and the level_up adjustments
+      // bring it back to the current one.
+      startingBalance: openingSize(num(row.starting_balance), ledger.adjustments),
       orders: ledger.orders,
       fills: ledger.fills,
       fundingPayments: ledger.funding,
@@ -250,10 +256,12 @@ export class PgChallengeStore implements ChallengeStore {
       revivedBy: optStr(row.revived_by),
       scars: state.scars ?? 0,
       claim: state.claim,
+      // Funded accounts opened before Funded scaling are Lv.1 of their tier, counted from their opening.
+      scaling: stage === "funded" ? (state.scaling ?? defaultScaling(num(row.created_at))) : undefined,
       reviveFeeUsd: optNum(row.revive_fee_usd),
       paymentRef: optStr(row.payment_ref),
       account,
-      risk: new RiskMonitor({ limits: limitsForTier(tier, stage), createdAt: num(row.created_at), restore: state.risk }),
+      risk: new RiskMonitor({ limits: limitsForTier(tier, stage, num(row.starting_balance)), createdAt: num(row.created_at), restore: state.risk }),
       combatLog: ledger.combat,
       riskEvents: ledger.risk,
       books: new Map(),
@@ -287,11 +295,15 @@ export class PgChallengeStore implements ChallengeStore {
     const row = (await this.db.query<Row>("SELECT starting_balance, balance FROM challenges WHERE id = $1", [id])).rows[0];
     if (!row) return undefined;
     const ledger = await this.readLedger(this.db, id);
-    const acct = SimAccount.restore({ id, startingBalance: num(row.starting_balance), orders: ledger.orders, fills: ledger.fills, fundingPayments: ledger.funding, adjustments: ledger.adjustments });
+    const acct = SimAccount.restore({ id, startingBalance: openingSize(num(row.starting_balance), ledger.adjustments), orders: ledger.orders, fills: ledger.fills, fundingPayments: ledger.funding, adjustments: ledger.adjustments });
     const diff = Math.abs(acct.balance - num(row.balance));
     return { ok: diff <= tolerance, storedBalance: num(row.balance), replayedBalance: acct.balance, diff, fills: ledger.fills.length };
   }
 }
+
+/** Opening size of an account: the current size minus every funded level-up step recorded in the ledger. */
+const openingSize = (current: number, adjustments: readonly BalanceAdjustment[]): number =>
+  adjustments.reduce((s, a) => (a.kind === "level_up" ? s - a.amount : s), current);
 
 // ------------------------------------------------------------------ row mapping
 

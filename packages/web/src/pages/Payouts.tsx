@@ -85,7 +85,13 @@ function PayoutsView() {
                 <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.03em" }}>{knightView(funded).name}</div>
                 <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>{knightView(funded).label} · #{funded.id.slice(-4).toUpperCase()}</div>
               </div>
-              <div className="kr"><span>Account size</span><b>{usd(funded.risk.startingBalance)}</b></div>
+              <div className="kr"><span>Account size</span><b>{usd(funded.risk.startingBalance, funded.risk.startingBalance % 1 ? 2 : 0)}</b></div>
+              {funded.scaling && (
+                <>
+                  <div className="kr" data-testid="payouts-scaling"><span>Level up</span><b>{usd(Math.max(0, funded.scaling.profitSinceLevel))} / {usd(funded.scaling.profitTarget)} · {funded.scaling.payoutsSinceLevel}/{funded.scaling.payoutsNeeded} payout</b></div>
+                  {funded.scaling.next && <div className="kr"><span>Next</span><b>{funded.scaling.next.label} · {usd(funded.scaling.next.size, funded.scaling.next.size % 1 ? 2 : 0)}</b></div>}
+                </>
+              )}
               <div className="kr"><span>Balance</span><b>{usd(funded.risk.balance)}</b></div>
               <div className="kr"><span>Profit to date</span><b className={funded.risk.profitLoss >= 0 ? "up" : "dn"}>{usdSigned(funded.risk.profitLoss)}</b></div>
             </>

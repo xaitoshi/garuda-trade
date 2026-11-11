@@ -53,11 +53,10 @@ describe("POST /challenges", () => {
     expect((await create({})).status).toBe(400);
   });
 
-  it("gates Paladin and Ascended behind the previous NFT level", async () => {
-    expect((await create({ tier: "paladin" })).status).toBe(403);
-    expect((await create({ tier: "paladin", nftLevels: ["knight"] })).status).toBe(201);
-    expect((await create({ tier: "ascended", nftLevels: ["knight"] })).status).toBe(403);
-    expect((await create({ tier: "ascended", nftLevels: ["paladin"] })).status).toBe(201);
+  it("every tier is open to buy (no knight-level gate on Paladin or Ascended)", async () => {
+    expect((await create({ tier: "paladin" })).status).toBe(201);
+    expect((await create({ tier: "ascended" })).status).toBe(201);
+    expect((await create({ tier: "ascended", nftLevels: ["squire"] })).status).toBe(201);
     expect((await create({ tier: "demo" })).status).toBe(201);
   });
 

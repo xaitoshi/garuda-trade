@@ -5,7 +5,7 @@ import {
   FakeKnights,
   FakeUsdc,
   HttpRpc,
-  KNIGHT_LEVELS,
+  KNIGHT_TIERS,
   MainnetRefusedError,
   MetaplexCoreKnights,
   RpcError,
@@ -16,8 +16,8 @@ import {
   fromAttributeList,
   imageUrl,
   knightAssetKeypair,
-  levelMetadata,
-  levelMetadataUri,
+  tierMetadata,
+  tierMetadataUri,
   refundReferenceKeypair,
   sameAttrs,
   toAttributeList,
@@ -74,30 +74,46 @@ describe("amounts", () => {
 });
 
 describe("knight attributes and metadata", () => {
-  const a: KnightAttrs = { level: "paladin", status: "funded", tier: "paladin", challengeId: "ch_1", wins: 3, revives: 1 };
+  const a: KnightAttrs = { tier: "paladin", level: 3, status: "funded", challengeId: "ch_1", wins: 3, revives: 1 };
 
-  it("round-trips through the onchain key/value list", () => {
+  it("round-trips through the onchain key/value list (tier, funded level, status)", () => {
     const list = toAttributeList(a);
-    expect(list.map((x) => x.key)).toEqual(["level", "status", "tier", "challenge_id", "wins", "revives"]);
+    expect(list.map((x) => x.key)).toEqual(["tier", "level", "status", "challenge_id", "wins", "revives"]);
+    expect(list.find((x) => x.key === "level")?.value).toBe("3");
     expect(fromAttributeList(list)).toEqual(a);
+  });
+
+  it("reads a knight minted before Funded scaling (level was a tier name) as Lv.1 of its tier", () => {
+    const legacy = [
+      { key: "level", value: "knight" },
+      { key: "status", value: "idle" },
+      { key: "tier", value: "squire" },
+      { key: "challenge_id", value: "c" },
+      { key: "wins", value: "1" },
+      { key: "revives", value: "0" },
+    ];
+    expect(fromAttributeList(legacy)).toEqual({ tier: "squire", level: 1, status: "idle", challengeId: "c", wins: 1, revives: 0 });
   });
 
   it("rejects attribute lists that are not ours or are malformed", () => {
     expect(fromAttributeList([])).toBeUndefined();
     expect(fromAttributeList(toAttributeList(a).map((x) => (x.key === "level" ? { ...x, value: "king" } : x)))).toBeUndefined();
+    expect(fromAttributeList(toAttributeList(a).map((x) => (x.key === "level" ? { ...x, value: "0" } : x)))).toBeUndefined();
+    expect(fromAttributeList(toAttributeList(a).map((x) => (x.key === "tier" ? { ...x, value: "king" } : x)))).toBeUndefined();
     expect(fromAttributeList(toAttributeList(a).map((x) => (x.key === "wins" ? { ...x, value: "-1" } : x)))).toBeUndefined();
   });
 
   it("sameAttrs compares every field", () => {
     expect(sameAttrs(a, { ...a })).toBe(true);
-    for (const k of Object.keys(a) as (keyof KnightAttrs)[]) expect(sameAttrs(a, { ...a, [k]: k === "wins" || k === "revives" ? 9 : k === "level" ? "squire" : k === "status" ? "idle" : k === "tier" ? "squire" : "other" } as KnightAttrs)).toBe(false);
+    for (const k of Object.keys(a) as (keyof KnightAttrs)[]) expect(sameAttrs(a, { ...a, [k]: k === "wins" || k === "revives" || k === "level" ? 9 : k === "status" ? "idle" : k === "tier" ? "squire" : "other" } as KnightAttrs)).toBe(false);
   });
 
-  it("serves one metadata file per level, pointing at the matching PNG", () => {
-    expect(KNIGHT_LEVELS).toEqual(["squire", "knight", "paladin", "ascended"]);
-    const imgs = KNIGHT_LEVELS.map((l) => levelMetadata("http://h:1/", l).image);
+  it("serves one metadata file per tier, pointing at the matching PNG (art follows the tier)", () => {
+    expect(KNIGHT_TIERS).toEqual(["squire", "knight", "paladin", "ascended"]);
+    const imgs = KNIGHT_TIERS.map((t) => tierMetadata("http://h:1/", t).image);
     expect(imgs).toEqual(["knight-1.png", "knight-2.png", "knight-3.png", "knight-4.png"].map((f) => `http://h:1/nft/images/${f}`));
-    expect(levelMetadataUri("http://h:1/", "knight")).toBe("http://h:1/nft/metadata/knight.json");
+    expect(tierMetadata("http://h:1/", "knight").attributes[0]).toEqual({ trait_type: "Tier", value: "Knight" });
+    expect(tierMetadataUri("http://h:1/", "knight")).toBe("http://h:1/nft/metadata/knight.json");
     expect(imageUrl("http://h:1", "squire")).toBe("http://h:1/nft/images/knight-1.png");
   });
 });
@@ -106,30 +122,29 @@ describe("deriveKnightState", () => {
   let t = 0;
   const row = (r: Partial<KnightHistoryRow>): KnightHistoryRow => ({ id: `c${++t}`, tier: "squire", stage: "evaluation", status: "active", lifecycle: "live" as never, createdAt: ++t, ...r });
 
-  it("a fresh live challenge is Active, Squire, frozen", () => {
-    const s = deriveKnightState([row({})]);
-    expect(s).toMatchObject({ frozen: true, attrs: { level: "squire", status: "active", wins: 0, revives: 0 } });
+  it("a fresh live challenge is Active, Lv.1 of its tier, frozen", () => {
+    expect(deriveKnightState([row({})])).toMatchObject({ frozen: true, attrs: { tier: "squire", level: 1, status: "active", wins: 0, revives: 0 } });
+    expect(deriveKnightState([row({ tier: "ascended" })]).attrs).toMatchObject({ tier: "ascended", level: 1 });
   });
 
-  it("a pass levels up and unlocks; Paladin and Ascended passes climb further and never fall", () => {
-    expect(deriveKnightState([row({ status: "passed" })])).toMatchObject({ frozen: false, attrs: { level: "knight", wins: 1, status: "idle" } });
-    expect(deriveKnightState([row({ status: "passed" }), row({ tier: "paladin", status: "passed" })]).attrs).toMatchObject({ level: "paladin", wins: 2 });
-    const asc = deriveKnightState([row({ status: "passed" }), row({ tier: "paladin", status: "passed" }), row({ tier: "ascended", status: "passed" })]);
-    expect(asc.attrs).toMatchObject({ level: "ascended", status: "ascended", wins: 3 });
-    expect(deriveKnightState([row({ tier: "paladin", status: "passed" }), row({ status: "passed" })]).attrs.level).toBe("paladin");
+  it("passing a challenge never changes the tier or level (no more pass promotion)", () => {
+    expect(deriveKnightState([row({ status: "passed" })])).toMatchObject({ frozen: false, attrs: { tier: "squire", level: 1, wins: 1, status: "idle" } });
+    expect(deriveKnightState([row({ tier: "knight", status: "passed" })]).attrs).toMatchObject({ tier: "knight", level: 1 });
   });
 
-  it("a breach is Wounded and unlocked; a revive counts a scar and relocks", () => {
-    const wounded = row({ status: "wounded" });
-    expect(deriveKnightState([wounded])).toMatchObject({ frozen: false, attrs: { status: "wounded" } });
-    const revived = deriveKnightState([wounded, row({ reviveOf: wounded.id })]);
-    expect(revived).toMatchObject({ frozen: true, attrs: { status: "active", revives: 1 } });
-  });
-
-  it("a live funded account is Funded and frozen; demo rows never count", () => {
+  it("a live funded account shows its funded level and its (possibly graduated) tier", () => {
     const passed = row({ status: "passed" });
-    expect(deriveKnightState([passed, row({ stage: "funded" })])).toMatchObject({ frozen: true, attrs: { status: "funded", level: "knight" } });
+    expect(deriveKnightState([passed, row({ stage: "funded", fundedLevel: 3 })])).toMatchObject({ frozen: true, attrs: { status: "funded", tier: "squire", level: 3 } });
+    expect(deriveKnightState([passed, row({ stage: "funded", tier: "knight", fundedLevel: 1 })]).attrs).toMatchObject({ tier: "knight", level: 1, status: "funded" });
     expect(deriveKnightState([row({ tier: "demo", status: "passed" })]).attrs.wins).toBe(0);
+  });
+
+  it("a breach is Wounded and unlocked; a revive counts a scar, relocks, and the knight is back at Lv.1 of its current tier", () => {
+    const passed = row({ tier: "knight", status: "passed" });
+    const wounded = row({ stage: "funded", tier: "knight", fundedLevel: 2, status: "wounded" });
+    expect(deriveKnightState([passed, wounded])).toMatchObject({ frozen: false, attrs: { status: "wounded", tier: "knight", level: 2 } });
+    const revived = deriveKnightState([wounded, row({ tier: "knight", reviveOf: wounded.id })]);
+    expect(revived).toMatchObject({ frozen: true, attrs: { status: "active", revives: 1, tier: "knight", level: 1 } });
   });
 
   it("is order independent (a retry after a failure converges on the same state)", () => {
@@ -311,7 +326,7 @@ describe("SolanaUsdc.verifyPayment (mocked RPC, fixture transactions)", () => {
 describe("fakes behave like the real thing", () => {
   it("FakeKnights: frozen assets refuse transfer, mint is idempotent per order", async () => {
     const f = new FakeKnights();
-    const attrs: KnightAttrs = { level: "squire", status: "active", tier: "squire", challengeId: "c", wins: 0, revives: 0 };
+    const attrs: KnightAttrs = { tier: "squire", level: 1, status: "active", challengeId: "c", wins: 0, revives: 0 };
     const m1 = await f.mint({ owner: "A", name: "n", orderId: "o1", frozen: true, attrs });
     const m2 = await f.mint({ owner: "A", name: "n", orderId: "o1", frozen: true, attrs });
     expect(m2).toMatchObject({ asset: m1.asset, alreadyMinted: true });

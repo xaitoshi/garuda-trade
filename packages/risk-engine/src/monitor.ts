@@ -104,7 +104,7 @@ export interface RiskMonitorState {
  *  - warnings at 50% / 80% of either buffer; re-armed once the buffer recovers below the level.
  */
 export class RiskMonitor {
-  readonly limits: RiskLimits;
+  limits: RiskLimits;
   private s: RiskMonitorState;
 
   constructor(init: RiskMonitorInit) {
@@ -261,6 +261,19 @@ export class RiskMonitor {
    */
   rebaseAfterPayout(balance: number, equity: number, now: number): void {
     this.s.startOfDayBalance = Math.min(this.s.startOfDayBalance, balance);
+    this.s.warned = { daily_loss: 0, max_drawdown: 0 };
+    this.record(balance, equity, now);
+  }
+
+  /**
+   * Funded scaling: the account moved to a new level size. The 6% static floor and the 3% daily limit are measured
+   * from the NEW size from now on: the starting balance becomes `newSize` and today's start-of-day balance resets to
+   * the current balance (the level-up adds the size step to the balance, so it is newSize plus any unswept profit).
+   * Warnings re-arm. Call on a flat book.
+   */
+  rescale(newSize: number, balance: number, equity: number, now: number): void {
+    this.limits = { ...this.limits, startingBalance: newSize };
+    this.s.startOfDayBalance = balance;
     this.s.warned = { daily_loss: 0, max_drawdown: 0 };
     this.record(balance, equity, now);
   }

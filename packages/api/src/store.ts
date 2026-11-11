@@ -37,6 +37,8 @@ export interface Challenge {
   paymentRef?: string;
   /** Path to Funded claim on a PASSED evaluation (rulebook section 9): KYC, then risk review, then the funded account. */
   claim?: FundedClaim;
+  /** Funded accounts only: the funded level and its level-up history (rulebook section 16, Funded scaling). */
+  scaling?: FundedScaling;
   account: SimAccount;
   risk: RiskMonitor;
   combatLog: CombatLogEntry[];
@@ -47,6 +49,42 @@ export interface Challenge {
   /** Serialises operations on one challenge. */
   queue: Promise<unknown>;
 }
+
+/** One level-up (or graduation into the next tier) of a funded account. */
+export interface LevelUpRecord {
+  ts: number;
+  fromTier: TierId;
+  fromLevel: number;
+  fromSize: number;
+  toTier: TierId;
+  toLevel: number;
+  toSize: number;
+  /** Realized profit since the previous level-up that earned it. */
+  profit: number;
+  /** Completed payouts since the previous level-up that earned it. */
+  payouts: number;
+}
+
+/**
+ * Funded scaling state. The level-up conditions are counted from `levelSince` (the funded account's opening, or the
+ * last level-up): realized profit from the fill and funding ledger entries recorded after it (ledger cursors, so the
+ * count is exact even within one millisecond), and completed payouts REQUESTED at or after it.
+ */
+export interface FundedScaling {
+  level: number;
+  levelSince: number;
+  /** Ledger cursors at `levelSince`: profit since the level-up is the fills and funding payments from these indexes on. */
+  fillsFrom?: number;
+  fundingFrom?: number;
+  /** Ids of completed (paid) payouts requested after `levelSince`. */
+  payoutsSinceLevel: string[];
+  history: LevelUpRecord[];
+  /** Set while a level-up is earned but would push the wallet's funded accounts over the $300,000 aggregate cap. */
+  capHeld?: boolean;
+}
+
+/** Funded scaling state for an account that has none yet (opened before Funded scaling): Lv.1 counted from its opening. */
+export const defaultScaling = (createdAt: number): FundedScaling => ({ level: 1, levelSince: createdAt, payoutsSinceLevel: [], history: [] });
 
 export type KycStatus = "pending" | "approved" | "rejected";
 export type ClaimStatus = "kyc_pending" | "under_review" | "approved" | "rejected";
@@ -75,8 +113,10 @@ export interface ChallengeSummary {
   lifecycle: Lifecycle;
   wallet?: string;
   knightId?: string;
-  /** Account size (starting balance). */
+  /** Account size (starting balance; a funded account's CURRENT level size). */
   size: number;
+  /** Funded accounts: current funded level. */
+  fundedLevel?: number;
   createdAt: number;
   breachAt?: number;
   reviveOf?: string;
@@ -121,6 +161,7 @@ export function summarize(c: Challenge): ChallengeSummary {
     wallet: c.wallet,
     knightId: c.knightId,
     size: c.account.startingBalance,
+    ...(c.stage === "funded" ? { fundedLevel: c.scaling?.level ?? 1 } : {}),
     createdAt: c.createdAt,
     breachAt: c.breachAt,
     reviveOf: c.reviveOf,

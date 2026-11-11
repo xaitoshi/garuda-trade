@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, errorText } from "../lib/api";
 import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { STEP_TEXT, usePurchase } from "../lib/usePurchase";
-import { bestKnight, eligibilityFor } from "../lib/eligibility";
+import { eligibilityFor } from "../lib/eligibility";
 import { LEVELS, randomKnightName, type KnightLevel } from "../lib/knight";
 import { pct, shortAddr, usd } from "../lib/format";
 import type { Rules, TierId, TierSpec } from "../lib/types";
@@ -19,7 +19,8 @@ export function Challenges() {
   const { rules, signedIn, health, connected, wallet: address, walletLabel } = useSession();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const [tab, setTab] = useState<"challenges" | "demo" | "revive">("challenges");
+  // The free Demo card sits with the paid tiers on the Challenges tab (there is no separate Demo tab any more).
+  const [tab, setTab] = useState<"challenges" | "revive">(params.get("tab") === "revive" ? "revive" : "challenges");
   const [sel, setSel] = useState<TierId | null>((params.get("tier") as TierId | null) ?? null);
   const [name, setName] = useState(() => randomKnightName());
   const [agree, setAgree] = useState(false);
@@ -30,8 +31,6 @@ export function Challenges() {
   const payRef = useRef<HTMLDivElement>(null);
 
   const list = usePoll(() => api.challenges(), 15_000, "ch-list", signedIn);
-  const knights = usePoll(() => api.knights(), 30_000, "knights", signedIn);
-  const held = useMemo(() => bestKnight(knights.data, list.data ?? []), [knights.data, list.data]);
   const wounded = (list.data ?? []).filter((c) => c.status === "wounded");
 
   useEffect(() => {
@@ -42,7 +41,7 @@ export function Challenges() {
   const tiers = rules.tiers;
   const common = rules.common;
   const chosen = sel && sel !== "demo" ? tiers[sel] : undefined;
-  const elig = chosen ? eligibilityFor(chosen.id, chosen.requires, held) : undefined;
+  const elig = chosen ? eligibilityFor(chosen.id) : undefined;
 
   async function startDemo() {
     setDemoBusy(true);
@@ -60,7 +59,7 @@ export function Challenges() {
     if (!chosen || !elig) return;
     const knightName = name.trim().slice(0, 24) || undefined;
     try {
-      const order = await buy.run(() => api.quoteChallenge(chosen.id, knightName, elig.asset));
+      const order = await buy.run(() => api.quoteChallenge(chosen.id, knightName));
       setMinted({ challengeId: order.challengeId ?? "", tier: chosen.id, name: knightName ?? "Sir Unnamed" });
     } catch {
       /* buy.error shows it */
@@ -83,7 +82,7 @@ export function Challenges() {
       </button>
       <div className="tabrow">
         <div className="seg2" role="tablist">
-          {(["challenges", "demo", "revive"] as const).map((t) => (
+          {(["challenges", "revive"] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
               {t[0]!.toUpperCase() + t.slice(1)}
             </button>
@@ -108,7 +107,7 @@ export function Challenges() {
           )}
         </div>
       ) : (
-        <div className={`cards ${tab === "demo" ? "one" : ""}`}>
+        <div className="cards">
           <TierCard
             id="demo"
             spec={tiers.demo}
@@ -120,10 +119,9 @@ export function Challenges() {
             disabled={demoBusy}
             needWallet={!connectedOk}
           />
-          {tab === "challenges" &&
-            PAID.map((t) => {
+          {PAID.map((t) => {
               const spec = tiers[t];
-              const e = eligibilityFor(t, spec.requires, held);
+              const e = eligibilityFor(t);
               return (
                 <TierCard
                   key={t}
@@ -133,7 +131,7 @@ export function Challenges() {
                   pill={e.pill}
                   locked={e.locked}
                   selected={sel === t}
-                  note={e.locked ? (e.reason ?? "Locked") : `Mints a ${LEVELS[lvl(t) - 1]!.name} knight`}
+                  note={`Mints a ${LEVELS[lvl(t) - 1]!.name} knight. Funded at ${spec.name} Lv.1`}
                   btn={e.locked ? "Locked" : "Mint & start"}
                   onPick={e.locked ? undefined : () => { setMinted(null); buy.reset(); setSel(t); }}
                 />
@@ -309,10 +307,10 @@ function Reveal({ tier, minted, rules, name, spec }: { tier: TierId | undefined;
               <div className="mono dim" style={{ fontSize: 11 }}>{minted?.challengeId ? `#${minted.challengeId.slice(-6)}` : "UNMINTED"}</div>
               <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-.04em" }} data-testid="reveal-name">{shown || "Sir Unnamed"}</div>
             </div>
-            <span className="st active">LV.{level}</span>
+            <span className="st active">{LEVELS[level - 1]!.name}</span>
           </div>
           <div className="traits">
-            <div className="trait rare"><span>Level</span><b>{LEVELS[level - 1]!.name}</b></div>
+            <div className="trait rare"><span>Tier</span><b>{LEVELS[level - 1]!.name}</b></div>
             <div className="trait"><span>Account</span><b>{(minted ? t : spec) ? usd((t ?? spec)!.accountSize) : "-"}</b></div>
             <div className="trait"><span>Rules</span><b>{pct(rules.common.profitTargetPct, 0)} / {pct(rules.common.dailyLossPct, 0)} / {pct(rules.common.maxDrawdownPct, 0)}</b></div>
             <div className="trait"><span>Status</span><b>{minted ? "Active" : "Waiting for payment"}</b></div>

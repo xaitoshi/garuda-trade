@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { levelMetadataUri, sameAttrs } from "./metadata.js";
+import { tierMetadataUri, sameAttrs } from "./metadata.js";
 import { PayoutChainError, type PayoutExecutor, type PayoutLookup, type PayoutRequest, type PayoutSubmitResult } from "./payouts.js";
 import type { RefundInput, UsdcChain, VerifyPaymentInput, VerifyPaymentResult } from "./usdc.js";
 import type { KnightInfo, KnightNft, MintKnightInput, MintKnightResult, UpdateKnightInput } from "./types.js";
@@ -30,7 +30,7 @@ export class FakeKnights implements KnightNft {
       throw new Error("rpc unavailable");
     }
     const asset = `FakeKnight${randomUUID().replace(/-/g, "").slice(0, 24)}`;
-    this.assets.set(asset, { ...i.attrs, asset, owner: i.owner, frozen: i.frozen, name: i.name, uri: levelMetadataUri("http://fake", i.attrs.level), genuine: true });
+    this.assets.set(asset, { ...i.attrs, asset, owner: i.owner, frozen: i.frozen, name: i.name, uri: tierMetadataUri("http://fake", i.attrs.tier), genuine: true });
     this.mintedByOrder.set(i.orderId, asset);
     this.log.push(`mint ${asset} -> ${i.owner}`);
     return { asset, signature: `mintsig_${asset}`, alreadyMinted: false };
@@ -45,8 +45,8 @@ export class FakeKnights implements KnightNft {
     }
     if (sameAttrs(a, i.attrs) && a.frozen === i.frozen) return undefined;
     this.updateCalls++;
-    Object.assign(a, i.attrs, { frozen: i.frozen, uri: levelMetadataUri("http://fake", i.attrs.level) });
-    this.log.push(`update ${i.asset} ${i.attrs.level}/${i.attrs.status}${i.frozen ? " frozen" : ""}`);
+    Object.assign(a, i.attrs, { frozen: i.frozen, uri: tierMetadataUri("http://fake", i.attrs.tier) });
+    this.log.push(`update ${i.asset} ${i.attrs.tier}:${i.attrs.level}/${i.attrs.status}${i.frozen ? " frozen" : ""}`);
     return `updsig_${this.updateCalls}`;
   }
 
@@ -63,8 +63,8 @@ export class FakeKnights implements KnightNft {
   }
 
   /** A lookalike minted outside the Garuda collection with attributes the owner wrote himself. */
-  forge(asset: string, owner: string, level: KnightInfo["level"]): void {
-    this.assets.set(asset, { asset, owner, level, status: "active", tier: level, challengeId: "x", wins: 0, revives: 0, frozen: false, name: "fake", uri: "x", genuine: false });
+  forge(asset: string, owner: string, tier: KnightInfo["tier"]): void {
+    this.assets.set(asset, { asset, owner, level: 1, status: "active", tier, challengeId: "x", wins: 0, revives: 0, frozen: false, name: "fake", uri: "x", genuine: false });
   }
 }
 

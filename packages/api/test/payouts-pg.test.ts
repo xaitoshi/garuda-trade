@@ -25,14 +25,19 @@ describe("payouts on Postgres", () => {
       const ledger = (await t.db.query<{ type: string }>("SELECT type FROM payout_ledger WHERE payout_id = $1 ORDER BY seq", [out.id])).rows.map((r) => r.type);
       expect(ledger).toEqual(["requested", "debited", "approved", "attempt", "paid"]);
       const adj = (await t.db.query<{ id: string; kind: string; amount: number }>("SELECT id, kind, amount FROM balance_adjustments WHERE challenge_id = $1", [f.id])).rows;
-      expect(adj).toHaveLength(1);
+      // the sweep, then (Funded scaling: +45% realized and a completed payout) the Knight Lv.1 -> Lv.2 size step
+      expect(adj).toHaveLength(2);
       expect(adj[0]).toMatchObject({ id: `payout_sweep:${out.id}`, kind: "payout_sweep" });
       expect(Number(adj[0]!.amount)).toBeCloseTo(-out.grossProfitUsd, 6);
+      expect(adj[1]).toMatchObject({ id: "level_up:1", kind: "level_up" });
+      expect(Number(adj[1]!.amount)).toBeCloseTo(1_666.67, 6);
 
       // restart: balance is rebuilt from the ledger, replay matches the stored balance
       const svc2 = new ChallengeService({ market: rig.market, now: () => rig.clock.t, enforceGating: false, store: new PgChallengeStore(t.db) });
       const st = await svc2.getState(f.id, { refresh: false });
-      expect(st.account.balance).toBe(10_000);
+      expect(st.account.balance).toBeCloseTo(11_666.67, 6);
+      expect(st.account.startingBalance).toBe(11_666.67);
+      expect(st.scaling).toMatchObject({ level: 2, label: "Knight Lv.2" });
       expect(st.account.paidOut).toBeCloseTo(out.grossProfitUsd, 6);
       const v = await new PgChallengeStore(t.db).verifyLedger(f.id);
       expect(v).toMatchObject({ ok: true });

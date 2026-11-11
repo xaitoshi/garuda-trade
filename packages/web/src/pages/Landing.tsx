@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
-import { LEVELS, type KnightLevel } from "../lib/knight";
+import { LEVELS, fallbackScalingTable, type KnightLevel } from "../lib/knight";
 import { pct, usd } from "../lib/format";
 import { KnightImg } from "../components/Art";
 import { XMarketsButton } from "../components/XMarkets";
@@ -14,8 +14,8 @@ const FALLBACK = {
   common: { profitTargetPct: 0.1, dailyLossPct: 0.03, maxDrawdownPct: 0.06, profitSplit: 0.8 },
   tiers: { squire: { fee: 39, accountSize: 5_000 }, knight: { fee: 79, accountSize: 10_000 }, paladin: { fee: 119, accountSize: 15_000 }, ascended: { fee: 200, accountSize: 25_000 } },
 };
-const kfmt = (n: number) => `$${Math.round(n / 1000)}k`;
-const SUB = ["Mint any challenge", "Pass a challenge", "Level up again", "Funded and thriving"];
+const kfmt = (n: number) => `$${n % 1000 ? (n / 1000).toFixed(1) : Math.round(n / 1000)}k`;
+const SUB = ["Lv.3 graduates to Knight", "Lv.3 graduates to Paladin", "Lv.3 graduates to Ascended", "Grows $5K a level"];
 
 export function Landing() {
   const { rules } = useSession();
@@ -106,7 +106,7 @@ export function Landing() {
       <section className="s wrap" id="trials">
         <div className="s-head rv">
           <div><div className="eyebrow">Challenges</div><h2>Pick your trial.</h2></div>
-          <p className="lead">Same rules at every size. Pay the fee in USDC.</p>
+          <p className="lead">Every tier is open. Same rules at every size. Pay the fee in USDC.</p>
         </div>
         <div className="tiers rv">
           {paid.map((p) => (
@@ -132,18 +132,23 @@ export function Landing() {
 
       <section className="s wrap" id="knights">
         <div className="s-head rv">
-          <div><div className="eyebrow">Knights</div><h2>Level up<br />your knight.</h2></div>
-          <p className="lead">Win and it evolves. Lose and it is wounded.</p>
+          <div><div className="eyebrow">Knights</div><h2>Scale your<br />funded account.</h2></div>
+          <p className="lead">Make {pct(rules?.scaling?.levelUpProfitPct ?? 0.05, 0)} of your account size and take a payout to level up. Lose and your knight is wounded.</p>
         </div>
         <div className="stairs rv">
-          {LEVELS.map((l, i) => (
+          {LEVELS.map((l, i) => {
+            const row = (rules?.scaling?.table ?? fallbackScalingTable()).find((r) => r.tier === l.tier);
+            const first = row?.levels[0]?.size ?? 0;
+            const last = row?.levels[row.levels.length - 1]?.size ?? 0;
+            return (
             <div className="lvl" style={{ ["--i" as string]: i }} key={l.tier}>
               <div className="lvl-art">
                 <KnightImg level={l.level as KnightLevel} variant="card" fill alt="" />
               </div>
-              <div className="lvl-meta"><span className="mono">LV.{l.level}</span><h3>{l.name}</h3><p>{SUB[i]}</p></div>
+              <div className="lvl-meta"><span className="mono">Lv.1 to {row?.levels.length ?? 3} · {kfmt(first)} to {kfmt(last)}</span><h3>{l.name}</h3><p>{SUB[i]}</p></div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -163,7 +168,7 @@ export function Landing() {
             <div className="trust">
               <div><b>Plain numbers</b><span>Real PnL and limits, always visible.</span></div>
               <div><b>Live book fills</b><span>Orders walk the real Phoenix orderbook.</span></div>
-              <div><b>Onchain knights</b><span>Level and status live on Solana.</span></div>
+              <div><b>Onchain knights</b><span>Tier, level and status live on Solana.</span></div>
               <div><b>Auto risk limits</b><span>Breach a limit and positions close.</span></div>
             </div>
           </div>
@@ -176,7 +181,8 @@ export function Landing() {
           <div className="faq rv">
             <details open><summary>What is Garuda?</summary><p>A gamified prop firm on Phoenix perps. Trade a challenge, fight the Phoenix, get funded.</p></details>
             <details><summary>When do I get funded?</summary><p>Bank {pct(c.profitTargetPct, 0)} in closed profit, end flat, trade on at least 3 days, and keep your best day under half of your profit. Then claim, verify your identity, and pass a risk review of about one business day.</p></details>
-            <details><summary>What does the NFT do?</summary><p>Your knight tracks your progress. It levels up when you pass. Rarity is cosmetic only.</p></details>
+            <details><summary>What does the NFT do?</summary><p>Every paid challenge mints a knight of that tier. It tracks your funded level and graduates to the next tier with new art. Rarity is cosmetic only.</p></details>
+            <details><summary>How do I level up?</summary><p>On a funded account, make {pct(rules?.scaling?.levelUpProfitPct ?? 0.05, 0)} of the current size in closed profit and get one payout paid. The account grows to the next level and the limits follow. Squire Lv.3 graduates to Knight Lv.1, and Ascended goes up to $100K.</p></details>
             <details><summary>What if I fail?</summary><p>Your knight is wounded. Revive it at {pct(rules?.revive.discount ?? 0.2, 0)} off and retry.</p></details>
             <details><summary>How do payouts work?</summary><p>Funded accounts keep {pct(c.profitSplit, 0)} of profit, paid in USDC. Payouts are not switched on yet, so nothing can be withdrawn today.</p></details>
             <details><summary>Is this real money?</summary><p>Challenge accounts are simulated and fill against the live Phoenix orderbook. Challenge fees are paid in USDC.</p></details>

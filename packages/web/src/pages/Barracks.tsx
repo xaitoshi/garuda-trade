@@ -91,7 +91,7 @@ function Card({ k, selected, onPick }: { k: KnightCard; selected: boolean; onPic
         <div className="nm">{v.name}</div>
         <div className="mt">
           <span>{v.label}</span>
-          <span>{v.demo ? "Demo" : v.levelName} · {usd(k.c.risk.startingBalance / 1000)}k</span>
+          <span>{v.demo ? "Demo" : k.c.stage === "funded" ? "Funded" : "Challenge"} · {usd(k.c.risk.startingBalance / 1000, k.c.risk.startingBalance % 1000 ? 1 : 0)}k</span>
         </div>
       </div>
     </button>
@@ -128,7 +128,7 @@ function Detail({ k }: { k: KnightCard }) {
           <span key={l.level} style={{ display: "contents" }}>
             <div className={l.level <= v.level ? "on" : ""}>
               <KnightImg level={l.level as KnightLevel} size={50} />
-              <small>LV.{l.level}</small>
+              <small>{l.name}</small>
             </div>
             {i < 3 && <i>›</i>}
           </span>
