@@ -30,13 +30,22 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 :root td,:root .est b,:root .acc-grid b{font-variant-numeric:tabular-nums}
 
 /* ---------- header: logo, white sliding-pill nav and wallet capsule, centered as one group ---------- */
-:root .top{display:flex;justify-content:center;align-items:center;gap:18px;height:auto;min-height:56px;padding:8px 24px;background:transparent;border:0}
+:root .top{display:flex;justify-content:center;align-items:center;gap:18px;height:auto;min-height:56px;padding:8px 24px;background:transparent;border:0;position:relative;z-index:300;overflow:visible}
 :root .brand{font-size:13px;letter-spacing:.12em}
 :root .top-r{gap:8px}
 :root .tabs{position:relative;height:40px;align-items:center;padding:4px 8px;gap:0;border-radius:999px;background:#fff;box-shadow:inset 0 1px 0 #fff,0 4px 18px #0003}
 :root .tabs a,:root .tabs a.on{position:relative;height:32px;display:inline-flex;align-items:center;padding:0 14px 2px;border:0;border-radius:999px;background:transparent;color:#939393;font-size:13px;font-weight:500;letter-spacing:-.01em;transition:color .2s,background .3s var(--ease)}
 :root .tabs a.on{background:#eeeeef;color:#2e2e2e}
-:root .tabs a:hover{color:#333}
+':root .tabs a:hover{color:#333}
+:root .tabs{overflow:visible}
+/* Dropdown must not inherit the white-pill link colors or sit under page cards. */
+:root .nav-drop-menu{position:fixed;z-index:4000;background:#1d1f21;border:1px solid #ffffff20;box-shadow:0 16px 48px #000c;color:#f4f4f5}
+:root .tabs .nav-drop-menu a,:root .nav-drop-menu a{height:auto;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#c9cbd2;font-size:13px;font-weight:500}
+:root .tabs .nav-drop-menu a:hover,:root .tabs .nav-drop-menu a.on,:root .nav-drop-menu a:hover,:root .nav-drop-menu a.on{color:#f4f4f5;background:#2a2c32}
+:root .tabs .nav-drop-menu a.on::after,:root .nav-drop-menu a.on::after{content:none;display:none}
+:root .tabs .nav-drop.on .nav-drop-trigger,:root .tabs .nav-drop.open .nav-drop-trigger{background:#eeeeef;border:0}
+:root .tabs .nav-drop-trigger > a,:root .tabs .nav-drop-btn{color:#939393}
+:root .tabs .nav-drop-trigger:hover > a,:root .tabs .nav-drop-trigger:hover .nav-drop-btn,:root .tabs .nav-drop.open .nav-drop-trigger > a,:root .tabs .nav-drop.on .nav-drop-trigger > a,:root .tabs .nav-drop.open .nav-drop-btn,:root .tabs .nav-drop.on .nav-drop-btn{color:#2e2e2e}
 :root :is(.tabs a.on,.tabs2 button.on,.tb button.on,.seg2 button.on,.tf .chip.on,.flt .chip.on,.sw .chip.on)::after{content:"";position:absolute;left:50%;bottom:3px;width:2px;height:2px;border-radius:50%;background:currentColor;box-shadow:-4px 0 currentColor,4px 0 currentColor;transform:translateX(-50%);pointer-events:none}
 :root .wallet,:root .simbadge{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 18px;border:0;border-radius:999px;background:var(--neutral-raised);color:#eee;font-size:13px;font-weight:500;white-space:nowrap}
 :root .simbadge{color:#b9bbc5;font-size:12px}

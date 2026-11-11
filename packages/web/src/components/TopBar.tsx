@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
@@ -32,17 +33,76 @@ const CHALLENGE_LINKS = [
 function ChallengesMenu() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef(0);
   const on = pathname.startsWith("/challenges");
+
+  const place = () => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: Math.round(r.bottom + 6), left: Math.round(r.left) });
+  };
+
+  const armOpen = () => {
+    window.clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+  const armClose = () => {
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setOpen(false), 160);
+  };
+
+  useEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    place();
+    const onWin = () => place();
+    window.addEventListener("resize", onWin);
+    window.addEventListener("scroll", onWin, true);
+    return () => {
+      window.removeEventListener("resize", onWin);
+      window.removeEventListener("scroll", onWin, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  const menu = open && coords
+    ? createPortal(
+        <div
+          className="nav-drop-menu"
+          role="menu"
+          data-testid="challenges-dropdown"
+          ref={menuRef}
+          style={{ top: coords.top, left: coords.left }}
+          onMouseEnter={armOpen}
+          onMouseLeave={armClose}
+        >
+          {CHALLENGE_LINKS.map(([to, label]) => (
+            <NavLink key={to} to={to} role="menuitem" className={({ isActive }) => (isActive ? "on" : "")} onClick={() => setOpen(false)}>
+              {label}
+            </NavLink>
+          ))}
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
-    <div className={`nav-drop${on ? " on" : ""}${open ? " open" : ""}`} ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div className={`nav-drop${on ? " on" : ""}${open ? " open" : ""}`} ref={ref} onMouseEnter={armOpen} onMouseLeave={armClose}>
       <div className="nav-drop-trigger">
         <NavLink to="/challenges" className={({ isActive }) => (isActive && pathname === "/challenges" ? "on" : "")} onClick={() => setOpen(false)}>
           Challenges
@@ -60,21 +120,14 @@ function ChallengesMenu() {
             // Hover already opens the menu on desktop. A click in that same gesture
             // must not toggle it closed (Playwright and fine pointers hover before click).
             const hoverDevice = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-            setOpen((v) => (hoverDevice ? true : !v));
+            if (hoverDevice) armOpen();
+            else setOpen((v) => !v);
           }}
         >
           <span className="nav-drop-chev" />
         </button>
       </div>
-      {open && (
-        <div className="nav-drop-menu" role="menu" data-testid="challenges-dropdown">
-          {CHALLENGE_LINKS.map(([to, label]) => (
-            <NavLink key={to} to={to} role="menuitem" className={({ isActive }) => (isActive ? "on" : "")} onClick={() => setOpen(false)}>
-              {label}
-            </NavLink>
-          ))}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
@@ -89,7 +142,7 @@ export function TopBar({ landing }: { landing: boolean }) {
       {landing ? (
         <nav className="tabs landing-tabs" aria-label="Sections">
           <a href="#how">How it works</a>
-          <a href="#trials">Challenges</a>
+          <ChallengesMenu />
           <a href="#knights">Knights</a>
           <a href="#faq">FAQ</a>
           <Link to="/calledit">Called It</Link>
