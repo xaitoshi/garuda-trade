@@ -1,7 +1,8 @@
 /**
  * The shareable "Called it" card, drawn straight onto a canvas (1200x675, X's large card ratio, rendered at 2x).
  * Drawing it by hand keeps the PNG identical on every device and avoids cross-origin canvas taint: the only image
- * from outside is the author avatar, which the API inlines as a data URL.
+ * from outside is the author avatar, which the API inlines as a data URL, plus an optional post photo or upload, which
+ * loads from the Garuda API with open CORS (or from a local data URL) so the canvas stays exportable.
  */
 import { fmtAge, fmtPct, fmtPrice, type Asset, type Bar, type CallStats, type TweetInfo } from "./calledit";
 
@@ -14,6 +15,7 @@ const FONT = "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-ser
 function loadImage(src: string): Promise<HTMLImageElement | undefined> {
   return new Promise((res) => {
     const img = new Image();
+    if (/^https?:/.test(src)) img.crossOrigin = "anonymous";
     img.onload = () => res(img);
     img.onerror = () => res(undefined);
     img.src = src;
@@ -56,6 +58,8 @@ export interface CardInput {
   stats: CallStats;
   url: string;
   now: number;
+  /** Post photo or uploaded image shown under the post text. */
+  image?: string;
 }
 
 export async function renderCard(inp: CardInput): Promise<HTMLCanvasElement> {
@@ -135,7 +139,8 @@ export async function renderCard(inp: CardInput): Promise<HTMLCanvasElement> {
   ctx.font = `400 19px ${FONT}`;
   ctx.textBaseline = "top";
   const body = tweet.text ?? `Posted ${new Date(tweet.postedAt).toUTCString().replace(" GMT", " UTC")}`;
-  for (const line of wrap(ctx, body, colW, 6)) {
+  const photo = inp.image ? await loadImage(inp.image) : undefined;
+  for (const line of wrap(ctx, body, colW, photo ? 3 : 6)) {
     ctx.fillText(line, L, y);
     y += 27;
   }
@@ -143,6 +148,28 @@ export async function renderCard(inp: CardInput): Promise<HTMLCanvasElement> {
   ctx.font = `400 14px ${FONT}`;
   y += 8;
   ctx.fillText(`${new Date(tweet.postedAt).toISOString().slice(0, 16).replace("T", " ")} UTC  ·  ${fmtAge(inp.now - tweet.postedAt)} ago`, L, y);
+
+  // The post photo (or upload), cover fit in a rounded frame above the big number.
+  if (photo && photo.naturalWidth > 0) {
+    const top = y + 30;
+    const h = Math.max(0, 470 - top);
+    if (h >= 80) {
+      ctx.save();
+      roundRect(ctx, L, top, colW, h, 12);
+      ctx.fillStyle = C.panel;
+      ctx.fill();
+      ctx.clip();
+      const sc = Math.max(colW / photo.naturalWidth, h / photo.naturalHeight);
+      const dw = photo.naturalWidth * sc;
+      const dh = photo.naturalHeight * sc;
+      ctx.drawImage(photo, L + (colW - dw) / 2, top + (h - dh) / 2, dw, dh);
+      ctx.restore();
+      roundRect(ctx, L, top, colW, h, 12);
+      ctx.strokeStyle = C.line;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
 
   // Big number.
   ctx.textBaseline = "alphabetic";

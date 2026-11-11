@@ -28,6 +28,9 @@ import {
   PgEarlyStore,
   type EarlyStore,
   isSolanaAddress,
+  InMemoryUploadStore,
+  PgUploadStore,
+  type UploadStore,
 } from "@garuda/api";
 import { DEFAULT_ART_DIR, HttpRpc, MetaplexCoreKnights, SolanaTreasuryPayout, SolanaUsdc, assertDevnetCluster, loadKeypairFile } from "@garuda/chain";
 import { EarlyRpc, MAINNET_USDC_MINT, MetaplexEarlyMinter, assertEarlyCluster, keypairFromSecret, verifyUsdcPayment, type EarlyCluster } from "@garuda/chain";
@@ -63,6 +66,7 @@ let orderStore: OrderStore = new InMemoryOrderStore();
 let payoutStore: PayoutStore = new InMemoryPayoutStore();
 let routingStore: RoutingStore = new InMemoryRoutingStore();
 let earlyStore: EarlyStore = new InMemoryEarlyStore();
+let uploadStore: UploadStore = new InMemoryUploadStore();
 let storage = "memory (state is lost on restart: set DATABASE_URL)";
 let closeDb: () => Promise<void> = async () => {};
 if (env.DATABASE_URL) {
@@ -73,6 +77,7 @@ if (env.DATABASE_URL) {
   payoutStore = new PgPayoutStore(db);
   routingStore = new PgRoutingStore(db);
   earlyStore = new PgEarlyStore(db);
+  uploadStore = new PgUploadStore(db);
   closeDb = () => db.close();
   storage = "postgres";
 }
@@ -244,6 +249,7 @@ const app = buildApp({
   logger: true,
   routing: router,
   early,
+  uploads: uploadStore,
   builderCodeConfigured: Boolean(env.PHOENIX_BUILDER_CODE),
   auth: authOff ? undefined : new AuthService({ store: authStore, domain: env.GARUDA_AUTH_DOMAIN ?? "garuda", allowedOrigins: env.GARUDA_CORS_ORIGIN === "*" ? "*" : (env.GARUDA_CORS_ORIGIN ?? "").split(",").map((o) => o.trim()).filter(Boolean), privy }),
   trustProxy: env.GARUDA_TRUST_PROXY === "1",

@@ -24,7 +24,8 @@ import { DEFAULT_ART_DIR, collectionMetadata, isKnightTierName, readArt, tierMet
 import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "./payouts.js";
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
-import { TweetLookup } from "./tweets.js";
+import { MediaProxy, TweetLookup } from "./tweets.js";
+import { InMemoryUploadStore, registerUploadRoutes, type UploadStore } from "./uploads.js";
 import { registerEarlyRoutes, type EarlyAccessService } from "./early.js";
 
 const tierEnum = z.enum(TIER_IDS as [string, ...string[]]);
@@ -133,6 +134,10 @@ export interface AppOptions {
   marketCacheMs?: number;
   /** Public tweet lookup behind GET /social/tweets/:id (the /calledit page). Default: X's public embed endpoint. */
   tweets?: TweetLookup;
+  /** Post photo proxy behind GET /social/media (the /calledit page). Default: fetches pbs.twimg.com. */
+  media?: MediaProxy;
+  /** /calledit image uploads (POST /social/uploads). Default: in memory. */
+  uploads?: UploadStore;
   /** Phase 2 Phoenix order routing. Absent = routing disabled (the /admin/routing routes answer 404). */
   routing?: RoutingAdmin;
   /** Garuda Beta Access (/early). Absent = the /early routes do not exist. */
@@ -374,6 +379,22 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     reply.header("Cache-Control", "public, max-age=600");
     return tweets.get(id);
   });
+
+  /** Post photos, served from the API so they load on every network and can be drawn onto the card canvas. */
+  const media = opts.media ?? new MediaProxy();
+  app.get<{ Querystring: { u?: string } }>("/social/media", async (req, reply) => {
+    const u = String(req.query.u ?? "");
+    const img = await media.get(u);
+    if (!img) throw new ServiceError(404, "media_unavailable", "That image is not available");
+    reply.header("Content-Type", img.type);
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+    return reply.send(img.body);
+  });
+
+  registerUploadRoutes(app, opts.uploads ?? new InMemoryUploadStore(), { now: opts.now });
 
   /** OHLCV for the chart. `source` says whether it is real Phoenix history or a synthetic offline stand-in. Public. */
   app.get<{ Params: { symbol: string }; Querystring: { tf?: string; limit?: string } }>("/markets/:symbol/candles", async (req) => {

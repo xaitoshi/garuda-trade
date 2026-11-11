@@ -10,4 +10,5 @@ export * from "./rate-limit.js";
 export * from "./app.js";
 export * from "./privy.js";
 export * from "./tweets.js";
+export * from "./uploads.js";
 export * from "./early.js";
