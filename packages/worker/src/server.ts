@@ -116,12 +116,11 @@ try {
 }
 // Garuda Beta Access (/early, docs/early-mint.md). Waitlist only unless EARLY_MINT_ENABLED=true. When enabled it runs on
 // EARLY_CLUSTER (default mainnet-beta): buyers pay EARLY_PRICE_USD in USDC to EARLY_TREASURY and the mint authority
-// (EARLY_MINT_KEYPAIR) mints a Metaplex Core asset into EARLY_COLLECTION. Any missing or wrong setting keeps it OFF.
+// (EARLY_MINT_KEYPAIR) mints a Metaplex Core asset into EARLY_COLLECTION. No supply cap: one per wallet and per email. Any missing or wrong setting keeps it OFF.
 const earlyCluster: EarlyCluster = env.EARLY_CLUSTER === "devnet" ? "devnet" : "mainnet-beta";
 const earlyBase = {
   store: earlyStore,
   priceUsd: Number(env.EARLY_PRICE_USD ?? 1.69),
-  maxSupply: Number(env.EARLY_MAX_SUPPLY ?? 1000),
   cluster: earlyCluster,
   imageUrl: env.EARLY_IMAGE_URL ?? "https://garuda.markets/early/garuda-beta-access.png",
   metadataUri: env.EARLY_METADATA_URI ?? "https://garuda.markets/early/metadata.json",
@@ -150,7 +149,7 @@ try {
   const authority = keypairFromSecret(Uint8Array.from(secret));
   const minter = new MetaplexEarlyMinter({ rpcUrl, cluster: earlyCluster, authority, collection: need("EARLY_COLLECTION"), metadataUri: earlyBase.metadataUri, soulbound: env.EARLY_SOULBOUND !== "false" });
   early = new EarlyAccessService({ ...earlyBase, enabled: true, minter, payment: { mint: usdcMint, treasury, verify: (i) => verifyUsdcPayment(rpc, { mint: usdcMint, treasury }, i) } });
-  earlyLabel = `minting on ${earlyCluster} $${earlyBase.priceUsd} cap ${earlyBase.maxSupply}`;
+  earlyLabel = `minting on ${earlyCluster} $${earlyBase.priceUsd} no cap`;
 } catch (e) {
   if (!(e as { quiet?: boolean }).quiet) console.error(`[garuda-early] minting config rejected, /early stays waitlist only: ${e instanceof Error ? e.message : e}`);
   early = new EarlyAccessService({ ...earlyBase, enabled: false });

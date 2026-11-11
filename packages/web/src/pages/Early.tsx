@@ -25,7 +25,7 @@ const STEP: Record<string, string> = {
 };
 
 export function Early() {
-  const { wallet: sessionWallet, paySigner, connected, privyEnabled, privyLogin } = useSession();
+  const { wallet: sessionWallet, paySigner, privyEnabled, privyLogin } = useSession();
   const [status, setStatus] = useState<EarlyStatus | null>(null);
   const [wallet, setWallet] = useState("");
   const [email, setEmail] = useState("");
@@ -59,7 +59,6 @@ export function Early() {
   const walletOk = BASE58.test(wallet.trim());
   const emailOk = EMAIL.test(email.trim());
   const busy = step !== null;
-  const soldOut = enabled && status?.soldOut;
   const mainnet = useMemo(() => new Connection(EARLY_RPC, "confirmed"), []);
 
   const useConnected = () => {
@@ -109,7 +108,7 @@ export function Early() {
     setStep("claim");
     try {
       const payer = enabled ? paySigner.publicKey?.toBase58() : undefined;
-      if (enabled && !payer) throw new Error(`Connect a wallet to pay ${priceText} in USDC. The NFT goes to the address you entered.`);
+      if (enabled && !payer) throw new Error("Connect a wallet to pay. The NFT goes to the address you entered.");
       const out = await api.earlyClaim(wallet.trim(), email.trim(), payer);
       if (out.status === "awaiting_payment") await pay(out.payment);
       else finish(out);
@@ -132,22 +131,7 @@ export function Early() {
         </div>
 
         <div className="early-copy">
-          <div className="early-eyebrow">Garuda Beta Access</div>
           <h1 className="early-title">You Are Early.</h1>
-          <p className="early-lead">
-            Mint the Garuda Beta Access NFT on Solana. One per wallet. Holders get first access to Garuda challenges and every beta drop.
-          </p>
-
-          <div className="early-meta">
-            <div className="early-price" data-testid="early-price">
-              <b>{priceText}</b>
-              <span>USDC per mint</span>
-            </div>
-            <div className="early-supply">
-              <b>{status ? `${status.minted} / ${status.cap}` : "1000"}</b>
-              <span>{status ? "minted" : "supply"}</span>
-            </div>
-          </div>
 
           {done ? (
             <div className="early-done" data-testid="early-done">
@@ -161,7 +145,7 @@ export function Early() {
               {done.kind === "waitlist" && (
                 <>
                   <h2>You're on the list.</h2>
-                  <p>{done.again ? "This wallet is already on the list." : "Minting opens soon. Come back to mint yours for " + priceText + " when it opens."}</p>
+                  <p>{done.again ? "This wallet is already on the list." : "Minting opens soon. Come back to mint yours."}</p>
                 </>
               )}
               {done.kind === "paid" && (
@@ -177,8 +161,7 @@ export function Early() {
             </div>
           ) : (
             <form className="early-form" onSubmit={submit} noValidate>
-              {!enabled && <div className="early-soon"><i />Minting opens soon. Join the waitlist now, no payment today.</div>}
-              {soldOut && <div className="early-soon"><i />Sold out. Every Beta Access NFT is claimed.</div>}
+              {status && !enabled && <div className="early-soon"><i />Minting opens soon.</div>}
               <label className="early-field">
                 <span>Solana wallet address</span>
                 <div className="early-input-row">
@@ -213,16 +196,10 @@ export function Early() {
                 />
                 {touched && !emailOk && <em>Enter a valid email.</em>}
               </label>
-              <button className="btn btn-fire early-submit" type="submit" disabled={busy || Boolean(soldOut)} data-testid="early-submit">
-                {busy ? STEP[step!] ?? "Working..." : enabled ? `Mint for ${priceText}` : "Join the waitlist"}
+              <button className="btn btn-fire early-submit" type="submit" disabled={busy} data-testid="early-submit">
+                {busy ? STEP[step!] ?? "Working..." : enabled ? "Mint" : "Join the waitlist"}
               </button>
               {error && <div className="early-error" role="alert">{error}</div>}
-              <p className="early-fine">
-                {enabled
-                  ? `You pay ${priceText} in USDC from your connected wallet on Solana mainnet, plus the network fee and NFT rent (about 0.003 SOL). The NFT is minted to the address above. One per wallet and per email.`
-                  : `Mint price will be ${priceText} in USDC on Solana mainnet. One per wallet and per email. We only use your email for Garuda updates.`}
-                {enabled && !connected && " Connect a wallet to pay."}
-              </p>
             </form>
           )}
         </div>
