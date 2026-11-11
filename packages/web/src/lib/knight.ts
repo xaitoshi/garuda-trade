@@ -67,6 +67,8 @@ export function artState(c: ChallengeState): ArtState {
 }
 
 export const knightSrc = (level: KnightLevel, state: ArtState): string => `/art/knights/${level}-${state}.png`;
+/** Portrait cover-crop for tall challenge / landing cards so the dots reach every edge. */
+export const knightCardSrc = (level: KnightLevel): string => `/art/cards/${level}.png`;
 
 /** Boss art by remaining HP (1 = full) and outcome. */
 export function bossState(c: Pick<ChallengeState, "status" | "risk">): BossState {

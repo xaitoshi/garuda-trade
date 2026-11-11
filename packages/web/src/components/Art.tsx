@@ -1,8 +1,8 @@
 import type { ArtState, KnightLevel, BossState } from "../lib/knight";
-import { knightSrc } from "../lib/knight";
+import { knightCardSrc, knightSrc } from "../lib/knight";
 
-export function KnightImg({ level, state = "active", size = 120, className = "", alt, fill }: { level: KnightLevel; state?: ArtState; size?: number; className?: string; alt?: string; fill?: boolean }) {
-  const src = knightSrc(level, state);
+export function KnightImg({ level, state = "active", size = 120, className = "", alt, fill, variant }: { level: KnightLevel; state?: ArtState; size?: number; className?: string; alt?: string; fill?: boolean; variant?: "card" | "square" }) {
+  const src = variant === "card" ? knightCardSrc(level) : knightSrc(level, state);
   const cls = `knight knight-${state}${fill ? " knight-fill" : ""} ${className}`.trim();
   const label = alt ?? `Level ${level} knight, ${state}`;
   if (fill) return <img className={cls} src={src} alt={label} draggable={false} />;

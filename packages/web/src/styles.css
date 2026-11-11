@@ -33,7 +33,7 @@ main{padding:24px;max-width:1440px;margin:0 auto}
 .btn-fire{background:var(--fire);color:var(--ink);box-shadow:0 10px 32px -8px rgba(255,95,1,.6)}
 .btn-ghost{background:var(--panel);border:1px solid var(--line)}
 .btn-sm{padding:10px 14px;font-size:14px;border-radius:10px}
-.knight-fill{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;display:block;margin:0;padding:0;border:0;max-width:none}
+img.knight.knight-fill,.knight-fill{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;margin:0;padding:0;border:0;max-width:none}
 .chip{display:inline-flex;align-items:center;gap:6px;font-family:Inter,sans-serif;font-size:11px;letter-spacing:0;border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--mute);background:var(--panel)}
 .chip.on{color:var(--bone);border-color:var(--line2);background:var(--panel2)}
 .st{display:inline-flex;align-items:center;gap:6px;font-family:Inter,sans-serif;font-size:11px;letter-spacing:0;text-transform:none;border-radius:7px;padding:5px 9px;border:1px solid}
@@ -328,7 +328,6 @@ img.knight.knight-victory{filter:brightness(1.08) contrast(1.06) drop-shadow(0 0
 .boss-mark.boss-defeated{color:#948f90;filter:grayscale(1) brightness(.75)}
 .boss-mark.boss-defeated .boss-core{background:radial-gradient(circle,#555,#222);box-shadow:none}
 
-.knight-fill{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;display:block;margin:0;max-width:none}
 
 .nav-drop{position:relative}
 .nav-drop-trigger{display:inline-flex;align-items:center;border-radius:10px}
