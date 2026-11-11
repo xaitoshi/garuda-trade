@@ -132,7 +132,7 @@ function ChallengesMenu() {
   );
 }
 
-/** /early only: the logo back home and nothing else (no links into the app). */
+/** Logo-only header. /early now uses a centered logo link instead. */
 export function BareTopBar() {
   return (
     <header className="top top-bare" data-testid="top-bare">

@@ -1,44 +1,95 @@
-/* /early: Garuda Beta Access mint. Dark, dot-matrix, matches the landing hero. */
-.pg-early{max-width:1240px;margin:0 auto;padding:56px 40px 96px;min-height:calc(100vh - 64px);background:var(--landing-ink,#08090a)}
-.early-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;align-items:center}
-.early-art{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#08090a;aspect-ratio:1/1;box-shadow:0 30px 80px -30px rgba(255,95,1,.35)}
-.early-art img{display:block;width:100%;height:100%;object-fit:cover;user-select:none;pointer-events:none}
-.early-title{font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);font-weight:400;font-size:clamp(40px,6vw,76px);letter-spacing:-1px;line-height:1.02}
-.early-form{margin-top:36px;display:flex;flex-direction:column;gap:16px;max-width:520px}
-.early-soon{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bone);border:1px solid rgba(255,95,1,.4);background:rgba(255,95,1,.07);border-radius:12px;padding:12px 14px}
-.early-soon i{width:7px;height:7px;border-radius:50%;background:var(--fire);box-shadow:0 0 8px var(--fire);flex:none}
+/* /early: centered waitlist. Dark, dot-matrix, no mint UI. */
+.pg-early{
+  min-height:100vh;
+  margin:0;
+  max-width:none;
+  padding:48px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--landing-ink,#08090a);
+}
+.early-hero{
+  width:100%;
+  max-width:400px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+.early-logo{
+  display:block;
+  line-height:0;
+  margin-bottom:28px;
+}
+.early-logo img{display:block;height:168px;width:auto;margin:0 auto;user-select:none}
+.early-line{
+  margin:0;
+  font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);
+  font-weight:400;
+  font-size:clamp(18px,3.4vw,26px);
+  letter-spacing:-.3px;
+  line-height:1.25;
+  color:var(--bone);
+}
+.early-sub{
+  margin:10px 0 0;
+  font-size:14px;
+  color:var(--mute);
+}
+.early-form{
+  width:100%;
+  margin-top:36px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  text-align:left;
+}
 .early-field{display:flex;flex-direction:column;gap:8px}
 .early-field>span{font-size:13px;color:var(--mute)}
 .early-field em{font-style:normal;font-size:13px;color:var(--red)}
-.early-input-row{display:flex;gap:8px}
-.early-field input{flex:1;min-width:0;height:52px;border-radius:12px;border:1px solid var(--line2);background:#111012;color:var(--bone);font:500 15px/1 Inter,ui-sans-serif,system-ui,sans-serif;padding:0 16px;outline:none;transition:border-color .2s}
-.early-field input::placeholder{color:var(--dim)}
-.early-field input:focus{border-color:var(--fire)}
-.early-field input[aria-invalid="true"]{border-color:var(--red)}
-.early-use{flex:none;height:52px;padding:0 16px;border-radius:12px;border:1px solid var(--line2);background:var(--panel);color:var(--bone);font:600 14px/1 Inter,sans-serif;cursor:pointer}
-.early-use:hover{border-color:var(--mute)}
-.early-submit{height:54px;font-size:16px;cursor:pointer;margin-top:4px}
-.early-submit:disabled{opacity:.6;cursor:wait}
 .early-error{font-size:14px;color:var(--red);border:1px solid rgba(255,95,109,.35);background:rgba(255,95,109,.06);border-radius:10px;padding:10px 12px}
-.early-done{margin-top:28px;display:flex;flex-direction:column;gap:14px;max-width:520px;border:1px solid var(--line);background:var(--ink2);border-radius:18px;padding:26px}
-.early-done h2{font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);font-weight:400;font-size:40px;letter-spacing:-.5px}
-.early-done p{color:var(--mute);font-size:16px}
-.early-done .btn{align-self:flex-start}
-@media (max-width:900px){
-  .pg-early{padding:28px 20px 72px}
-  .early-grid{grid-template-columns:minmax(0,1fr);gap:28px}
-  .early-art{max-width:520px;width:100%;margin:0 auto}
+.early-done{margin-top:36px;width:100%}
+.early-done h1{
+  margin:0;
+  font-family:var(--display,"Geist Pixel Circle",ui-monospace,monospace);
+  font-weight:400;
+  font-size:clamp(32px,6vw,48px);
+  letter-spacing:-.5px;
+  line-height:1.1;
 }
-.early-field>input{flex:none}
-.early-art picture{display:block;width:100%;height:100%}
-.top.top-bare{display:flex;justify-content:flex-start;align-items:center;max-width:1240px;margin:0 auto;padding:0 40px;border-bottom:0;background:transparent}
-@media (max-width:900px){.top.top-bare{justify-content:center;padding:0 20px}}
+@media (max-width:600px){
+  .pg-early{padding:32px 20px}
+  .early-logo img{height:132px}
+}
 /* /early controls: squared like the Pilot terminal order ticket (10px control radius, thin 1px edge, 44/47px tall). */
-:root .pg-early .early-field input{height:44px;border-radius:var(--r-control,10px);border:1px solid rgba(255,255,255,.09);background:#1a1b1e;font:400 13px/1 Inter,ui-sans-serif,system-ui,sans-serif;padding:0 12px;transition:border-color .28s}
+:root .pg-early .early-field input{
+  height:44px;
+  width:100%;
+  box-sizing:border-box;
+  border-radius:var(--r-control,10px);
+  border:1px solid rgba(255,255,255,.09);
+  background:#1a1b1e;
+  color:var(--bone);
+  font:400 13px/1 Inter,ui-sans-serif,system-ui,sans-serif;
+  padding:0 12px;
+  outline:none;
+  transition:border-color .28s;
+}
+:root .pg-early .early-field input::placeholder{color:var(--dim)}
 :root .pg-early .early-field input:hover{border-color:rgba(255,255,255,.18)}
 :root .pg-early .early-field input:focus{border-color:var(--fire)}
 :root .pg-early .early-field input[aria-invalid="true"]{border-color:var(--red)}
-:root .pg-early .early-use{height:44px;min-height:44px;padding:0 14px;border-radius:var(--r-control,10px);border:1px solid rgba(255,255,255,.125);background:rgba(255,255,255,.02);font:500 12px/1 Inter,sans-serif;transition:background-color .42s,border-color .42s}
-:root .pg-early .early-use:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.22)}
-:root .pg-early .early-submit{height:47px;min-height:47px;border-radius:var(--r-control,10px);font-size:13px;font-weight:600;padding:1px 6px;margin-top:4px;transition:background-color .42s cubic-bezier(.22,.7,.24,1),color .42s cubic-bezier(.22,.7,.24,1)}
-:root .pg-early .early-done .btn{border-radius:var(--r-control,10px)}
+:root .pg-early .early-submit{
+  width:100%;
+  height:47px;
+  min-height:47px;
+  border-radius:var(--r-control,10px);
+  font-size:13px;
+  font-weight:600;
+  padding:1px 6px;
+  margin-top:4px;
+  cursor:pointer;
+  transition:background-color .42s cubic-bezier(.22,.7,.24,1),color .42s cubic-bezier(.22,.7,.24,1);
+}
+:root .pg-early .early-submit:disabled{opacity:.6;cursor:wait}
