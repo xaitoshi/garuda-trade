@@ -22,6 +22,7 @@ import { DEFAULT_ART_DIR, collectionMetadata, isKnightLevel, levelMetadata, read
 import { payoutView, type Payout, type PayoutService, type PayoutStatus } from "./payouts.js";
 import type { PurchaseService } from "./purchases.js";
 import { ChallengeService, ServiceError } from "./service.js";
+import { TweetLookup } from "./tweets.js";
 
 const tierEnum = z.enum(TIER_IDS as [string, ...string[]]);
 
@@ -103,6 +104,8 @@ export interface AppOptions {
   corsOrigins?: string[] | "*";
   /** How long a public /markets/:symbol snapshot is shared between callers. Default 750 ms. */
   marketCacheMs?: number;
+  /** Public tweet lookup behind GET /social/tweets/:id (the /calledit page). Default: X's public embed endpoint. */
+  tweets?: TweetLookup;
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -302,6 +305,15 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       slot: snap.slot,
       book: { bids: snap.book.bids.slice(0, depth), asks: snap.book.asks.slice(0, depth) },
     };
+  });
+
+  /** Public post lookup for /calledit: text, author and avatar from X's embed endpoint, plus the id-derived time. */
+  const tweets = opts.tweets ?? new TweetLookup();
+  app.get<{ Params: { id: string } }>("/social/tweets/:id", async (req, reply) => {
+    const id = req.params.id;
+    if (!/^\d{5,20}$/.test(id)) throw new ServiceError(400, "invalid_tweet_id", "id must be a numeric post id");
+    reply.header("Cache-Control", "public, max-age=600");
+    return tweets.get(id);
   });
 
   /** OHLCV for the chart. `source` says whether it is real Phoenix history or a synthetic offline stand-in. Public. */

@@ -10,6 +10,7 @@ export function Footer() {
       </span>
       <span className="foot-r">
         {offline ? "API offline" : health ? `data: ${health.marketData}${health.marketDataReachable ? "" : " (unreachable)"}` : "connecting..."}
+        <Link to="/calledit">Called It</Link>
         <Link to="/leaderboard">Leaderboard</Link>
       </span>
     </footer>

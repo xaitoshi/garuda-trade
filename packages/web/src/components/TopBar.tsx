@@ -20,6 +20,7 @@ const TABS = [
   ["/barracks", "Barracks"],
   ["/leaderboard", "Leaderboard"],
   ["/payouts", "Payouts"],
+  ["/calledit", "Called It"],
 ] as const;
 
 const CHALLENGE_LINKS = [
@@ -91,6 +92,7 @@ export function TopBar({ landing }: { landing: boolean }) {
           <a href="#trials">Challenges</a>
           <a href="#knights">Knights</a>
           <a href="#faq">FAQ</a>
+          <Link to="/calledit">Called It</Link>
         </nav>
       ) : (
         <nav className="tabs" aria-label="Main">
