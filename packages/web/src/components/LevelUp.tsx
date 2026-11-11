@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ChallengeState, LevelUpRecord } from "../lib/types";
 import { levelOfTier, tierLevelLabel } from "../lib/knight";
 import { usd } from "../lib/format";
@@ -40,7 +41,8 @@ export function LevelUpCelebration({ c }: { c: ChallengeState }) {
     setRec(undefined);
   };
   const graduated = rec.toTier !== rec.fromTier;
-  return (
+  // Portal to <body>: an animated/transformed page wrapper would otherwise turn position:fixed into page-relative.
+  return createPortal(
     <div className="lvl-up" role="dialog" aria-label={graduated ? "Graduation" : "Level up"} data-testid="level-up" onClick={close}>
       <div className="panel lvl-card dots" onClick={(e) => e.stopPropagation()}>
         <Spark color="#ffc24a" size={22} style={{ position: "absolute", left: 30, top: 26 }} />
@@ -51,13 +53,14 @@ export function LevelUpCelebration({ c }: { c: ChallengeState }) {
           <KnightImg level={levelOfTier(rec.toTier)} state="victory" size={150} alt="" />
         </div>
         <p className="mute">
-          {tierLevelLabel(rec.fromTier, rec.fromLevel)} {usd(rec.fromSize, 2)} › {tierLevelLabel(rec.toTier, rec.toLevel)} {usd(rec.toSize, 2)}. Your drawdown floor and daily limit now follow the new size.
+          {tierLevelLabel(rec.fromTier, rec.fromLevel)} {usd(rec.fromSize, rec.fromSize % 1 ? 2 : 0)} › {tierLevelLabel(rec.toTier, rec.toLevel)} {usd(rec.toSize, rec.toSize % 1 ? 2 : 0)}. Your drawdown floor and daily limit now follow the new size.
           {graduated ? " Your knight NFT took the new tier and art." : ""}
         </p>
         <button className="btn btn-fire" onClick={close} data-testid="level-up-ok">
           Keep trading
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
