@@ -309,3 +309,7 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 
 /* tables inside rounded panels: the header row's fill must not poke out past the rounded corners */
 :root main .panel:has(> table, > .tbl-scroll){overflow:hidden}
+
+/* demo card: the logo on its own, no tile behind it */
+:root main.pg-challenges .cd .demo-ic{background:transparent;border:0;width:auto;height:auto}
+:root main.pg-challenges .cd .demo-ic img{height:44px!important}
