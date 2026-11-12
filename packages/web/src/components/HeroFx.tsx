@@ -2,36 +2,41 @@ import { useEffect, useRef } from "react";
 import { openingPixels, PITCH, TOP, BOTTOM } from "./heroOpening";
 
 /**
- * The opening of the hero knight's helmet lights up in Phoenix orange every few seconds.
+ * The opening of the hero knight's helmet wakes every few seconds, each time in the next dim, unsettling colour.
  *
  * Nothing is drawn by hand: the effect takes the artwork's own light pixels around the opening (every dot that borders
- * the dark dome of the helmet) and paints exactly those pixels orange, on a layer that sits on the <img> with the same
- * object-fit and object-position. So the orange dots are the white dots, pixel for pixel, never beside them.
- * The light rises from the bottom of the opening to the top, flares, burns with a slow breath and an odd flicker, then
- * drains back down.
+ * the dark dome of the helmet) and paints exactly those pixels, on a layer that sits on the <img> with the same
+ * object-fit and object-position. So the coloured dots are the white dots, pixel for pixel, never beside them.
+ * The light rises from the bottom, holds, blinks twice like an eyelid, glares, then sinks away.
  */
-const CYCLE = 8; // seconds between ignitions
-const FIRST = 1.2; // the first ignition, after the page settles
-const ORANGE: [number, number, number] = [255, 122, 24];
-const HOT: [number, number, number] = [255, 214, 150];
-const BLOOM = "rgba(255,70,10,";
-
+const CYCLE = 6.5; // seconds between wakings
+const FIRST = 1.2; // the first waking, after the page settles
+// each waking uses the next colour: dim, deep and unsettling rather than bright. rgb of the dots, and of their glow
+const MOODS: { dot: [number, number, number]; glow: string }[] = [
+  { dot: [196, 28, 18], glow: "rgba(150,0,0," },     // blood red
+  { dot: [214, 92, 18], glow: "rgba(170,50,0," },    // ember, the Phoenix orange gone dark
+  { dot: [150, 24, 72], glow: "rgba(110,0,50," },    // bruised crimson
+  { dot: [120, 36, 150], glow: "rgba(80,10,120," },  // cursed violet
+];
+const PEAK = 0.72; // the brightest the dots get: lit, but never glaring
 // which dots are the opening is worked out in heroOpening.ts (and tested against the art there)
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
-/** reveal 0..1 (how far up the light has climbed), brightness, bloom */
+/** The eyes wake: the light rises from the bottom, holds, blinks twice (an eyelid closing, top to bottom), glares
+ * for a moment, then sinks away. reveal 0..1 = how far up it has climbed, b = brightness, bloom, mood = colour index. */
 function phase(t: number) {
-  if (t < FIRST) return { reveal: 0, b: 0, bloom: 0 };
-  const k = (t - FIRST) % CYCLE;
-  if (k < 0.6) { const r = ease(k / 0.6); return { reveal: r, b: 0.7 + 0.3 * r, bloom: 0.5 * r }; }   // light climbs
-  if (k < 0.8) { const f = 1 - (k - 0.6) / 0.2; return { reveal: 1, b: 1 + 0.35 * f, bloom: 0.5 + 0.5 * f }; } // flare
-  if (k < 3.7) {                                                                                     // burn
-    const breath = 0.88 + 0.12 * Math.sin((k - 0.8) * 2.4);
-    const flicker = k > 2.55 && k < 2.68 ? 0.5 : k > 2.72 && k < 2.78 ? 0.75 : 1;
-    return { reveal: 1, b: breath * flicker, bloom: 0.45 * breath * flicker };
-  }
-  if (k < 4.6) { const r = 1 - ease((k - 3.7) / 0.9); return { reveal: r, b: 0.5 + 0.5 * r, bloom: 0.3 * r }; } // drains down
-  return { reveal: 0, b: 0, bloom: 0 };
+  if (t < FIRST) return { reveal: 0, b: 0, bloom: 0, mood: 0 };
+  const n = Math.floor((t - FIRST) / CYCLE), k = (t - FIRST) % CYCLE, mood = n % MOODS.length;
+  const on = (reveal: number, b: number, bloom: number) => ({ reveal, b: b * PEAK, bloom, mood });
+  if (k < 0.7) { const r = ease(k / 0.7); return on(r, 0.6 + 0.4 * r, 0.4 * r); }            // rises
+  if (k < 1.5) return on(1, 0.85 + 0.15 * Math.sin((k - 0.7) * 6), 0.4);                   // holds, pulsing
+  // two blinks: the lid comes down (reveal falls from the top), then opens again
+  const blink = (k0: number) => { const x = (k - k0) / 0.22; return x < 0 || x > 1 ? 1 : Math.abs(1 - 2 * x); };
+  if (k < 2.1) { const r = Math.min(blink(1.5), blink(1.82)); return on(0.15 + 0.85 * r, 1, 0.4 * r); }
+  if (k < 2.5) { const f = 1 - (k - 2.1) / 0.4; return on(1, 1 + 0.25 * f, 0.4 + 0.5 * f); } // glares
+  if (k < 3.6) return on(1, 0.9 + 0.1 * Math.sin((k - 2.5) * 3), 0.35);
+  if (k < 4.4) { const r = 1 - ease((k - 3.6) / 0.8); return on(r, 0.5 + 0.5 * r, 0.25 * r); } // sinks away
+  return { reveal: 0, b: 0, bloom: 0, mood };
 }
 
 export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
@@ -44,11 +49,11 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
     if (!canvas || !host || !img) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const g = canvas.getContext("2d")!;
-    let glow: HTMLCanvasElement | null = null, hot: HTMLCanvasElement | null = null;
+    let layers: HTMLCanvasElement[] = [];
     let raf = 0, dead = false, visible = true, t0 = 0, last = 0;
     let s = 1, ox = 0, oy = 0, dpr = 1;
 
-    // build two layers the size of the artwork: the opening's own light pixels in orange, and the same in hot white-orange
+    // one layer per colour, the size of the artwork: the opening's own light pixels in that colour
     const analyse = (im: HTMLImageElement) => {
       const W = im.naturalWidth, H = im.naturalHeight;
       const c = document.createElement("canvas"); c.width = W; c.height = H;
@@ -68,7 +73,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
         og.putImageData(out, 0, 0);
         return o;
       };
-      glow = mk(ORANGE); hot = mk(HOT);
+      layers = MOODS.map((m) => mk(m.dot));
     };
 
     const layout = () => {
@@ -86,30 +91,23 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
     const paint = (st: ReturnType<typeof phase>) => {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, canvas.width, canvas.height);
-      if (!glow || !hot || st.b <= 0.01 || st.reveal <= 0) return;
+      const glow = layers[st.mood];
+      if (!glow || st.b <= 0.01 || st.reveal <= 0) return;
       g.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
-      // the light climbs: only rows below the current level are shown
+      // only rows below the current level are lit
       const level = BOTTOM + PITCH - st.reveal * (BOTTOM - TOP + 2 * PITCH);
       g.save();
       g.beginPath(); g.rect(0, level, glow.width, BOTTOM + PITCH - level); g.clip();
-      g.shadowColor = BLOOM + Math.min(1, st.bloom) + ")";
-      g.shadowBlur = (8 + 14 * st.bloom) * dpr * s;
+      g.shadowColor = MOODS[st.mood]!.glow + Math.min(1, st.bloom) + ")";
+      g.shadowBlur = (6 + 10 * st.bloom) * dpr * s;
       g.globalAlpha = Math.min(1, st.b);
       g.drawImage(glow, 0, 0);
-      g.shadowBlur = 0;
-      if (st.b > 1) { g.globalAlpha = Math.min(1, (st.b - 1) * 2.5); g.drawImage(hot, 0, 0); } // the flare runs hot
-      // a bright band at the climbing edge
-      if (st.reveal < 1) {
-        g.globalAlpha = 0.9;
-        g.beginPath(); g.rect(0, level, glow.width, 2 * PITCH); g.clip();
-        g.drawImage(hot, 0, 0);
-      }
       g.restore();
     };
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      if (dead || !visible || document.hidden || !glow) return;
+      if (dead || !visible || document.hidden || !layers.length) return;
       if (now - last < 1000 / 40) return;
       last = now;
       if (!t0) t0 = now;
@@ -124,7 +122,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
     probe.onload = () => {
       if (dead) return;
       analyse(probe); layout();
-      if (reduce) paint({ reveal: 1, b: 0.9, bloom: 0.3 }); // lit, still
+      if (reduce) paint({ reveal: 1, b: PEAK, bloom: 0.3, mood: 0 }); // lit, still
       else raf = requestAnimationFrame(frame);
     };
     probe.src = src;

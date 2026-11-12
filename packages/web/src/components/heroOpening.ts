@@ -19,9 +19,11 @@ export const DENSE = 0.55;                // share of lit cells around a dot abo
 export const OUT = { left: 362, right: 650 }; // columns safely outside the bowl, where the wall flood starts
 // single dots picked out by eye that read as noise, not as part of the opening (image pixels)
 export const DROP: [number, number][] = [[416, 176], [396, 241], [411, 286], [416, 286]];
-export const SPAN = { left: 382, leftLow: 394, lowFrom: 225, right: 607, rightLow: 588, rightLowFrom: 235 };
-// the helmet's width: the opening never reaches past these columns. leftLow / rightLow apply below lowFrom /
-// rightLowFrom, so the streaks stay and the loose dots beside the walls go
+export const SPAN = { left: 382, leftLow: 394, lowFrom: 200 };
+// on the right the opening ends at the helmet's diagonal arm: a line along the arm (image pixels), plus a little margin
+export const RIGHT_EDGE = { x0: 596, y0: 160, x1: 541, y1: 285, margin: 12 };
+const rightLimit = (y: number) => RIGHT_EDGE.x0 + ((y - RIGHT_EDGE.y0) * (RIGHT_EDGE.x1 - RIGHT_EDGE.x0)) / (RIGHT_EDGE.y1 - RIGHT_EDGE.y0) + RIGHT_EDGE.margin;
+// the left edge of the opening (image pixels); below lowFrom it is leftLow, so the streak stays and the loose dots go
 
 export interface Grid { px0: number; py0: number; cols: number; rows: number; lit: Uint8Array }
 export interface Opening extends Grid { keep: Uint8Array; area: Uint8Array; dark: Uint8Array; wall: Uint8Array }
@@ -107,7 +109,7 @@ export function findOpening(d: Uint8ClampedArray, W: number, H: number): Opening
     const [i, j] = fs.pop()!;
     if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
     const k = j * cols + i, x = px0 + i * PITCH, y = py0 + j * PITCH;
-    if (inside[k] || wall[k] || y < TOP || y > BOTTOM || x < (y > SPAN.lowFrom ? SPAN.leftLow : SPAN.left) || x > (y > SPAN.rightLowFrom ? SPAN.rightLow : SPAN.right)) continue;
+    if (inside[k] || wall[k] || y < TOP || y > BOTTOM || x < (y > SPAN.lowFrom ? SPAN.leftLow : SPAN.left) || x > rightLimit(y)) continue;
     inside[k] = 1;
     fs.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]);
   }
