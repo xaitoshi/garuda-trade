@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The opening of the hero knight's helmet: the U-shaped rim of white dots under the dark dome fills with Phoenix
- * orange every few seconds. A spark at the bottom of the U, the colour climbs both sides of the rim, flares, burns with
- * a slow breath and an odd flicker, then drains back down. The rim is found in the artwork itself (the dots that border
- * the dark dome, flood-filled from inside it), so the effect only recolours dots that are already there.
+ * The opening of the hero knight's helmet: a clean U of dots along the lower edge of the dark dome fills with Phoenix
+ * orange every few seconds. A spark at the bottom of the U, the colour climbs both arms, flares, burns with a slow
+ * breath and an odd flicker, then drains back down. The U is a vector curve (half a superellipse fitted to the dome),
+ * drawn as dots on the artwork's own 5px grid, so it stays smooth instead of following the art's ragged edge.
  * The canvas matches the <img> it sits on: same object-fit (cover) and object-position from CSS.
  */
 const PITCH = 5;
@@ -23,12 +23,12 @@ export const EYE_PALETTES: Record<string, EyePalette> = {
 };
 const DEFAULT_PALETTE = "inferno";
 
-// the helmet opening, in the 879px pixel space of /art/landing/hero-knight-dotted.png: a point inside the dark dome,
-// the part of its border that is the opening (below TOP, between LEFT and RIGHT, above FLOOR), and the bottom of the U
-const SEED = { x: 500, y: 200 };
-const TOP = 165, FLOOR = 305, LEFT = 360, RIGHT = 610;
-const BOTTOM = { x: 488, y: 300 };
-const REACH = 190; // farthest rim dot from BOTTOM, sets how far the colour climbs
+// the helmet opening in the 879px pixel space of /art/landing/hero-knight-dotted.png: half a superellipse around the
+// dome (centre, radii, how square its bottom is), swept from A0 to A1 degrees, never below FLOOR
+// fitted to the artwork: the parameters minimise the distance to the art's own edge dots around the opening
+const U = { cx: 475, cy: 152, rx: 117, ry: 126, ex: 1.75, a0: -14, a1: 194, floor: 296 };
+const STROKE = 3.6; // grid dots closer than this to the curve are lit: one to two dots thick
+const BOTTOM = { x: U.cx, y: U.floor };
 
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -82,34 +82,17 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
         if (sum > best) { best = sum; px0 = px; py0 = py; }
       }
       cells = [];
-      const cols = Math.floor((c.width - px0) / PITCH), rows = Math.floor((c.height - py0) / PITCH);
-      const lit = (i: number, j: number) => L(px0 + i * PITCH, py0 + j * PITCH) > 70;
-      // the dark dome: flood fill on the dot grid from SEED, blocked by lit dots, never below FLOOR
-      const dark = new Uint8Array(cols * rows), seen = new Uint8Array(cols * rows);
-      const stack: [number, number][] = [[Math.round((SEED.x - px0) / PITCH), Math.round((SEED.y - py0) / PITCH)]];
-      let count = 0;
-      while (stack.length && count < 20000) {
-        const [i, j] = stack.pop()!;
-        if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
-        const k = j * cols + i;
-        if (seen[k]) continue;
-        seen[k] = 1;
-        if (lit(i, j) || py0 + j * PITCH > FLOOR) continue;
-        dark[k] = 1; count++;
-        stack.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]);
+      const pts: [number, number, number][] = [];
+      for (let d = U.a0; d <= U.a1; d += 0.5) {
+        const t = (d * Math.PI) / 180, sn = Math.sin(t);
+        // along: 0 at the bottom of the U, 1 at the tips, so the colour climbs both arms together
+        pts.push([U.cx + U.rx * Math.cos(t), Math.min(U.floor, U.cy + U.ry * Math.sign(sn) * Math.pow(Math.abs(sn), U.ex)), Math.abs(d - 90) / Math.max(90 - U.a0, U.a1 - 90)]);
       }
-      // the rim: lit dots within two cells of the dome, in the opening's window
-      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-        const x = px0 + i * PITCH, y = py0 + j * PITCH;
-        if (y < TOP || x < LEFT || x > RIGHT || !lit(i, j)) continue;
-        let near = Infinity;
-        for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) {
-          const ii = i + a, jj = j + b;
-          if (ii >= 0 && jj >= 0 && ii < cols && jj < rows && dark[jj * cols + ii]) near = Math.min(near, Math.hypot(a, b));
-        }
-        if (near === Infinity) continue;
-        const along = Math.min(1, Math.hypot(x - BOTTOM.x, (y - BOTTOM.y) * 1.4) / REACH);
-        cells.push({ x, y, along, core: near <= 1.5 ? 1 : 0.6, eye: 0 });
+      for (let y = py0; y <= U.floor + PITCH; y += PITCH) for (let x = px0; x < c.width; x += PITCH) {
+        if (x < U.cx - U.rx - 8 || x > U.cx + U.rx + 8) continue;
+        let best = Infinity, along = 0;
+        for (const [px, py, a] of pts) { const dd = Math.hypot(x - px, y - py); if (dd < best) { best = dd; along = a; } }
+        if (best < STROKE) cells.push({ x, y, along, core: 1 - (best / STROKE) * 0.4, eye: 0 });
       }
     };
 
