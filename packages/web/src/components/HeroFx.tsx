@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { openingPixels, PITCH, TOP, BOTTOM } from "./heroOpening";
 
 /**
- * The opening of the hero knight's helmet wakes every few seconds, each time in the next dim, unsettling colour.
+ * The opening of the hero knight's helmet wakes every few seconds in a muted Phoenix orange.
  *
  * Nothing is drawn by hand: the effect takes the artwork's own light pixels around the opening (every dot that borders
  * the dark dome of the helmet) and paints exactly those pixels, on a layer that sits on the <img> with the same
@@ -11,12 +11,9 @@ import { openingPixels, PITCH, TOP, BOTTOM } from "./heroOpening";
  */
 const CYCLE = 6.5; // seconds between wakings
 const FIRST = 1.2; // the first waking, after the page settles
-// each waking uses the next colour: dim, deep and unsettling rather than bright. rgb of the dots, and of their glow
+// one colour: the Phoenix orange, toned down so it smoulders instead of glaring
 const MOODS: { dot: [number, number, number]; glow: string }[] = [
-  { dot: [196, 28, 18], glow: "rgba(150,0,0," },     // blood red
-  { dot: [214, 92, 18], glow: "rgba(170,50,0," },    // ember, the Phoenix orange gone dark
-  { dot: [150, 24, 72], glow: "rgba(110,0,50," },    // bruised crimson
-  { dot: [120, 36, 150], glow: "rgba(80,10,120," },  // cursed violet
+  { dot: [214, 112, 40], glow: "rgba(170,70,10," },
 ];
 const PEAK = 0.72; // the brightest the dots get: lit, but never glaring
 // which dots are the opening is worked out in heroOpening.ts (and tested against the art there)
