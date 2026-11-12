@@ -331,3 +331,5 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 ::-webkit-scrollbar-thumb{min-height:32px;border:2px solid var(--scroll-track);border-radius:8px;background:var(--scroll-thumb);background-clip:padding-box}
 ::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-hover)}
 @media(forced-colors:active){*{scrollbar-color:auto}}
+/* the dots only show when a nav item is active (the landing's section links have none) */
+:root .tabs:not(:has(a.on,.nav-drop.on))::after{opacity:0}

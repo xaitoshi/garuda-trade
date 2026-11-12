@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 const RESET: React.CSSProperties = { display: "inline", font: "inherit", color: "inherit", letterSpacing: "inherit", margin: 0, fontVariantNumeric: "tabular-nums" };
 const EASE = "cubic-bezier(.22,.7,.24,1)";
 const DIGITS = "0123456789";
-const FADE = "linear-gradient(transparent, #000 18%, #000 82%, transparent)";
+const FADE = "linear-gradient(transparent, #000 6%, #000 94%, transparent)";
 
 export function DotNumber({ value, className }: { value: string; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -38,11 +38,11 @@ export function DotNumber({ value, className }: { value: string; className?: str
         if (!DIGITS.includes(c)) return <span key={i} aria-hidden style={RESET}>{c}</span>;
         const order = k++;
         return (
-          <span key={i} aria-hidden style={{ ...RESET, display: "inline-block", position: "relative", height: "1.05em", lineHeight: "1.05em", overflow: "hidden", WebkitMaskImage: FADE, maskImage: FADE }}>
+          <span key={i} aria-hidden style={{ ...RESET, display: "inline-block", position: "relative", height: "1.2em", lineHeight: "1.2em", overflow: "hidden", WebkitMaskImage: FADE, maskImage: FADE }}>
             <span style={{ ...RESET, visibility: "hidden" }}>{c}</span>
             <span style={{ ...RESET, display: "flex", flexDirection: "column", position: "absolute", left: 0, top: 0,
-              transform: `translateY(${rolled ? -Number(c) * 1.05 : 0}em)`, transition: `transform 1100ms ${EASE} ${order * 90}ms` }}>
-              {[...DIGITS].map((n) => <span key={n} style={{ ...RESET, display: "block", height: "1.05em" }}>{n}</span>)}
+              transform: `translateY(${rolled ? -Number(c) * 1.2 : 0}em)`, transition: `transform 1100ms ${EASE} ${order * 90}ms` }}>
+              {[...DIGITS].map((n) => <span key={n} style={{ ...RESET, display: "block", height: "1.2em" }}>{n}</span>)}
             </span>
           </span>
         );
