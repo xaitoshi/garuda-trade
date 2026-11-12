@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The hero knight's eyes. Two almond-shaped slits under the visor ignite every few seconds: a spark at the inner
- * corner, the fire runs outward along each slit, flares, then burns with a slow breath and an odd flicker, and dies
- * back toward the inner corner. Everything is drawn on the artwork's own 5px dot grid, so the eyes are dots too: the
- * socket is cleared to black, the slit dots glow from a hot core to a dark outer colour, and the light spills onto the
+ * The opening of the hero knight's helmet: the T-shaped slit (across the visor, then down the face) lights from inside
+ * every few seconds. A spark at the junction, the light runs out along both arms and down the stem, flares, burns with
+ * a slow breath and an odd flicker, and dies back to the junction. Everything is drawn on the artwork's own 5px dot
+ * grid: the slit is cleared to black, its dots glow from a hot core to a dark outer colour, and the light spills onto the
  * nearby dots of the mask. The picture itself never changes.
  * The canvas matches the <img> it sits on: same object-fit (cover) and object-position from CSS.
  */
@@ -24,23 +24,25 @@ export const EYE_PALETTES: Record<string, EyePalette> = {
 };
 const DEFAULT_PALETTE = "inferno";
 
-// the two slits, in the 879px pixel space of /art/landing/hero-knight-dotted.png. ang tilts each slit down toward the
-// nose for an angry read; inner is the end next to the nose, where the fire starts.
-const EYES = [
-  { cx: 452, cy: 281, len: 50, ang: 0.38, inner: 1 },
-  { cx: 524, cy: 281, len: 50, ang: -0.38, inner: -1 },
+// the T-shaped opening, in the 879px pixel space of /art/landing/hero-knight-dotted.png: two arms out from the junction
+// across the visor and a stem down the face. half = half-width of the slit at the junction, tapering to the tip.
+const JUNCTION = { x: 488, y: 300 };
+const ARMS = [
+  { x: 414, y: 292, half: 5.5 },  // left arm, rising slightly toward the edge
+  { x: 562, y: 292, half: 5.5 },  // right arm
+  { x: 490, y: 452, half: 4.5 },  // stem down the face
 ];
-const HALF = 7.5; // half-height of a slit at its widest
+const REACH = Math.max(...ARMS.map((a) => Math.hypot(a.x - JUNCTION.x, a.y - JUNCTION.y)));
 
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const rgba = (c: RGB, a: number) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
-/** State of the eyes at time t (s): reveal 0..1 from the inner corner out, brightness, bloom strength, spark 0..1. */
+/** State of the eyes at time t (s): reveal 0..1 from the junction out, brightness, bloom strength, spark 0..1. */
 function phase(t: number) {
   if (t < FIRST) return { reveal: 0, b: 0, bloom: 0, spark: 0 };
   const k = (t - FIRST) % CYCLE;
-  if (k < 0.14) return { reveal: 0, b: 0, bloom: 0.3 * (k / 0.14), spark: k / 0.14 };                 // spark at the inner corner
+  if (k < 0.14) return { reveal: 0, b: 0, bloom: 0.3 * (k / 0.14), spark: k / 0.14 };                 // spark at the junction
   if (k < 0.55) { const r = ease((k - 0.14) / 0.41); return { reveal: r, b: 0.55 + 0.45 * r, bloom: 0.4 + 0.4 * r, spark: 1 - r }; } // fire runs outward
   if (k < 0.75) { const f = 1 - (k - 0.55) / 0.2; return { reveal: 1, b: 1 + 0.45 * f, bloom: 0.8 + 0.7 * f, spark: 0 }; }        // flare
   if (k < 3.7) {                                                                                       // burn, breathe, one flicker
@@ -85,23 +87,24 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
         if (sum > best) { best = sum; px0 = px; py0 = py; }
       }
       cells = []; socket = []; spill = [];
-      for (let y = py0; y < 380; y += PITCH) for (let x = px0; x < 640; x += PITCH) {
-        let inEye = false, nearest = Infinity;
-        EYES.forEach((e, ei) => {
-          const dx = x - e.cx, dy = y - e.cy, ca = Math.cos(e.ang), sa = Math.sin(e.ang);
-          const u = dx * ca + dy * sa, v = -dx * sa + dy * ca;
-          const t = u / e.len + 0.5;                      // 0..1 along the slit, left to right
-          nearest = Math.min(nearest, Math.hypot(dx, dy));
-          if (t < 0 || t > 1) return;
-          const half = HALF * Math.pow(Math.sin(Math.PI * t), 0.6); // almond: widest in the middle
-          if (Math.abs(v) <= half + 3.2) socket.push({ x, y });
-          if (Math.abs(v) <= half + 0.6) {
-            inEye = true;
-            const along = e.inner > 0 ? 1 - t : t;        // 0 at the inner corner
-            cells.push({ x, y, along, core: Math.max(0, 1 - Math.abs(v) / Math.max(half, 1.5)) * Math.pow(Math.sin(Math.PI * t), 0.5), eye: ei });
+      for (let y = py0; y < 480; y += PITCH) for (let x = px0; x < 640; x += PITCH) {
+        let inSlit = false, nearest = Infinity, sock = false;
+        ARMS.forEach((a, ai) => {
+          const vx = a.x - JUNCTION.x, vy = a.y - JUNCTION.y, len = Math.hypot(vx, vy);
+          const u = ((x - JUNCTION.x) * vx + (y - JUNCTION.y) * vy) / len;          // distance along the arm
+          const v = Math.abs((x - JUNCTION.x) * vy - (y - JUNCTION.y) * vx) / len;  // distance across it
+          const t = u / len;
+          nearest = Math.min(nearest, Math.hypot(x - (JUNCTION.x + vx * Math.max(0, Math.min(1, t))), y - (JUNCTION.y + vy * Math.max(0, Math.min(1, t)))));
+          if (t < -0.04 || t > 1) return;
+          const half = a.half * Math.pow(1 - Math.max(0, t), 0.45) + 0.8;          // tapers to a point at the tip
+          if (v <= half + 3.2) sock = true;
+          if (v <= half + 0.6 && !inSlit) {
+            inSlit = true;
+            cells.push({ x, y, along: (Math.max(0, u) / REACH), core: Math.max(0, 1 - v / Math.max(half, 1.5)) * (1 - 0.55 * Math.max(0, t)), eye: ai });
           }
         });
-        if (!inEye && nearest < 95 && L(x, y) > 70) spill.push({ x, y, w: Math.pow(1 - nearest / 95, 1.6) });
+        if (sock) socket.push({ x, y });
+        if (!inSlit && nearest < 70 && L(x, y) > 70) spill.push({ x, y, w: Math.pow(1 - nearest / 70, 1.6) });
       }
     };
 
@@ -124,10 +127,10 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
       if (!on) return;
       g.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
       const R = PITCH * 0.36;
-      // 1. the socket goes black, so the eye reads as a hole in the helmet, not a sticker on it
+      // 1. the socket goes black, so the slit reads as an opening in the helmet, not a sticker on it
       g.fillStyle = `rgba(0,0,0,${Math.min(1, 0.4 + st.b)})`;
       for (const p of socket) g.fillRect(p.x - PITCH / 2, p.y - PITCH / 2, PITCH, PITCH);
-      // 2. light spill on the mask around the eyes
+      // 2. light spill on the mask around the opening
       for (const p of spill) {
         const a = p.w * 0.55 * Math.min(1.2, st.b);
         if (a < 0.03) continue;
@@ -146,13 +149,10 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
         g.fillStyle = rgba(col, Math.min(1, (0.5 + 0.5 * heat) * k * Math.min(1, st.b + 0.2)));
         g.beginPath(); g.arc(c.x, c.y, R * (0.85 + 0.45 * heat), 0, Math.PI * 2); g.fill();
       }
-      // 4. the spark: one white-hot dot at each inner corner, before the fire runs
+      // 4. the spark: one white-hot dot at the junction, before the light runs
       if (st.spark > 0.01) {
-        for (const e of EYES) {
-          const x = e.cx - (e.inner * e.len / 2) * Math.cos(e.ang), y = e.cy - (e.inner * e.len / 2) * Math.sin(e.ang);
-          g.fillStyle = rgba(pal.core, st.spark);
-          g.beginPath(); g.arc(x, y, R * (1 + st.spark), 0, Math.PI * 2); g.fill();
-        }
+        g.fillStyle = rgba(pal.core, st.spark);
+        g.beginPath(); g.arc(JUNCTION.x, JUNCTION.y, R * (1 + 1.4 * st.spark), 0, Math.PI * 2); g.fill();
       }
       g.shadowBlur = 0;
     };
