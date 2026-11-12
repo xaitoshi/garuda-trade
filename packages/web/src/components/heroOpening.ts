@@ -17,7 +17,7 @@ export const BOTTOM = 291;                // the mask starts below this
 export const GROW = 3;                    // cells
 export const DENSE = 0.55;                // share of lit cells around a dot above which it counts as dense
 export const OUT = { left: 362, right: 650 }; // columns safely outside the bowl, where the wall flood starts
-export const SPAN = { left: 372, right: 662 }; // the helmet's width: the opening never reaches past these columns
+export const SPAN = { left: 382, right: 662 }; // the helmet's width: the opening never reaches past these columns
 
 export interface Grid { px0: number; py0: number; cols: number; rows: number; lit: Uint8Array }
 export interface Opening extends Grid { keep: Uint8Array; area: Uint8Array; dark: Uint8Array; wall: Uint8Array }
