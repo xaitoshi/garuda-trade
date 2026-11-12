@@ -10,11 +10,13 @@ import "./calledit.css";
 import "./early.css";
 import { App } from "./App";
 import { installSlidingIndicators } from "./lib/slide";
+import { Analytics } from "@vercel/analytics/react";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      <Analytics />
     </BrowserRouter>
   </StrictMode>,
 );
