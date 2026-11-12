@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { findOpening, PITCH, TOP, BOTTOM } from "./heroOpening";
+import { openingPixels, PITCH, TOP, BOTTOM } from "./heroOpening";
 
 /**
  * The opening of the hero knight's helmet lights up in Phoenix orange every few seconds.
@@ -55,20 +55,15 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
       const cg = c.getContext("2d", { willReadFrequently: true })!;
       cg.drawImage(im, 0, 0);
       const d = cg.getImageData(0, 0, W, H).data;
-      const L = (x: number, y: number) => { const o = (y * W + x) * 4; return d[o]! * 0.3 + d[o + 1]! * 0.59 + d[o + 2]! * 0.11; };
-      const { px0, py0, cols, rows, keep } = findOpening(d, W, H);
-      // paint the artwork's own pixels of those cells
+      const alpha = openingPixels(d, W, H);
+      // paint those pixels in one colour
       const mk = (col: [number, number, number]) => {
         const o = document.createElement("canvas"); o.width = W; o.height = H;
         const og = o.getContext("2d")!, out = og.createImageData(W, H);
-        for (let y = Math.max(0, TOP - PITCH); y < Math.min(H, BOTTOM + PITCH); y++) for (let x = 0; x < W; x++) {
-          const i = Math.round((x - px0) / PITCH), j = Math.round((y - py0) / PITCH);
-          if (i < 0 || j < 0 || i >= cols || j >= rows || !keep[j * cols + i]) continue;
-          const l = L(x, y);
-          if (l < 40) continue;
-          const p = (y * W + x) * 4;
-          out.data[p] = col[0]; out.data[p + 1] = col[1]; out.data[p + 2] = col[2];
-          out.data[p + 3] = Math.min(255, Math.round(((l - 40) / 140) * 255));
+        for (let k = 0; k < alpha.length; k++) {
+          if (!alpha[k]) continue;
+          const p = k * 4;
+          out.data[p] = col[0]; out.data[p + 1] = col[1]; out.data[p + 2] = col[2]; out.data[p + 3] = alpha[k]!;
         }
         og.putImageData(out, 0, 0);
         return o;
