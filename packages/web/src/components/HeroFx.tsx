@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { findOpening, PITCH, TOP, BOTTOM } from "./heroOpening";
 
 /**
  * The opening of the hero knight's helmet lights up in Phoenix orange every few seconds.
@@ -15,13 +16,7 @@ const ORANGE: [number, number, number] = [255, 122, 24];
 const HOT: [number, number, number] = [255, 214, 150];
 const BLOOM = "rgba(255,70,10,";
 
-// the opening, in the 879px pixel space of /art/landing/hero-knight-dotted.png: a point inside the dark dome, and the
-// band of rows where the dome's border is the opening (above TOP it is the dome's crown, below BOTTOM it is the mask)
-const SEED = { x: 488, y: 200 };
-const TOP = 120, BOTTOM = 300;
-const PITCH = 5; // the artwork's dot spacing
-const NEAR = 1; // a light dot belongs to the opening when it is within this many cells of the dark dome
-
+// which dots are the opening is worked out in heroOpening.ts (and tested against the art there)
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
 /** reveal 0..1 (how far up the light has climbed), brightness, bloom */
@@ -61,40 +56,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
       cg.drawImage(im, 0, 0);
       const d = cg.getImageData(0, 0, W, H).data;
       const L = (x: number, y: number) => { const o = (y * W + x) * 4; return d[o]! * 0.3 + d[o + 1]! * 0.59 + d[o + 2]! * 0.11; };
-      // the dot grid's phase: where sampling hits the most light
-      let best = -1, px0 = 0, py0 = 0;
-      for (let py = 0; py < PITCH; py++) for (let px = 0; px < PITCH; px++) {
-        let sum = 0;
-        for (let y = py; y < H; y += PITCH * 4) for (let x = px; x < W; x += PITCH * 4) sum += L(x, y);
-        if (sum > best) { best = sum; px0 = px; py0 = py; }
-      }
-      const cols = Math.ceil((W - px0) / PITCH), rows = Math.ceil((H - py0) / PITCH);
-      const lit = (i: number, j: number) => i >= 0 && j >= 0 && i < cols && j < rows && L(Math.min(W - 1, px0 + i * PITCH), Math.min(H - 1, py0 + j * PITCH)) > 70;
-      // the dark dome: flood fill over unlit cells from SEED, not below BOTTOM
-      const dark = new Uint8Array(cols * rows), seen = new Uint8Array(cols * rows);
-      const stack: [number, number][] = [[Math.round((SEED.x - px0) / PITCH), Math.round((SEED.y - py0) / PITCH)]];
-      while (stack.length) {
-        const [i, j] = stack.pop()!;
-        if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
-        const k = j * cols + i;
-        if (seen[k]) continue;
-        seen[k] = 1;
-        if (lit(i, j) || py0 + j * PITCH > BOTTOM) continue;
-        dark[k] = 1;
-        stack.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]);
-      }
-      // cells of the opening: light cells within NEAR of the dome, between TOP and BOTTOM
-      const keep = new Uint8Array(cols * rows);
-      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-        const y = py0 + j * PITCH;
-        if (y < TOP || y > BOTTOM || !lit(i, j)) continue;
-        let near = false;
-        for (let b = -NEAR; b <= NEAR && !near; b++) for (let a = -NEAR; a <= NEAR; a++) {
-          const ii = i + a, jj = j + b;
-          if (ii >= 0 && jj >= 0 && ii < cols && jj < rows && dark[jj * cols + ii]) { near = true; break; }
-        }
-        if (near) keep[j * cols + i] = 1;
-      }
+      const { px0, py0, cols, rows, keep } = findOpening(d, W, H);
       // paint the artwork's own pixels of those cells
       const mk = (col: [number, number, number]) => {
         const o = document.createElement("canvas"); o.width = W; o.height = H;
