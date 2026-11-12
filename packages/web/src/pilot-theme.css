@@ -313,3 +313,6 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 /* demo card: the logo on its own, no tile behind it */
 :root main.pg-challenges .cd .demo-ic{background:transparent;border:0;width:auto;height:auto}
 :root main.pg-challenges .cd .demo-ic img{height:44px!important}
+
+/* terms checkbox: the tick exists only once it is checked (the base rule always drew it) */
+:root main.pg-challenges .cb input:not(:checked)+u::after{content:none}
