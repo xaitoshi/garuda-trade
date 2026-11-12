@@ -28,7 +28,8 @@ export function Bar({ pct, color, h = 8 }: { pct: number; color: string; h?: num
   );
 }
 
-export const Logo = ({ h = 26 }: { h?: number }) => <img src="/logo-white.svg" alt="" height={h} style={{ height: h, width: "auto" }} />;
+/** The dotted Halftone mark: its pieces strike into place on load, then a glint crosses it every few seconds. */
+export const Logo = ({ h = 26 }: { h?: number }) => <img src="/brand/garuda-mark.svg" alt="" height={h} style={{ height: h, width: "auto" }} />;
 
 export const Spark = ({ color = "#bbb4fb", size = 24, style }: { color?: string; size?: number; style?: React.CSSProperties }) => (
   <svg style={style} width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden>

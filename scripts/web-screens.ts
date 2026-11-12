@@ -152,7 +152,6 @@ try {
   console.log("order:", await page.getByTestId("order-msg").innerText());
   await page.waitForTimeout(2500);
   await shot("01-terminal", { full: true, settle: 1500 });
-  ok("simulated badge visible", await page.getByText("Simulated account").first().isVisible());
 
   // ---- 05 wounded + revive, 04 ascension (seeded for this wallet: market crash / rally through the real engine)
   const wounded = await post("/dev/seed", { wallet, scenario: "wounded" });

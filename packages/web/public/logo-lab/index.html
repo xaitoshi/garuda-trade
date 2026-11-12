@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Garuda / Motion Lab</title>
+<link rel="icon" href="/logo-white.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./lab.css">
+<script type="module" src="./lab.js"></script>
+</head>
+<body>
+<header>
+  <span class="wordmark">garuda <span>/ motion lab</span></span>
+  <span class="test-label">DESIGN EXPLORATION · 01</span>
+</header>
+<main>
+  <div class="intro">
+    <p class="eyebrow">DOTTED MARK / 5 MARKS · <span id="count-eyebrow">28</span> STUDIES</p>
+    <h1>One helmet.<br>Many dots<span>.</span></h1>
+    <p>Оригінальний знак Garuda, перекладений у крапки. П’ять марок і <span id="count-intro">28</span> анімацій.<br>Натисніть на варіант, щоб роздивитися його ближче й перемкнути марку.</p>
+  </div>
+
+  <section class="marks" aria-labelledby="marks-title">
+    <div class="section-head">
+      <h2 id="marks-title">5 марок</h2>
+      <p>Статичні версії. Знизу кожної — розміри 20, 32 і 48 px, як у навбарі та іконках.</p>
+    </div>
+    <div id="marks"></div>
+  </section>
+
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="Тип анімації">
+      <button data-filter="all" aria-pressed="true">Усі <small id="count-all">28</small></button>
+      <button data-filter="Halftone" aria-pressed="false">Півтон: нові</button>
+      <button data-filter="Entrance" aria-pressed="false">Поява</button>
+      <button data-filter="Character" aria-pressed="false">Характер</button>
+      <button data-filter="Ambient" aria-pressed="false">Фонові</button>
+      <button data-filter="Experimental" aria-pressed="false">Експерименти</button>
+      <button data-filter="favorites" aria-pressed="false">★ Обране</button>
+    </div>
+    <div class="controls">
+      <button id="pause">Пауза</button>
+      <button id="replay">↻ Повтор</button>
+      <label>Марка <select id="mark-select"><option value="-1" selected>Рідна</option></select></label>
+      <label>Темп <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+    </div>
+  </div>
+  <p class="hint" id="motion-note">Анімуються лише видимі варіанти. Зірочка зберігає обране в цьому браузері.</p>
+  <section id="grid" aria-label="Варіанти анімації"></section>
+  <p id="favorites" aria-live="polite"></p>
+  <footer>
+    <span>SVG / logo-white.svg · Motion / Garuda</span>
+    <span>Лоадери для сайту: <a href="./loaders/garuda-comet.svg">comet</a> · <a href="./loaders/garuda-radar.svg">radar</a> · <a href="./loaders/garuda-signal.svg">signal</a> · <a href="./loaders/garuda-segments.svg">segments</a></span>
+  </footer>
+</main>
+
+<dialog id="preview">
+  <div class="dialog-head"><span id="preview-label"></span><button id="close" aria-label="Закрити">×</button></div>
+  <div id="large-stage" class="stage"></div>
+  <h2 id="preview-title"></h2>
+  <p id="preview-description"></p>
+  <div class="mark-switch" role="group" aria-label="Марка" id="mark-switch"></div>
+  <div class="dialog-actions">
+    <button id="previous" aria-label="Попередній варіант">←</button>
+    <button id="preview-pause">Пауза</button>
+    <button id="preview-replay">↻ Повторити</button>
+    <button id="next" aria-label="Наступний варіант">→</button>
+  </div>
+</dialog>
+</body>
+</html>
