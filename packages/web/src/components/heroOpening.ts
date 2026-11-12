@@ -17,7 +17,11 @@ export const BOTTOM = 291;                // the mask starts below this
 export const GROW = 3;                    // cells
 export const DENSE = 0.55;                // share of lit cells around a dot above which it counts as dense
 export const OUT = { left: 362, right: 650 }; // columns safely outside the bowl, where the wall flood starts
-export const SPAN = { left: 382, right: 607 }; // the helmet's width: the opening never reaches past these columns
+// single dots picked out by eye that read as noise, not as part of the opening (image pixels)
+export const DROP: [number, number][] = [[416, 176], [396, 241], [411, 286], [416, 286]];
+export const SPAN = { left: 382, leftLow: 394, lowFrom: 225, right: 607, rightLow: 588, rightLowFrom: 235 };
+// the helmet's width: the opening never reaches past these columns. leftLow / rightLow apply below lowFrom /
+// rightLowFrom, so the streaks stay and the loose dots beside the walls go
 
 export interface Grid { px0: number; py0: number; cols: number; rows: number; lit: Uint8Array }
 export interface Opening extends Grid { keep: Uint8Array; area: Uint8Array; dark: Uint8Array; wall: Uint8Array }
@@ -103,12 +107,26 @@ export function findOpening(d: Uint8ClampedArray, W: number, H: number): Opening
     const [i, j] = fs.pop()!;
     if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
     const k = j * cols + i, x = px0 + i * PITCH, y = py0 + j * PITCH;
-    if (inside[k] || wall[k] || y < TOP || y > BOTTOM || x < SPAN.left || x > SPAN.right) continue;
+    if (inside[k] || wall[k] || y < TOP || y > BOTTOM || x < (y > SPAN.lowFrom ? SPAN.leftLow : SPAN.left) || x > (y > SPAN.rightLowFrom ? SPAN.rightLow : SPAN.right)) continue;
     inside[k] = 1;
     fs.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]);
   }
   const keep = new Uint8Array(cols * rows);
   for (let k = 0; k < keep.length; k++) if (lit[k] && inside[k]) keep[k] = 1;
+  // tidy: drop dots with no other lit dot of the opening within two cells, and the DROP list
+  const lone: number[] = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const k = j * cols + i;
+    if (!keep[k]) continue;
+    let n = 0;
+    for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) {
+      const ii = i + a, jj = j + b;
+      if ((a || b) && ii >= 0 && jj >= 0 && ii < cols && jj < rows && keep[jj * cols + ii]) n++;
+    }
+    const x = px0 + i * PITCH, y = py0 + j * PITCH;
+    if (!n || DROP.some(([dx, dy]) => Math.abs(dx - x) <= 3 && Math.abs(dy - y) <= 3)) lone.push(k);
+  }
+  for (const k of lone) keep[k] = 0;
   return { ...gr, keep, area, dark, wall };
 }
 
