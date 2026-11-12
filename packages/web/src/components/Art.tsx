@@ -9,10 +9,21 @@ export function KnightImg({ level, state = "active", size = 120, className = "",
   return <img className={cls} src={src} width={size} height={size} alt={label} draggable={false} />;
 }
 
-/** Geometric Phoenix mark (no illustration). State is colour and scale only. */
-export function BossImg({ state = "full", size = 160, className = "" }: { state?: BossState; size?: number; className?: string }) {
+/** Phoenix art. Default is the geometric mark (Revive, Ascension). `fill` is the dotted illustration, used on the terminal battle card. */
+export function BossImg({ state = "full", size = 160, className = "", fill, alt }: { state?: BossState; size?: number; className?: string; fill?: boolean; alt?: string }) {
+  const label = alt ?? `The Phoenix, ${state}`;
+  if (fill) {
+    return (
+      <div className={`boss-bleed boss-${state} ${className}`.trim()} role="img" aria-label={label}>
+        <picture>
+          <source type="image/webp" srcSet="/art/phoenix/dotted.webp" />
+          <img src="/art/phoenix/dotted.png" alt="" draggable={false} />
+        </picture>
+      </div>
+    );
+  }
   return (
-    <div className={`boss-mark boss-${state} ${className}`} style={{ width: size, height: size }} role="img" aria-label={`The Phoenix, ${state}`}>
+    <div className={`boss-mark boss-${state} ${className}`} style={{ width: size, height: size }} role="img" aria-label={label}>
       <span className="boss-ring" aria-hidden />
       <span className="boss-core" aria-hidden />
       <span className="boss-label">{state === "defeated" ? "Fallen" : "Phoenix"}</span>
