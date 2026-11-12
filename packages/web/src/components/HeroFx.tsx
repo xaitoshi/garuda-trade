@@ -7,9 +7,9 @@ import { openingPixels, PITCH, TOP, BOTTOM } from "./heroOpening";
  * Nothing is drawn by hand: the effect takes the artwork's own light pixels around the opening (every dot that borders
  * the dark dome of the helmet) and paints exactly those pixels, on a layer that sits on the <img> with the same
  * object-fit and object-position. So the coloured dots are the white dots, pixel for pixel, never beside them.
- * The light rises from the bottom, holds, blinks twice like an eyelid, glares, then sinks away.
+ * Mostly dark; then the eyes snap on, the knight sinks into shadow, a blink, a harder stare, and a stuttering death.
  */
-const CYCLE = 6.5; // seconds between wakings
+const CYCLE = 7.5; // seconds between wakings: mostly darkness
 const FIRST = 1.2; // the first waking, after the page settles
 // one colour: the Phoenix orange, toned down so it smoulders instead of glaring
 const MOODS: { dot: [number, number, number]; glow: string }[] = [
@@ -19,21 +19,25 @@ const PEAK = 0.72; // the brightest the dots get: lit, but never glaring
 // which dots are the opening is worked out in heroOpening.ts (and tested against the art there)
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
-/** The eyes wake: the light rises from the bottom, holds, blinks twice (an eyelid closing, top to bottom), glares
- * for a moment, then sinks away. reveal 0..1 = how far up it has climbed, b = brightness, bloom, mood = colour index. */
+/** Menace, not decoration: long darkness, then the eyes snap on at once and the rest of the knight sinks into shadow.
+ * They smoulder with a slow breath, blink once (the lid falls from the top), stare harder, then die with a stutter.
+ * reveal = how much of the opening is lit from the bottom (the lid), b = brightness, bloom, dim = shadow over the knight. */
 function phase(t: number) {
-  if (t < FIRST) return { reveal: 0, b: 0, bloom: 0, mood: 0 };
-  const n = Math.floor((t - FIRST) / CYCLE), k = (t - FIRST) % CYCLE, mood = n % MOODS.length;
-  const on = (reveal: number, b: number, bloom: number) => ({ reveal, b: b * PEAK, bloom, mood });
-  if (k < 0.7) { const r = ease(k / 0.7); return on(r, 0.6 + 0.4 * r, 0.4 * r); }            // rises
-  if (k < 1.5) return on(1, 0.85 + 0.15 * Math.sin((k - 0.7) * 6), 0.4);                   // holds, pulsing
-  // two blinks: the lid comes down (reveal falls from the top), then opens again
-  const blink = (k0: number) => { const x = (k - k0) / 0.22; return x < 0 || x > 1 ? 1 : Math.abs(1 - 2 * x); };
-  if (k < 2.1) { const r = Math.min(blink(1.5), blink(1.82)); return on(0.15 + 0.85 * r, 1, 0.4 * r); }
-  if (k < 2.5) { const f = 1 - (k - 2.1) / 0.4; return on(1, 1 + 0.25 * f, 0.4 + 0.5 * f); } // glares
-  if (k < 3.6) return on(1, 0.9 + 0.1 * Math.sin((k - 2.5) * 3), 0.35);
-  if (k < 4.4) { const r = 1 - ease((k - 3.6) / 0.8); return on(r, 0.5 + 0.5 * r, 0.25 * r); } // sinks away
-  return { reveal: 0, b: 0, bloom: 0, mood };
+  const off = { reveal: 0, b: 0, bloom: 0, mood: 0, dim: 0 };
+  if (t < FIRST) return off;
+  const k = (t - FIRST) % CYCLE;
+  const on = (reveal: number, b: number, bloom: number, dim: number) => ({ reveal, b: b * PEAK, bloom, mood: 0, dim });
+  if (k < 0.05) return on(1, 1.4 * (k / 0.05), 1.2 * (k / 0.05), 0.45 * (k / 0.05));            // snaps on
+  if (k < 0.35) { const f = 1 - (k - 0.05) / 0.3; return on(1, 1 + 0.4 * f, 0.6 + 0.6 * f, 0.45); } // the flash settles
+  const breath = 0.8 + 0.2 * Math.sin((k - 0.35) * 1.8);
+  if (k < 2.0) return on(1, breath, 0.55 * breath, 0.45);                                       // smoulders
+  if (k < 2.45) { const x = (k - 2.0) / 0.45, lid = Math.abs(1 - 2 * x); return on(0.1 + 0.9 * lid, breath, 0.5 * lid, 0.45); } // one slow blink
+  if (k < 2.9) { const f = (k - 2.45) / 0.45; return on(1, breath + 0.3 * Math.sin(f * Math.PI), 0.55 + 0.4 * Math.sin(f * Math.PI), 0.5); } // stares harder
+  if (k < 3.6) return on(1, breath, 0.5 * breath, 0.45);
+  // dies with a stutter: off, on, off, faint, gone
+  const st = [[3.6, 0], [3.68, 0.9], [3.74, 0], [3.86, 0.5], [3.92, 0]] as const;
+  for (let i = st.length - 1; i >= 0; i--) if (k >= st[i]![0]) return st[i]![1] ? on(1, st[i]![1], 0.3 * st[i]![1], 0.45 * st[i]![1]) : { ...off, dim: i < st.length - 1 ? 0.25 : 0 };
+  return off;
 }
 
 export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
@@ -89,6 +93,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, canvas.width, canvas.height);
       const glow = layers[st.mood];
+      if (st.dim > 0) { g.fillStyle = `rgba(0,0,0,${st.dim})`; g.fillRect(0, 0, canvas.width, canvas.height); }
       if (!glow || st.b <= 0.01 || st.reveal <= 0) return;
       g.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
       // only rows below the current level are lit
@@ -119,7 +124,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
     probe.onload = () => {
       if (dead) return;
       analyse(probe); layout();
-      if (reduce) paint({ reveal: 1, b: PEAK, bloom: 0.3, mood: 0 }); // lit, still
+      if (reduce) paint({ reveal: 1, b: PEAK, bloom: 0.3, mood: 0, dim: 0.3 }); // lit, still
       else raf = requestAnimationFrame(frame);
     };
     probe.src = src;
