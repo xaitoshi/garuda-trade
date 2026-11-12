@@ -278,3 +278,11 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 :root main .rail-dots span{transition:width 180ms var(--motion-ease)}
 :root .bar i{transition:width var(--motion-slide) var(--motion-ease)}
 @media(prefers-reduced-motion:reduce){:root main,:root .menu,:root main .tk-b>*{animation:none}:root [data-slide]::before,:root [data-slide]::after{transition:none!important}}
+
+/* sign-in / notice gate: no card frame around a framed picture. The page itself is the surface, the knight fades into it */
+:root .panel.gate{background:transparent;border:0;box-shadow:none;background-image:none}
+:root .gate img.knight{border-radius:50%;-webkit-mask:radial-gradient(closest-side,#000 55%,transparent 100%);mask:radial-gradient(closest-side,#000 55%,transparent 100%)}
+
+/* leaderboard avatars: the knight fills the circle, cropped to the head, no grey disc behind a small square */
+:root main.pg-leaderboard .av i{width:44px;height:44px;flex:none;overflow:hidden;border-radius:50%;background:#000;box-shadow:inset 0 0 0 1px #ffffff1c}
+:root main.pg-leaderboard .av i img.knight{width:100%;height:100%;object-fit:cover;object-position:50% 22%;transform:scale(1.7);transform-origin:50% 25%}
