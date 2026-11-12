@@ -18,6 +18,7 @@ import { Payouts } from "./pages/Payouts";
 import { CalledIt } from "./pages/CalledIt";
 import { Early } from "./pages/Early";
 import { Footer } from "./components/Footer";
+import { useRevealAll } from "./lib/revealAll";
 
 export function App() {
   // Phantom, Solflare, Backpack... register themselves through the Wallet Standard, so no explicit list is needed.
@@ -42,6 +43,7 @@ function Shell() {
   const landing = pathname === "/";
   // /early is a standalone waitlist page: no app nav, no footer. The centered logo links home.
   const bare = pathname.replace(/\/+$/, "") === "/early";
+  useRevealAll();
   return (
     <>
       {!bare && <TopBar landing={landing} />}

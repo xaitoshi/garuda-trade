@@ -306,3 +306,6 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 /* side picker: keyboard focus is a thin inner ring in the side's own colour, not the white outline */
 :root main .seg button:focus-visible{outline:0;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--positive) 55%,transparent)}
 :root main .seg button.short:focus-visible{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--negative) 55%,transparent)}
+
+/* tables inside rounded panels: the header row's fill must not poke out past the rounded corners */
+:root main .panel:has(> table, > .tbl-scroll){overflow:hidden}
