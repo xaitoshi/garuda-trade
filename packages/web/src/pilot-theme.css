@@ -316,3 +316,8 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 
 /* terms checkbox: the tick exists only once it is checked (the base rule always drew it) */
 :root main.pg-challenges .cb input:not(:checked)+u::after{content:none}
+
+/* header nav, as in Pilot: no sliding pill behind the active item, only its darker label and the three dots under it */
+:root .tabs::before{background:transparent}
+:root .tabs a.on,:root .tabs .nav-drop.on .nav-drop-trigger,:root .tabs .nav-drop.open .nav-drop-trigger{background:transparent}
+:root .tabs a.on{color:#111}
