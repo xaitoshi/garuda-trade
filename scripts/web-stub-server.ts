@@ -57,7 +57,9 @@ const app = buildApp({
   payouts,
   logger: false,
   corsOrigins: process.env.GARUDA_CORS_ORIGIN ? process.env.GARUDA_CORS_ORIGIN.split(",") : undefined,
-  auth: new AuthService({ store: new InMemoryAuthStore(), domain: "garuda" }),
+  // any origin: wallets (Phantom, Solflare) refuse a sign-in message whose domain is not the page's host, and the stub
+  // is opened from localhost, a LAN address or a tunnel
+  auth: new AuthService({ store: new InMemoryAuthStore(), domain: "garuda", allowedOrigins: "*" }),
   health: () => ({ storage: "memory", worker: worker.metrics().running, market: market.name, chain: "stub" }),
   metrics: () => worker.metrics(),
 });
