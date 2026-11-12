@@ -278,7 +278,7 @@ function Reveal({ tier, minted, rules, name, spec }: { tier: TierId | undefined;
   const shown = minted ? minted.name : name;
   async function share() {
     try {
-      await navigator.clipboard.writeText(`${shown} just woke up on Garuda: ${t?.name ?? ""} Trial knight. Simulated account.`);
+      await navigator.clipboard.writeText(`${shown} just woke up on Garuda: ${t?.name ?? ""} Trial knight.`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

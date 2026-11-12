@@ -1,13 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
-import { LEVELS, fallbackScalingTable, type KnightLevel } from "../lib/knight";
+import { LEVELS, fallbackScalingTable } from "../lib/knight";
 import { pct, usd } from "../lib/format";
-import { KnightImg } from "../components/Art";
 import { XMarketsButton } from "../components/XMarkets";
+import { HeroFx } from "../components/HeroFx";
+import { useReveal } from "../lib/reveal";
 
-/** Near-black sampled from the dotted hero artwork edges (~#08090a). */
-const LANDING_INK = "#08090a";
+/** Pure black, like Pilot: the knights are white dots on transparency, so there is no artwork edge to match. */
+const LANDING_INK = "#000";
 
 /** Used until /rules answers, so the landing page never depends on the API being up. */
 const FALLBACK = {
@@ -22,6 +23,9 @@ export function Landing() {
   const c = rules?.common ?? FALLBACK.common;
   const t = rules?.tiers ?? FALLBACK.tiers;
   const paid = LEVELS.map((l) => ({ ...l, ...t[l.tier] }));
+  const page = useRef<HTMLElement>(null);
+  // what rises into view as you scroll (styles in landing-dots.css)
+  useReveal(page, ".hero-copy > *, .hero-art, .strip > div, .s-head, .step, .tier, .fine, .lvl, .pay-big, .feed-row, .trust > div, .faq-grid > div > .eyebrow, .faq-grid h2, .faq details, .final h2, .final .cta-row");
 
   // Match document chrome to the hero artwork so the dotted knight has no visible page card edge.
   useEffect(() => {
@@ -35,7 +39,7 @@ export function Landing() {
   }, []);
 
   return (
-    <main className="pg-landing" data-testid="landing">
+    <main className="pg-landing" data-testid="landing" ref={page}>
       <header className="hero">
         <div className="hero-copy">
           <h1 className="hero-headline">
@@ -66,6 +70,7 @@ export function Landing() {
             height={884}
             decoding="async"
           />
+          <HeroFx src="/art/landing/hero-knight-dotted.png" imgClass="hero-knight" />
         </div>
       </header>
 
@@ -84,19 +89,19 @@ export function Landing() {
         <div className="steps">
           <article className="step rv">
             <div className="art">
-              <img className="knight knight-fill" src="/art/steps/1.png" alt="" draggable={false} />
+              <img className="knight knight-fill" src="/art/cards/1.png" alt="" draggable={false} />
             </div>
             <div className="step-body"><span className="step-n">01</span><h3>Mint a knight</h3><p>Every challenge mints a knight NFT.</p></div>
           </article>
           <article className="step rv">
             <div className="art">
-              <img className="knight knight-fill" src="/art/steps/2.png" alt="" draggable={false} />
+              <img className="knight knight-fill" src="/art/nft/2.png" alt="" draggable={false} />
             </div>
-            <div className="step-body"><span className="step-n">02</span><h3>Tame the Phoenix</h3><p>Profit chips the boss. Losses hurt your knight.</p></div>
+            <div className="step-body"><span className="step-n">02</span><h3>Tame the <span className="phx">Phoenix</span></h3><p>Profit chips the boss. Losses hurt your knight.</p></div>
           </article>
           <article className="step rv">
             <div className="art">
-              <img className="knight knight-fill" src="/art/steps/4.png" alt="" draggable={false} />
+              <img className="knight knight-fill" src="/art/landing/hero-knight-dotted.png" alt="" draggable={false} />
             </div>
             <div className="step-body"><span className="step-n">03</span><h3>Ascend, get funded</h3><p>Bank {pct(c.profitTargetPct, 0)} in closed profit over at least 3 trading days inside the limits, then claim a funded account.</p></div>
           </article>
@@ -111,7 +116,7 @@ export function Landing() {
         <div className="tiers rv">
           {paid.map((p) => (
             <article className="tier" data-lv={p.level} key={p.tier}>
-              <div className="tier-art"><KnightImg level={p.level as KnightLevel} variant="card" fill alt="" /></div>
+              <div className="tier-art"><img className="knight knight-fill" src={`/art/cards/${p.level}.png`} alt="" draggable={false} /></div>
               <div className="tier-name">{p.name} Trial</div>
               <div className="tier-size">{kfmt(p.accountSize)}<span>account</span></div>
               <dl>
@@ -127,7 +132,7 @@ export function Landing() {
             </article>
           ))}
         </div>
-        <div className="fine rv"><span className="badge">Simulated account</span>Challenges run on simulated accounts against the live Phoenix orderbook. Try the free demo first.</div>
+        <div className="fine rv">Challenges run on simulated accounts against the live Phoenix orderbook. Try the free demo first.</div>
       </section>
 
       <section className="s wrap" id="knights">
@@ -143,7 +148,7 @@ export function Landing() {
             return (
             <div className="lvl" style={{ ["--i" as string]: i }} key={l.tier}>
               <div className="lvl-art">
-                <KnightImg level={l.level as KnightLevel} variant="card" fill alt="" />
+                <img className="knight knight-fill" src={`/art/cards/${l.level}.png`} alt="" draggable={false} />
               </div>
               <div className="lvl-meta"><span className="mono">Lv.1 to {row?.levels.length ?? 3} · {kfmt(first)} to {kfmt(last)}</span><h3>{l.name}</h3><p>{SUB[i]}</p></div>
             </div>
@@ -158,18 +163,18 @@ export function Landing() {
           <p className="lead">Funded traders keep {pct(c.profitSplit, 0)} of profit, paid in USDC.</p>
         </div>
         <div className="pay rv">
-          <div className="pay-big"><div className="num">{Math.round(c.profitSplit * 100)}<sup>%</sup></div><p>of every profit goes to you.</p></div>
+          <div className="pay-big"><div className="num">{String(Math.round(c.profitSplit * 100))}<sup>%</sup></div><p>of every profit goes to you.</p></div>
           <div className="pay-right">
             <div className="feed">
-              <div className="feed-row"><div className="ic"><KnightImg level={1} size={34} /></div><div><strong>Profit target</strong><small>To pass the evaluation</small></div><span className="amt">{pct(c.profitTargetPct, 0)}</span></div>
-              <div className="feed-row"><div className="ic"><KnightImg level={2} size={34} /></div><div><strong>Daily loss limit</strong><small>Of the start-of-day balance, UTC</small></div><span className="amt">{pct(c.dailyLossPct, 0)}</span></div>
-              <div className="feed-row"><div className="ic"><KnightImg level={3} size={34} /></div><div><strong>Max drawdown</strong><small>Static, from the starting balance</small></div><span className="amt">{pct(c.maxDrawdownPct, 0)}</span></div>
+              <div className="feed-row"><div className="ic" aria-hidden>%</div><div><strong>Profit target</strong><small>To pass the evaluation</small></div><span className="amt">{pct(c.profitTargetPct, 0)}</span></div>
+              <div className="feed-row"><div className="ic" aria-hidden>&minus;</div><div><strong>Daily loss limit</strong><small>Of the start-of-day balance, UTC</small></div><span className="amt">{pct(c.dailyLossPct, 0)}</span></div>
+              <div className="feed-row"><div className="ic" aria-hidden>/</div><div><strong>Max drawdown</strong><small>Static, from the starting balance</small></div><span className="amt">{pct(c.maxDrawdownPct, 0)}</span></div>
             </div>
             <div className="trust">
-              <div><b>Plain numbers</b><span>Real PnL and limits, always visible.</span></div>
-              <div><b>Live book fills</b><span>Orders walk the real Phoenix orderbook.</span></div>
-              <div><b>Onchain knights</b><span>Tier, level and status live on Solana.</span></div>
-              <div><b>Auto risk limits</b><span>Breach a limit and positions close.</span></div>
+              <div><i aria-hidden>=</i><b>Plain numbers</b><span>Real PnL and limits, always visible.</span></div>
+              <div><i aria-hidden>&lt;</i><b>Live book fills</b><span>Orders walk the real Phoenix orderbook.</span></div>
+              <div><i aria-hidden>*</i><b>Onchain knights</b><span>Tier, level and status live on Solana.</span></div>
+              <div><i aria-hidden>!</i><b>Auto risk limits</b><span>Breach a limit and positions close.</span></div>
             </div>
           </div>
         </div>
@@ -191,7 +196,7 @@ export function Landing() {
       </section>
 
       <section className="final">
-        <h2 className="rv">Face the<br />Phoenix.</h2>
+        <h2 className="rv">Face the<br /><span className="phx">Phoenix</span>.</h2>
         <div className="cta-row rv">
           <Link className="btn btn-fire" to="/challenges">Start a challenge</Link>
           <XMarketsButton />

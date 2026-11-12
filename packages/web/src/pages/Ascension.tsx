@@ -39,7 +39,7 @@ export function Ascension({ c, onState }: { c: ChallengeState; onState?: (s: Cha
     }
   }
   async function share() {
-    const text = `${k.name} slew the Phoenix on Garuda: ${k.levelName} trial, ${usdSigned(c.risk.profitLoss)} (${pct(c.risk.profitLoss / start)}). Simulated account.`;
+    const text = `${k.name} slew the Phoenix on Garuda: ${k.levelName} trial, ${usdSigned(c.risk.profitLoss)} (${pct(c.risk.profitLoss / start)}).`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);

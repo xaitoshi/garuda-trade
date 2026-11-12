@@ -7,15 +7,6 @@ import { useSession } from "../lib/session";
 import { shortAddr } from "../lib/format";
 import { Logo } from "./Art";
 
-export function SimBadge() {
-  return (
-    <span className="simbadge" title="Challenge accounts are simulated. Fees and payouts are in USDC on Solana devnet.">
-      <i />
-      Simulated account
-    </span>
-  );
-}
-
 const TABS = [
   ["/terminal", "Terminal"],
   ["/barracks", "Barracks"],
@@ -171,7 +162,6 @@ export function TopBar({ landing }: { landing: boolean }) {
         </nav>
       )}
       <div className="top-r">
-        <SimBadge />
         <WalletButton />
       </div>
     </header>
