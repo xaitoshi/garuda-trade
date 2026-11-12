@@ -302,3 +302,7 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 :root main.pg-barracks .sum span::before{content:"";width:5px;height:5px;border-radius:50%;background:#f1f1f4}
 :root main.pg-barracks .sum div:nth-child(3) span::before{background:var(--negative)}
 :root main.pg-barracks .sum div:nth-child(4) span::before{background:#f69f45}
+
+/* side picker: keyboard focus is a thin inner ring in the side's own colour, not the white outline */
+:root main .seg button:focus-visible{outline:0;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--positive) 55%,transparent)}
+:root main .seg button.short:focus-visible{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--negative) 55%,transparent)}
