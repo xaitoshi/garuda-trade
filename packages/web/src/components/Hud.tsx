@@ -42,13 +42,15 @@ export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string })
         </div>
       </div>
       <div className="scene">
-        <div className="slab a" />
-        <div className="slab b" />
-        <KnightImg level={k.level} state={artState(c)} size={150} className="sc-k" />
+        <div className="sc-side sc-side-k">
+          <KnightImg level={k.level} state={artState(c)} fill className="sc-k" />
+        </div>
+        <div className="sc-side sc-side-b">
+          <BossImg state={bossState(c)} fill className="sc-b" />
+        </div>
         <svg className="bolt" width="26" height="26" viewBox="0 0 24 24" fill="#ffc24a" aria-hidden>
           <path d="M13 1L4 14h6l-1 9 10-14h-6z" />
         </svg>
-        <BossImg state={bossState(c)} size={190} className="sc-b" />
       </div>
       <span className="slot-tag a">Account · {k.label}</span>
       <span className="slot-tag b">Live · {symbol}-PERP</span>
