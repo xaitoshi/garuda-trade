@@ -1,11 +1,10 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The opening of the hero knight's helmet: the T-shaped slit (across the visor, then down the face) lights from inside
- * every few seconds. A spark at the junction, the light runs out along both arms and down the stem, flares, burns with
- * a slow breath and an odd flicker, and dies back to the junction. Everything is drawn on the artwork's own 5px dot
- * grid: the slit is cleared to black, its dots glow from a hot core to a dark outer colour, and the light spills onto the
- * nearby dots of the mask. The picture itself never changes.
+ * The opening of the hero knight's helmet: the U-shaped rim of white dots under the dark dome fills with Phoenix
+ * orange every few seconds. A spark at the bottom of the U, the colour climbs both sides of the rim, flares, burns with
+ * a slow breath and an odd flicker, then drains back down. The rim is found in the artwork itself (the dots that border
+ * the dark dome, flood-filled from inside it), so the effect only recolours dots that are already there.
  * The canvas matches the <img> it sits on: same object-fit (cover) and object-position from CSS.
  */
 const PITCH = 5;
@@ -24,15 +23,12 @@ export const EYE_PALETTES: Record<string, EyePalette> = {
 };
 const DEFAULT_PALETTE = "inferno";
 
-// the T-shaped opening, in the 879px pixel space of /art/landing/hero-knight-dotted.png: two arms out from the junction
-// across the visor and a stem down the face. half = half-width of the slit at the junction, tapering to the tip.
-const JUNCTION = { x: 488, y: 300 };
-const ARMS = [
-  { x: 414, y: 292, half: 5.5 },  // left arm, rising slightly toward the edge
-  { x: 562, y: 292, half: 5.5 },  // right arm
-  { x: 490, y: 452, half: 4.5 },  // stem down the face
-];
-const REACH = Math.max(...ARMS.map((a) => Math.hypot(a.x - JUNCTION.x, a.y - JUNCTION.y)));
+// the helmet opening, in the 879px pixel space of /art/landing/hero-knight-dotted.png: a point inside the dark dome,
+// the part of its border that is the opening (below TOP, between LEFT and RIGHT, above FLOOR), and the bottom of the U
+const SEED = { x: 500, y: 200 };
+const TOP = 165, FLOOR = 305, LEFT = 360, RIGHT = 610;
+const BOTTOM = { x: 488, y: 300 };
+const REACH = 190; // farthest rim dot from BOTTOM, sets how far the colour climbs
 
 const ease = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -55,7 +51,6 @@ function phase(t: number) {
 }
 
 interface Cell { x: number; y: number; along: number; core: number; eye: number }
-interface Spill { x: number; y: number; w: number }
 
 export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -69,7 +64,7 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
     let pal = EYE_PALETTES[DEFAULT_PALETTE]!;
     try { const q = new URLSearchParams(location.search).get("eyes"); if (q && EYE_PALETTES[q]) pal = EYE_PALETTES[q]!; } catch { /* default */ }
     const g = canvas.getContext("2d")!;
-    let cells: Cell[] = [], socket: { x: number; y: number }[] = [], spill: Spill[] = [];
+    let cells: Cell[] = [];
     let raf = 0, dead = false, visible = true, t0 = 0, last = 0;
     let s = 1, ox = 0, oy = 0, dpr = 1;
 
@@ -86,25 +81,35 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
         for (let y = py; y < c.height; y += PITCH * 4) for (let x = px; x < c.width; x += PITCH * 4) sum += L(x, y);
         if (sum > best) { best = sum; px0 = px; py0 = py; }
       }
-      cells = []; socket = []; spill = [];
-      for (let y = py0; y < 480; y += PITCH) for (let x = px0; x < 640; x += PITCH) {
-        let inSlit = false, nearest = Infinity, sock = false;
-        ARMS.forEach((a, ai) => {
-          const vx = a.x - JUNCTION.x, vy = a.y - JUNCTION.y, len = Math.hypot(vx, vy);
-          const u = ((x - JUNCTION.x) * vx + (y - JUNCTION.y) * vy) / len;          // distance along the arm
-          const v = Math.abs((x - JUNCTION.x) * vy - (y - JUNCTION.y) * vx) / len;  // distance across it
-          const t = u / len;
-          nearest = Math.min(nearest, Math.hypot(x - (JUNCTION.x + vx * Math.max(0, Math.min(1, t))), y - (JUNCTION.y + vy * Math.max(0, Math.min(1, t)))));
-          if (t < -0.04 || t > 1) return;
-          const half = a.half * Math.pow(1 - Math.max(0, t), 0.45) + 0.8;          // tapers to a point at the tip
-          if (v <= half + 3.2) sock = true;
-          if (v <= half + 0.6 && !inSlit) {
-            inSlit = true;
-            cells.push({ x, y, along: (Math.max(0, u) / REACH), core: Math.max(0, 1 - v / Math.max(half, 1.5)) * (1 - 0.55 * Math.max(0, t)), eye: ai });
-          }
-        });
-        if (sock) socket.push({ x, y });
-        if (!inSlit && nearest < 70 && L(x, y) > 70) spill.push({ x, y, w: Math.pow(1 - nearest / 70, 1.6) });
+      cells = [];
+      const cols = Math.floor((c.width - px0) / PITCH), rows = Math.floor((c.height - py0) / PITCH);
+      const lit = (i: number, j: number) => L(px0 + i * PITCH, py0 + j * PITCH) > 70;
+      // the dark dome: flood fill on the dot grid from SEED, blocked by lit dots, never below FLOOR
+      const dark = new Uint8Array(cols * rows), seen = new Uint8Array(cols * rows);
+      const stack: [number, number][] = [[Math.round((SEED.x - px0) / PITCH), Math.round((SEED.y - py0) / PITCH)]];
+      let count = 0;
+      while (stack.length && count < 20000) {
+        const [i, j] = stack.pop()!;
+        if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+        const k = j * cols + i;
+        if (seen[k]) continue;
+        seen[k] = 1;
+        if (lit(i, j) || py0 + j * PITCH > FLOOR) continue;
+        dark[k] = 1; count++;
+        stack.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]);
+      }
+      // the rim: lit dots within two cells of the dome, in the opening's window
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const x = px0 + i * PITCH, y = py0 + j * PITCH;
+        if (y < TOP || x < LEFT || x > RIGHT || !lit(i, j)) continue;
+        let near = Infinity;
+        for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) {
+          const ii = i + a, jj = j + b;
+          if (ii >= 0 && jj >= 0 && ii < cols && jj < rows && dark[jj * cols + ii]) near = Math.min(near, Math.hypot(a, b));
+        }
+        if (near === Infinity) continue;
+        const along = Math.min(1, Math.hypot(x - BOTTOM.x, (y - BOTTOM.y) * 1.4) / REACH);
+        cells.push({ x, y, along, core: near <= 1.5 ? 1 : 0.6, eye: 0 });
       }
     };
 
@@ -127,32 +132,22 @@ export function HeroFx({ src, imgClass }: { src: string; imgClass: string }) {
       if (!on) return;
       g.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
       const R = PITCH * 0.36;
-      // 1. the socket goes black, so the slit reads as an opening in the helmet, not a sticker on it
-      g.fillStyle = `rgba(0,0,0,${Math.min(1, 0.4 + st.b)})`;
-      for (const p of socket) g.fillRect(p.x - PITCH / 2, p.y - PITCH / 2, PITCH, PITCH);
-      // 2. light spill on the mask around the opening
-      for (const p of spill) {
-        const a = p.w * 0.55 * Math.min(1.2, st.b);
-        if (a < 0.03) continue;
-        g.fillStyle = rgba(mix(pal.outer, pal.mid, p.w), a);
-        g.beginPath(); g.arc(p.x, p.y, R, 0, Math.PI * 2); g.fill();
-      }
-      // 3. bloom, then the slit dots from the dark rim to the hot core
+      // the rim dots turn orange, hotter at the flare, with a soft glow
       g.shadowColor = rgba(pal.bloom, Math.min(1, st.bloom));
-      g.shadowBlur = (10 + 22 * st.bloom) * dpr * s;
+      g.shadowBlur = (6 + 12 * st.bloom) * dpr * s;
       for (const c of cells) {
         const shown = st.reveal - c.along;                 // >0 once the fire has reached this dot
         if (shown <= 0) continue;
         const k = Math.min(1, shown / 0.18);
         const heat = Math.min(1, c.core * Math.min(1.25, st.b) * k);
-        const col = heat < 0.5 ? mix(pal.outer, pal.mid, heat * 2) : mix(pal.mid, pal.core, (heat - 0.5) * 2);
+        const col = heat < 0.85 ? mix(pal.outer, pal.mid, heat / 0.85) : mix(pal.mid, pal.core, ((heat - 0.85) / 0.4));
         g.fillStyle = rgba(col, Math.min(1, (0.5 + 0.5 * heat) * k * Math.min(1, st.b + 0.2)));
-        g.beginPath(); g.arc(c.x, c.y, R * (0.85 + 0.45 * heat), 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(c.x, c.y, R * (0.95 + 0.2 * heat), 0, Math.PI * 2); g.fill();
       }
-      // 4. the spark: one white-hot dot at the junction, before the light runs
+      // 4. the spark at the bottom of the U, before the colour climbs
       if (st.spark > 0.01) {
         g.fillStyle = rgba(pal.core, st.spark);
-        g.beginPath(); g.arc(JUNCTION.x, JUNCTION.y, R * (1 + 1.4 * st.spark), 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(BOTTOM.x, BOTTOM.y, R * (1 + 1.4 * st.spark), 0, Math.PI * 2); g.fill();
       }
       g.shadowBlur = 0;
     };

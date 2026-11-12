@@ -117,12 +117,10 @@ main.pg-landing .final{margin-top:104px;padding-top:150px;padding-bottom:110px}
 
 /* ---------- scroll reveal (lib/reveal.ts adds .reveal-ready to the page, then .in to each element) ---------- */
 @property --dot{syntax:"<length>";inherits:false;initial-value:6px}
-main.pg-landing.reveal-ready :is(.hero-copy > *,.strip > div,.s-head,.step,.tier,.fine,.lvl,.pay-big,.feed-row,.trust > div,.faq-grid > div > .eyebrow,.faq-grid h2,.faq details,.final h2,.final .cta-row){
+main.pg-landing.reveal-ready :is(.hero-copy > *,.strip > div,.s-head,.step,.tier,.fine,.pay-big,.feed-row,.trust > div,.faq-grid > div > .eyebrow,.faq-grid h2,.faq details,.final h2,.final .cta-row){
   opacity:0;transform:translateY(28px);
   transition:opacity .8s cubic-bezier(.22,.7,.24,1) calc(var(--i,0) * 90ms),transform .9s cubic-bezier(.22,.7,.24,1) calc(var(--i,0) * 90ms)}
-main.pg-landing.reveal-ready :is(.hero-copy > *,.strip > div,.s-head,.step,.tier,.fine,.lvl,.pay-big,.feed-row,.trust > div,.faq-grid > div > .eyebrow,.faq-grid h2,.faq details,.final h2,.final .cta-row).in{opacity:1;transform:none}
-/* the levels climb like stairs, from the bottom */
-main.pg-landing.reveal-ready .lvl{transform:translateY(90px);transition-duration:.8s,1.1s;transition-delay:calc(var(--i,0) * 130ms)}
+main.pg-landing.reveal-ready :is(.hero-copy > *,.strip > div,.s-head,.step,.tier,.fine,.pay-big,.feed-row,.trust > div,.faq-grid > div > .eyebrow,.faq-grid h2,.faq details,.final h2,.final .cta-row).in{opacity:1;transform:none}
 /* the big headlines come up through a slot */
 main.pg-landing.reveal-ready :is(.s-head h2,.final h2){clip-path:inset(0 0 100% 0);transition:clip-path 1s cubic-bezier(.22,.7,.24,1) .1s}
 main.pg-landing.reveal-ready :is(.s-head.in h2,.final h2.in){clip-path:inset(0 0 -10% 0)}
@@ -131,6 +129,7 @@ main.pg-landing.reveal-ready :is(.hero-art,.step .art,.tier-art,.lvl-art){
   -webkit-mask:radial-gradient(circle,#000 var(--dot),transparent calc(var(--dot) + .5px)) 0 0/8px 8px;mask:radial-gradient(circle,#000 var(--dot),transparent calc(var(--dot) + .5px)) 0 0/8px 8px;
   --dot:0px;transition:--dot 1.3s cubic-bezier(.22,.7,.24,1) .15s}
 main.pg-landing.reveal-ready :is(.hero-art.in,.in .art,.in .tier-art,.in .lvl-art){--dot:6px}
+main.pg-landing.reveal-ready .stairs{opacity:1;transform:none}
 /* once revealed the hero keeps its soft round fade */
 main.pg-landing.reveal-ready .hero-art.in{-webkit-mask:radial-gradient(closest-side,#000 52%,rgba(0,0,0,.55) 74%,transparent 100%),radial-gradient(circle,#000 var(--dot),transparent calc(var(--dot) + .5px)) 0 0/8px 8px;-webkit-mask-composite:source-in;mask:radial-gradient(closest-side,#000 52%,rgba(0,0,0,.55) 74%,transparent 100%) intersect,radial-gradient(circle,#000 var(--dot),transparent calc(var(--dot) + .5px)) 0 0/8px 8px}
 /* the 80 lands with a short overshoot */
@@ -150,3 +149,9 @@ main.pg-landing .tier-dots{display:none}
   main.pg-landing .tier-dots button.on{width:22px;border-radius:4px;background:#f2f2f3}
   main.pg-landing .tier-dots button::before{content:"";display:block;margin:-10px}/* 27px touch target */
 }
+/* the level columns grow out of the floor, bottom to top, one after another */
+main.pg-landing.reveal-ready .lvl{opacity:1;transform:none;clip-path:inset(100% 0 0 0 round 22px);
+  transition:clip-path 1.1s cubic-bezier(.22,.7,.24,1) calc(var(--i,0) * 160ms)}
+main.pg-landing.reveal-ready .stairs.in .lvl{clip-path:inset(0 0 0 0 round 22px)}
+main.pg-landing.reveal-ready .lvl .lvl-meta{opacity:0;transform:translateY(16px);transition:opacity .6s ease calc(var(--i,0) * 160ms + .55s),transform .6s cubic-bezier(.22,.7,.24,1) calc(var(--i,0) * 160ms + .55s)}
+main.pg-landing.reveal-ready .stairs.in .lvl-meta{opacity:1;transform:none}

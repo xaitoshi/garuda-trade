@@ -42,7 +42,7 @@ export function Landing() {
     if (row && card) row.scrollTo({ left: card.offsetLeft - (row.clientWidth - card.offsetWidth) / 2, behavior: "smooth" });
   };
   // what rises into view as you scroll (styles in landing-dots.css)
-  useReveal(page, ".hero-copy > *, .hero-art, .strip > div, .s-head, .step, .tier, .fine, .lvl, .pay-big, .feed-row, .trust > div, .faq-grid > div > .eyebrow, .faq-grid h2, .faq details, .final h2, .final .cta-row");
+  useReveal(page, ".hero-copy > *, .hero-art, .strip > div, .s-head, .step, .tier, .fine, .stairs, .pay-big, .feed-row, .trust > div, .faq-grid > div > .eyebrow, .faq-grid h2, .faq details, .final h2, .final .cta-row");
 
   // Match document chrome to the hero artwork so the dotted knight has no visible page card edge.
   useEffect(() => {
