@@ -136,3 +136,17 @@ main.pg-landing.reveal-ready .hero-art.in{-webkit-mask:radial-gradient(closest-s
 /* the 80 lands with a short overshoot */
 main.pg-landing .pay-big.in .num{animation:dl-land .9s cubic-bezier(.22,1.4,.36,1) .2s both}
 @keyframes dl-land{from{transform:scale(.86);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- phone: tiers are a swipe row with page dots ---------- */
+main.pg-landing .tier-dots{display:none}
+@media (max-width:820px){
+  main.pg-landing .tiers{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+    margin:0 -20px;padding:4px 20px 8px;scroll-padding:0 20px;scrollbar-width:none}
+  main.pg-landing .tiers::-webkit-scrollbar{display:none}
+  main.pg-landing .tier{flex:0 0 84%;scroll-snap-align:center}
+  main.pg-landing .tier:hover{transform:none}
+  main.pg-landing .tier-dots{display:flex;justify-content:center;gap:8px;margin-top:14px}
+  main.pg-landing .tier-dots button{width:7px;height:7px;padding:0;border-radius:50%;border:0;background:#ffffff33;transition:width .3s cubic-bezier(.22,.7,.24,1),background .3s}
+  main.pg-landing .tier-dots button.on{width:22px;border-radius:4px;background:#f2f2f3}
+  main.pg-landing .tier-dots button::before{content:"";display:block;margin:-10px}/* 27px touch target */
+}

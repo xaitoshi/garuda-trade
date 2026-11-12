@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "../lib/session";
 import { LEVELS, fallbackScalingTable } from "../lib/knight";
 import { pct, usd } from "../lib/format";
 import { XMarketsButton } from "../components/XMarkets";
 import { HeroFx } from "../components/HeroFx";
+import { DotNumber } from "../components/DotNumber";
 import { useReveal } from "../lib/reveal";
 
 /** Pure black, like Pilot: the knights are white dots on transparency, so there is no artwork edge to match. */
@@ -24,6 +25,22 @@ export function Landing() {
   const t = rules?.tiers ?? FALLBACK.tiers;
   const paid = LEVELS.map((l) => ({ ...l, ...t[l.tier] }));
   const page = useRef<HTMLElement>(null);
+  // phone: the tier cards are a swipe row with page dots under it
+  const tiersRow = useRef<HTMLDivElement>(null);
+  const [tierAt, setTierAt] = useState(0);
+  const onTiersScroll = () => {
+    const row = tiersRow.current;
+    if (!row) return;
+    const cards = [...row.children] as HTMLElement[];
+    const mid = row.scrollLeft + row.clientWidth / 2;
+    let best = 0;
+    cards.forEach((c, i) => { if (Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) < Math.abs(cards[best]!.offsetLeft + cards[best]!.offsetWidth / 2 - mid)) best = i; });
+    setTierAt(best);
+  };
+  const goTier = (i: number) => {
+    const row = tiersRow.current, card = row?.children[i] as HTMLElement | undefined;
+    if (row && card) row.scrollTo({ left: card.offsetLeft - (row.clientWidth - card.offsetWidth) / 2, behavior: "smooth" });
+  };
   // what rises into view as you scroll (styles in landing-dots.css)
   useReveal(page, ".hero-copy > *, .hero-art, .strip > div, .s-head, .step, .tier, .fine, .lvl, .pay-big, .feed-row, .trust > div, .faq-grid > div > .eyebrow, .faq-grid h2, .faq details, .final h2, .final .cta-row");
 
@@ -75,10 +92,10 @@ export function Landing() {
       </header>
 
       <div className="strip rv">
-        <div><b>{pct(c.profitSplit, 0)}</b><span>Profit split</span></div>
+        <div><b><DotNumber value={pct(c.profitSplit, 0)} /></b><span>Profit split</span></div>
         <div><b>USDC</b><span>Fees</span></div>
-        <div><b>{usd(t.squire.fee)}</b><span>Challenges from</span></div>
-        <div><b>{kfmt(t.ascended.accountSize)}</b><span>Largest account</span></div>
+        <div><b><DotNumber value={usd(t.squire.fee)} /></b><span>Challenges from</span></div>
+        <div><b><DotNumber value={kfmt(t.ascended.accountSize)} /></b><span>Largest account</span></div>
       </div>
 
       <section className="s wrap" id="how">
@@ -113,12 +130,12 @@ export function Landing() {
           <div><div className="eyebrow">Challenges</div><h2>Pick your trial.</h2></div>
           <p className="lead">Every tier is open. Same rules at every size. Pay the fee in USDC.</p>
         </div>
-        <div className="tiers rv">
+        <div className="tiers rv" ref={tiersRow} onScroll={onTiersScroll}>
           {paid.map((p) => (
             <article className="tier" data-lv={p.level} key={p.tier}>
               <div className="tier-art"><img className="knight knight-fill" src={`/art/cards/${p.level}.png`} alt="" draggable={false} /></div>
               <div className="tier-name">{p.name} Trial</div>
-              <div className="tier-size">{kfmt(p.accountSize)}<span>account</span></div>
+              <div className="tier-size"><DotNumber value={kfmt(p.accountSize)} /><span>account</span></div>
               <dl>
                 <div><dt>Profit target</dt><dd>{pct(c.profitTargetPct, 0)}</dd></div>
                 <div><dt>Daily loss</dt><dd>{pct(c.dailyLossPct, 0)}</dd></div>
@@ -126,10 +143,15 @@ export function Landing() {
                 <div><dt>Profit split</dt><dd className="hot">{pct(c.profitSplit, 0)}</dd></div>
               </dl>
               <div className="tier-foot">
-                <div className="fee"><span>Fee</span><b>{usd(p.fee)}</b></div>
+                <div className="fee"><span>Fee</span><b><DotNumber value={usd(p.fee)} /></b></div>
                 <Link className="btn btn-ghost" to={`/challenges?tier=${p.tier}`}>Start</Link>
               </div>
             </article>
+          ))}
+        </div>
+        <div className="tier-dots" role="tablist" aria-label="Challenge tiers">
+          {paid.map((p, i) => (
+            <button key={p.tier} type="button" role="tab" aria-selected={i === tierAt} aria-label={`${p.name} Trial`} className={i === tierAt ? "on" : ""} onClick={() => goTier(i)} />
           ))}
         </div>
         <div className="fine rv">Challenges run on simulated accounts against the live Phoenix orderbook. Try the free demo first.</div>
@@ -163,7 +185,7 @@ export function Landing() {
           <p className="lead">Funded traders keep {pct(c.profitSplit, 0)} of profit, paid in USDC.</p>
         </div>
         <div className="pay rv">
-          <div className="pay-big"><div className="num">{String(Math.round(c.profitSplit * 100))}<sup>%</sup></div><p>of every profit goes to you.</p></div>
+          <div className="pay-big"><div className="num"><DotNumber value={String(Math.round(c.profitSplit * 100))} /><sup>%</sup></div><p>of every profit goes to you.</p></div>
           <div className="pay-right">
             <div className="feed">
               <div className="feed-row"><div className="ic" aria-hidden>%</div><div><strong>Profit target</strong><small>To pass the evaluation</small></div><span className="amt">{pct(c.profitTargetPct, 0)}</span></div>
