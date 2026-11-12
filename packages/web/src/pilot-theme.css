@@ -286,3 +286,19 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
 /* leaderboard avatars: the knight fills the circle, cropped to the head, no grey disc behind a small square */
 :root main.pg-leaderboard .av i{width:44px;height:44px;flex:none;overflow:hidden;border-radius:50%;background:#000;box-shadow:inset 0 0 0 1px #ffffff1c}
 :root main.pg-leaderboard .av i img.knight{width:100%;height:100%;object-fit:cover;object-position:50% 22%;transform:scale(1.7);transform-origin:50% 25%}
+
+/* Path to Funded: a met requirement is marked by its green check and value only. The generic .ok badge rule (green
+   fill, 3px padding, small radius) must not reach the cell, or the cell shifts and turns into a green box */
+:root .ptf-req.ok{background:transparent;padding:14px 18px;border-radius:0;font-size:inherit;color:inherit}
+:root .ptf-req.ok>i{color:var(--positive);border-color:color-mix(in srgb,var(--positive) 55%,transparent);background:color-mix(in srgb,var(--positive) 12%,transparent)}
+
+/* Barracks summary: no tiles. Big pixel figures on the page, split by dotted rules, a dot under the label */
+:root main.pg-barracks .sum{gap:0}
+:root main.pg-barracks .sum div{background:transparent;border:0;border-radius:0;min-width:0;padding:6px 30px;
+  background-image:radial-gradient(circle,#ffffff2b 1px,transparent 1.3px);background-size:3px 6px;background-repeat:repeat-y;background-position:0 0}
+:root main.pg-barracks .sum div:first-child{background-image:none;padding-left:0}
+:root main.pg-barracks .sum b{font-size:44px;line-height:1;letter-spacing:-1px}
+:root main.pg-barracks .sum span{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:#8b8e98}
+:root main.pg-barracks .sum span::before{content:"";width:5px;height:5px;border-radius:50%;background:#f1f1f4}
+:root main.pg-barracks .sum div:nth-child(3) span::before{background:var(--negative)}
+:root main.pg-barracks .sum div:nth-child(4) span::before{background:#f69f45}
