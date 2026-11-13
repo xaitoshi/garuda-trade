@@ -1,7 +1,7 @@
 // Sliding selection indicators, the way Pilot moves its nav pill and side picker: each segmented control gets its
 // active child's box as CSS variables, and a ::before in pilot-theme.css glides between positions. One observer
 // covers every control on every page, so components keep their plain `.on` markup.
-const SELECTOR = ".tabs, .seg, .seg2, .tabs2, .tb, .tf, .flt, .sw";
+const SELECTOR = ".tabs, .mnav, .seg, .seg2, .tabs2, .tb, .tf, .flt, .sw";
 const ACTIVE = ":scope > .on, :scope > .active, :scope > button.chip.on";
 
 function place(el: HTMLElement) {

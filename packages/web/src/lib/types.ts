@@ -265,6 +265,13 @@ export interface MarketView {
   book: { bids: [number, number][]; asks: [number, number][] };
 }
 
+export interface MarketTrade {
+  price: number;
+  size: number;
+  time: number;
+  side: "buy" | "sell";
+}
+
 export interface Candle {
   time: number;
   open: number;

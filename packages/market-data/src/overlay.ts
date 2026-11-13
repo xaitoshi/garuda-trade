@@ -41,6 +41,12 @@ export class OverlayProvider implements MarketDataProvider {
     const k = this.shift.get(symbol) ?? 1;
     return k === 1 ? r : { ...r, candles: r.candles.map((c) => ({ ...c, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k })) };
   }
+  async recentTrades(symbol: string, limit: number) {
+    if (!this.inner.recentTrades) return { trades: [], source: "synthetic" as const };
+    const r = await this.inner.recentTrades(symbol, limit);
+    const k = this.shift.get(symbol) ?? 1;
+    return k === 1 ? r : { ...r, trades: r.trades.map((t) => ({ ...t, price: t.price * k })) };
+  }
   ping(): Promise<boolean> {
     return this.inner.ping();
   }

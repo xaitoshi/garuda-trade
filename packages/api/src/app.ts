@@ -411,6 +411,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
+  /** Recent public trades (the tape). `source` says whether it is real Phoenix fills or a synthetic offline stand-in. Public. */
+  const tradeCache = new Map<string, { at: number; body: unknown }>();
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>("/markets/:symbol/trades", async (req) => {
+    const symbol = marketSymbol(req.params.symbol);
+    const limit = Math.min(100, Math.max(5, Number(req.query.limit ?? 40) || 40));
+    if (!svc.market.recentTrades) return { symbol, source: "none", trades: [] };
+    const key = `${symbol}:${limit}`;
+    const hit = tradeCache.get(key);
+    if (hit && now() - hit.at < 1500) return hit.body;
+    try {
+      const r = await svc.market.recentTrades(symbol, limit);
+      const body = { symbol, source: r.source, trades: r.trades };
+      tradeCache.set(key, { at: now(), body });
+      return body;
+    } catch (e) {
+      throw new ServiceError(502, "market_unavailable", `No trades for ${symbol}: ${(e as Error).message}`);
+    }
+  });
+
   app.post("/auth/nonce", async (req) => {
     if (!auth) throw new ServiceError(404, "auth_disabled");
     return auth.issueNonce(nonceBody.parse(req.body).wallet, typeof req.headers.origin === "string" ? req.headers.origin : undefined);

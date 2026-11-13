@@ -73,3 +73,16 @@ export function useNow(ms = 1000): number {
   }, [ms]);
   return n;
 }
+
+/** True while a media query matches; follows changes (rotation, resizing). */
+export function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const q = window.matchMedia(query);
+    const update = () => setOn(q.matches);
+    update();
+    q.addEventListener("change", update);
+    return () => q.removeEventListener("change", update);
+  }, [query]);
+  return on;
+}

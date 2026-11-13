@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, errorText, isTransient } from "../lib/api";
 import { POLL } from "../lib/config";
-import { usePoll } from "../lib/hooks";
+import { useMedia, usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { applyTick, breachPrice, changePct } from "../lib/trade";
 import { px, pctSigned } from "../lib/format";
@@ -16,6 +16,7 @@ import { PriceChart, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
 import { MarketFavorites, MarketStats } from "../components/MarketFavorites";
+import { BookPanel, type BookView } from "../components/BookPanel";
 import { PositionsPanel } from "../components/Positions";
 import { CombatLog } from "../components/CombatLog";
 import { PathToFundedPanel } from "../components/PathToFunded";
@@ -99,6 +100,9 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const [symbol, setSymbol] = useState("SOL");
   // phones: the order ticket is a bottom sheet opened from the Trade bar
   const [sheet, setSheet] = useState(false);
+  const mobile = useMedia("(max-width:820px)");
+  const [view, setView] = useState<"chart" | BookView>("chart");
+  const [bookView, setBookView] = useState<BookView>("book");
   const [picking, setPicking] = useState(false);
   const [tf, setTf] = useState<(typeof CANDLE_TF)[number]>("1h");
   const [reviving, setReviving] = useState(false);
@@ -165,51 +169,76 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
       </div>
       <PathToFundedPanel c={c} />
       <div className="t-grid">
-        <div className="panel cc">
-          <MarketFavorites symbol={symbol} markets={(rules?.markets ?? []).map((x) => x.symbol)} onPick={setSymbol} />
-          <div className="ph">
-            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-              <MarketButton symbol={symbol} maxLeverage={m?.maxLeverage ?? rules?.markets.find((x) => x.symbol === symbol)?.maxLeverage} onOpen={() => setPicking(true)} />
-              {picking && <MarketPicker markets={rules?.markets ?? []} current={symbol} onPick={setSymbol} onClose={() => setPicking(false)} />}
-              <div className="px">
-                <b data-testid="mark">{m ? px(m.mark) : "..."}</b>
-                {chg !== undefined && <span className={`${chg >= 0 ? "up" : "dn"} mono`} style={{ fontSize: 12 }}>{pctSigned(chg, 2)}</span>}
+        <div className="panel cc" data-view={view}>
+          <div className="cc-strip">
+            <MarketFavorites symbol={symbol} markets={(rules?.markets ?? []).map((x) => x.symbol)} onPick={setSymbol} />
+            <div className="ph">
+              <div className="ph-l">
+                <MarketButton symbol={symbol} maxLeverage={m?.maxLeverage ?? rules?.markets.find((x) => x.symbol === symbol)?.maxLeverage} onOpen={() => setPicking(true)} />
+                {picking && <MarketPicker markets={rules?.markets ?? []} current={symbol} onPick={setSymbol} onClose={() => setPicking(false)} />}
+                <div className="px">
+                  <b data-testid="mark">{m ? px(m.mark) : "..."}</b>
+                  {chg !== undefined && <span className={`${chg >= 0 ? "up" : "dn"} mono`} style={{ fontSize: 12 }}>{pctSigned(chg, 2)}</span>}
+                </div>
+                <MarketStats m={m} />
               </div>
-              <MarketStats m={m} />
-            </div>
-            <div className="tf">
-              {CANDLE_TF.map((t) => (
-                <button key={t} className={`chip ${t === tf ? "on" : ""}`} onClick={() => setTf(t)}>
-                  {t}
-                </button>
-              ))}
+              <div className="tf tf-d">
+                {CANDLE_TF.map((t) => (
+                  <button key={t} className={`chip ${t === tf ? "on" : ""}`} onClick={() => setTf(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="ohlc">
-            {last && (
+          <div className="cc-body">
+            {mobile && (
+              <div className="tabs2 cc-tabs">
+                {([["chart", "Chart"], ["book", "Order Book"], ["trades", "Recent Trades"]] as const).map(([v, label]) => (
+                  <button key={v} className={view === v ? "on" : ""} onClick={() => { setView(v); if (v !== "chart") setBookView(v); }}>{label}</button>
+                ))}
+              </div>
+            )}
+            {mobile && view !== "chart" ? (
+              <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} />
+            ) : (
               <>
-                <span>O {px(last.open)}</span>
-                <span>H {px(last.high)}</span>
-                <span>L {px(last.low)}</span>
-                <span>C {px(last.close)}</span>
+                <div className="tf tf-m">
+                {CANDLE_TF.map((t) => (
+                  <button key={t} className={`chip ${t === tf ? "on" : ""}`} onClick={() => setTf(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+                <div className="ohlc">
+                  {last && (
+                    <>
+                      <span>O {px(last.open)}</span>
+                      <span>H {px(last.high)}</span>
+                      <span>L {px(last.low)}</span>
+                      <span>C {px(last.close)}</span>
+                    </>
+                  )}
+                  <span className="src" title={m ? `Book source: ${m.source}` : ""}>
+                    {candles.data ? (candles.data.source === "synthetic" ? "synthetic candles" : "live candles") : ""}
+                    {m && ` · book ${m.source}`}
+                  </span>
+                </div>
+                <div className="chart">
+                  <PriceChart candles={live} marks={marks} resetKey={`${symbol}:${tf}`} />
+                </div>
               </>
             )}
-            <span className="src" title={m ? `Book source: ${m.source}` : ""}>
-              {candles.data ? (candles.data.source === "synthetic" ? "synthetic candles" : "live candles") : ""}
-              {m && ` · book ${m.source}`}
-            </span>
-          </div>
-          <div className="chart">
-            <PriceChart candles={live} marks={marks} resetKey={`${symbol}:${tf}`} />
           </div>
           {m && !m.tradable && <div className="banner" style={{ margin: 12 }}>{m.tradableReason ?? "Market closed"}</div>}
         </div>
+        {!mobile && <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} />}
         <div className={`tk-wrap${sheet ? " open" : ""}`}>
           <div className="tk-backdrop" onClick={() => setSheet(false)} />
           <div className="tk-sheet">
             <div className="tk-sheet-hd">
               <b>Trade {symbol}</b>
-              <button type="button" aria-label="Close" onClick={() => setSheet(false)}>×</button>
+              <button type="button" aria-label="Close" onClick={() => setSheet(false)}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
             </div>
             <OrderTicket c={c} m={m} symbol={symbol} rules={rules} onState={(s) => { onState(s); setSheet(false); }} />
           </div>

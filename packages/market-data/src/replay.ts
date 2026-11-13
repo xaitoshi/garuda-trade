@@ -1,5 +1,5 @@
 import type { L2Book, Level } from "@garuda/sim-engine";
-import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot } from "./types.js";
+import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot, type MarketTrade } from "./types.js";
 
 export interface RecordedMarket {
   symbol: string;
@@ -98,6 +98,26 @@ export class ReplayProvider implements MarketDataProvider {
       return { time: end - (limit - 1 - i) * step, open, high: hi, low: lo, close, volume: 40 + rnd() * 160 + Math.abs(close - open) / close * 20000 };
     });
     return { candles, source: "synthetic" as const };
+  }
+
+  /** SYNTHETIC tape around the current mark so the Recent Trades view has something offline. Labelled synthetic. */
+  async recentTrades(symbol: string, limit: number) {
+    const m = this.markets.get(symbol);
+    if (!m) throw new Error(`replay: no recording for ${symbol}`);
+    const now = this.clock();
+    let seed = Math.floor(now / 4000);
+    for (const ch of symbol) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    let price = m.markPrice * (this.shift.get(symbol) ?? 1);
+    let t = now;
+    const trades: MarketTrade[] = [];
+    for (let i = 0; i < limit; i++) {
+      const side = rnd() < 0.5 ? "buy" : "sell";
+      trades.push({ price, size: Math.round((0.05 + rnd() ** 3 * 40) * 1000) / 1000, time: t, side });
+      price = price * (1 + (side === "buy" ? -1 : 1) * rnd() * 0.0004);
+      t -= Math.round(400 + rnd() * 6000);
+    }
+    return { trades, source: "synthetic" as const };
   }
 
   async ping(): Promise<boolean> {

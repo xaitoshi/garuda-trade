@@ -1,5 +1,5 @@
 import { API_URL } from "./config";
-import type { EarlyOutcome, EarlyStatus, KnightInfo, Candle, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PayoutView, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
+import type { EarlyOutcome, EarlyStatus, KnightInfo, Candle, MarketTrade, ChallengeState, ConfirmOutcome, Health, MarketView, PaymentInstructions, PaymentOrder, PayoutQuote, PayoutView, PlaceOrderResult, ReviveInfo, Rules, TierId } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -61,6 +61,7 @@ export const api = {
   health: () => call<Health>("/health", { auth: false }),
   rules: () => call<Rules>("/rules", { auth: false }),
   market: (symbol: string, depth = 14) => call<MarketView>(`/markets/${symbol}?depth=${depth}`, { auth: false }),
+  trades: (symbol: string, limit = 40) => call<{ trades: MarketTrade[]; source: string }>(`/markets/${symbol}/trades?limit=${limit}`, { auth: false }),
   candles: (symbol: string, tf: string, limit = 120) => call<{ candles: Candle[]; source: string }>(`/markets/${symbol}/candles?tf=${tf}&limit=${limit}`, { auth: false }),
 
   nonce: (wallet: string) => post<{ nonce: string; message: string }>("/auth/nonce", { wallet }),

@@ -101,17 +101,27 @@
   :root main.pg-terminal{display:flex;flex-direction:column;gap:10px;padding:8px 8px 0;animation-name:none;transform:none}
   :root main.pg-terminal :is(.t-top,.t-grid,.btm){display:contents}
   :root main.pg-terminal>*{min-width:0}
-  :root main.pg-terminal .cc{order:1}
+  :root main.pg-terminal .cc{order:1;display:flex;flex-direction:column;gap:10px;background:transparent;border:0;padding:0;overflow:visible}
   :root main.pg-terminal [data-testid=positions-panel]{order:2}
+  :root main.pg-terminal .cc>:is(.cc-strip,.cc-body){border:1px solid var(--edge);border-radius:var(--r-panel);background:var(--neutral-panel);overflow:hidden}
   :root main.pg-terminal .slot{order:3}
   :root main.pg-terminal .hudrow{order:4}
   :root main.pg-terminal .ptf{order:5}
   :root main.pg-terminal .logp{order:6}
   :root main.pg-terminal .banner{order:0}
-  :root main.pg-terminal .cc .ph{flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px 12px;gap:8px}
-  :root main.pg-terminal .cc .tf{width:100%;overflow-x:auto;scrollbar-width:none}
+  :root main.pg-terminal .cc .ph{flex-direction:row;flex-wrap:nowrap;align-items:center;padding:10px 12px;gap:8px;border:0}
+  :root main.pg-terminal .cc .tf-d{display:none}
+  :root main.pg-terminal .cc .tf-m{display:flex;padding:6px 10px 0;overflow-x:auto;scrollbar-width:none}
+  :root main.pg-terminal .cc-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;padding:0 6px;border-bottom:1px solid #ffffff09}
+  :root main.pg-terminal .cc-tabs button{padding:12px 0 14px;text-align:center;font-size:12px}
+  :root main.pg-terminal .cc-body .bookp{border:0;border-radius:0;background:transparent}
+  :root main.pg-terminal .cc-body .bookp .bk-tabs{display:none}
+  :root main.pg-terminal .cc .px{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+  :root main.pg-terminal .cc .px b{font-family:Inter,sans-serif;font-weight:600;letter-spacing:-.4px;font-size:19px!important}
+  :root main.pg-terminal .cc .px span{font-size:11px!important}
+  :root main.pg-terminal .cc-strip{border-bottom:1px solid var(--edge)!important}
   :root main.pg-terminal .cc .ohlc{padding:4px 12px;font-size:10px;flex-wrap:wrap;gap:4px 10px}
-  :root main.pg-terminal .cc .chart{min-height:0;height:clamp(300px,52dvh,520px);padding:4px}
+  :root main.pg-terminal .cc .chart{min-height:0;height:clamp(240px,40dvh,360px);padding:4px}
   :root main.pg-terminal .cc .chart-host{min-height:0}
   :root main.pg-terminal .hudrow{grid-template-columns:1fr 1fr;gap:10px}
   :root main.pg-terminal .hud{padding:14px}
@@ -126,10 +136,17 @@
   :root main.pg-terminal .tk-wrap.open .tk-sheet{display:flex;flex-direction:column;position:absolute;left:0;right:0;bottom:0;max-height:calc(100dvh - 60px);background:var(--neutral-panel,#141517);border:1px solid #ffffff17;border-bottom:0;border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom);animation:tk-sheet-in .28s cubic-bezier(.22,.7,.24,1)}
   :root main.pg-terminal .tk-sheet-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 4px;flex:none}
   :root main.pg-terminal .tk-sheet-hd b{font-size:15px;font-weight:600}
-  :root main.pg-terminal .tk-sheet-hd button{width:32px;height:32px;border:0;border-radius:50%;background:#ffffff10;color:#f4f4f5;font-size:20px;line-height:1;cursor:pointer}
+  :root main.pg-terminal .tk-sheet-hd button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:#ffffff10;color:#f4f4f5;cursor:pointer}
   :root main.pg-terminal .tk-sheet .tk{overflow-y:auto;border:0;border-radius:0;background:transparent;flex:1;min-height:0}
   :root main.pg-terminal .tk-sheet .tk-b{padding:10px 16px 16px}
   @keyframes tk-sheet-in{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+}
+
+/* the split market strip / chart card (desktop keeps one panel) */
+:root main.pg-terminal .cc .ph-l{display:flex;align-items:center;gap:18px;min-width:0;flex-wrap:wrap}
+@media(min-width:821px){:root main.pg-terminal .cc .tf-m{display:none}}
+@media(min-width:1181px){
+  :root main.pg-terminal .t-grid{grid-template-columns:minmax(0,1fr) 270px 360px}
 }
 
 /* favourites row and market stats, as in PilotBot */
@@ -149,10 +166,42 @@
 :root main .mkt-stats dt{font-size:11px;color:#8b8e98;white-space:nowrap;margin-bottom:6px}
 :root main .mkt-stats dd{margin:0;font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 @media(max-width:820px){
-  :root main.pg-terminal .cc .ph>div:first-child{flex-wrap:nowrap!important;gap:12px!important;min-width:0;width:100%}
-  :root main.pg-terminal .mkt-stats{flex:1;gap:14px;padding-left:12px}
+  :root main.pg-terminal .cc .ph-l{flex-wrap:nowrap;gap:10px;min-width:0;width:100%}
+  :root main.pg-terminal .mkt-stats{flex:1;gap:14px;padding-left:0;border:0}
   :root main.pg-terminal .mkt-stats dt{font-size:9px;margin-bottom:4px}
   :root main.pg-terminal .mkt-stats dd{font-size:11px}
   :root main.pg-terminal .cc .px b{font-size:20px}
   :root main.pg-terminal .mkt-btn svg{display:none}
 }
+
+/* order book and recent trades */
+:root main .bookp{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+:root main .bookp .bk-tabs{margin:0;padding:0 16px}
+:root main .bk{display:flex;flex-direction:column;flex:1;min-height:0;font-variant-numeric:tabular-nums;font-size:12px}
+:root main .bk-hd,:root main .bk-row,:root main .bk-tr{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:8px;padding:0 16px}
+:root main .bk-hd{padding-top:10px;padding-bottom:6px;font-size:10px;color:#787d88}
+:root main :is(.bk-hd,.bk-row,.bk-tr) span:not(:first-child){text-align:right}
+:root main .bk-row{position:relative;height:24px;align-items:center;color:#c9cbd2}
+:root main .bk-row::before{content:"";position:absolute;right:0;top:2px;bottom:2px;width:var(--d);border-radius:3px 0 0 3px;opacity:.13;transition:width .4s var(--motion-ease,ease)}
+:root main .bk-row.ask::before{background:var(--negative,#ff5f6d)}
+:root main .bk-row.bid::before{background:var(--positive,#3ddc97)}
+:root main .bk-row.ask span:first-child{color:var(--negative,#ff5f6d)}
+:root main .bk-row.bid span:first-child{color:var(--positive,#3ddc97)}
+:root main .bk-row span{position:relative}
+:root main .bk-mid{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:8px 16px;border-block:1px solid #ffffff09;margin:2px 0}
+:root main .bk-mid b{font-size:15px;font-weight:600;color:#f4f4f5}
+:root main .bk-mid span{font-size:10px;color:#787d88}
+:root main .bk-tape{display:flex;flex-direction:column;overflow-y:auto;max-height:470px;scrollbar-width:none}
+:root main .bk-tr{height:24px;flex:none;align-items:center;color:#c9cbd2;animation:bk-in .35s var(--motion-ease,ease) both}
+:root main .bk-tr.buy span:first-child{color:var(--positive,#3ddc97)}
+:root main .bk-tr.sell span:first-child{color:var(--negative,#ff5f6d)}
+:root main .bk-tr span:last-child{color:#787d88}
+:root main .bk-empty{padding:24px 16px;color:#787d88;font-size:12px;text-align:center}
+:root main .bk-src{padding:8px 16px;font-size:10px;color:#6b6e76;border-top:1px solid #ffffff09}
+@keyframes bk-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media(max-width:820px){
+  :root main .bk-tape{max-height:none;height:clamp(240px,40dvh,360px)}
+  :root main.pg-terminal .cc-body>:not(.cc-tabs){animation:bk-in .3s var(--motion-ease,ease) both}
+}
+/* the stats strip fades out at its right edge where it scrolls, as in PilotBot */
+:root main .mkt-stats{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);padding-right:24px}

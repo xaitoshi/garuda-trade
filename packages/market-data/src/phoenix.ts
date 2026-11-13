@@ -1,6 +1,6 @@
 import { createPhoenixClient } from "@ellipsis-labs/rise";
 import type { L2Book, Level } from "@garuda/sim-engine";
-import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot } from "./types.js";
+import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot, type MarketTrade } from "./types.js";
 
 export interface PhoenixProviderOptions {
   apiUrl?: string;
@@ -18,6 +18,19 @@ interface RawMarket {
   isolatedOnly?: boolean;
   leverageTiers?: { maxLeverage: number }[];
   commodityMetadata?: { status?: string; isAfterHours?: boolean; isReopen?: boolean };
+}
+
+/** Tick rule: a trade above the previous price was a buy, below a sell, equal keeps the previous side. Input newest first. */
+export function withTickSides(rows: { price: number; size: number; time: number }[]): MarketTrade[] {
+  const out: MarketTrade[] = new Array(rows.length);
+  let side: "buy" | "sell" = "buy";
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const prev = rows[i + 1];
+    if (prev && rows[i]!.price > prev.price) side = "buy";
+    else if (prev && rows[i]!.price < prev.price) side = "sell";
+    out[i] = { ...rows[i]!, side };
+  }
+  return out;
 }
 
 export function normalizeSymbol(s: string): string {
@@ -131,6 +144,20 @@ export class PhoenixSdkProvider implements MarketDataProvider {
       .sort((a, b) => a.time - b.time)
       .slice(-limit);
     return { candles, source: "phoenix-live" as const };
+  }
+
+  /** Public fills from Phoenix (read-only). Phoenix does not report the taker side, so it is inferred by the tick rule. */
+  async recentTrades(symbolIn: string, limit: number) {
+    const symbol = normalizeSymbol(symbolIn);
+    const res = (await this.client.api.trades().getMarketFills(symbol, { limit })) as unknown as {
+      data: { baseQty: string; price: string; timestamp: number }[];
+    };
+    const rows = res.data
+      .map((f) => ({ price: Number(f.price), size: Math.abs(Number(f.baseQty)), time: Number(f.timestamp) < 1e12 ? Number(f.timestamp) * 1000 : Number(f.timestamp) }))
+      .filter((t) => Number.isFinite(t.price) && Number.isFinite(t.size) && t.size > 0)
+      .sort((a, b) => b.time - a.time)
+      .slice(0, limit);
+    return { trades: withTickSides(rows), source: "phoenix-live" as const };
   }
 
   async ping(): Promise<boolean> {
