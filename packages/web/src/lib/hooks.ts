@@ -17,37 +17,50 @@ export function usePoll<T>(fn: () => Promise<T>, ms: number, key: unknown, enabl
   const fnRef = useRef(fn);
   fnRef.current = fn;
   const alive = useRef(true);
+  // Requests belong to one run of the effect (one `key`): a late answer from a previous key is dropped, and a tick is
+  // skipped while this run's previous request is still open, so a slow API never piles requests up.
+  const gen = useRef(0);
+  const inFlight = useRef(false);
 
-  const reload = useCallback(async () => {
+  const run = useCallback(async (g: number) => {
+    inFlight.current = true;
     try {
       const v = await fnRef.current();
-      if (alive.current) {
+      if (alive.current && g === gen.current) {
         setData(v);
         setError(undefined);
       }
     } catch (e) {
-      if (alive.current) setError(e);
+      if (alive.current && g === gen.current) setError(e);
     } finally {
-      if (alive.current) setLoading(false);
+      if (g === gen.current) {
+        inFlight.current = false;
+        if (alive.current) setLoading(false);
+      }
     }
   }, []);
 
+  /** Fetch now, even if a poll is open (after an order the caller wants the fresh state). */
+  const reload = useCallback(() => run(gen.current), [run]);
+
   useEffect(() => {
     alive.current = true;
+    const g = ++gen.current;
+    inFlight.current = false;
     if (!enabled) {
       setLoading(false);
       return () => void (alive.current = false);
     }
     setLoading(true);
-    void reload();
+    void run(g);
     const t = setInterval(() => {
-      if (document.visibilityState !== "hidden") void reload();
+      if (document.visibilityState !== "hidden" && !inFlight.current) void run(g);
     }, ms);
     return () => {
       alive.current = false;
       clearInterval(t);
     };
-  }, [ms, key, enabled, reload]);
+  }, [ms, key, enabled, run]);
 
   return { data, error, loading, reload, set: setData };
 }
