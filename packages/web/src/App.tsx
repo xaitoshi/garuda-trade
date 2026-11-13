@@ -18,6 +18,7 @@ import { Payouts } from "./pages/Payouts";
 import { CalledIt } from "./pages/CalledIt";
 import { Early } from "./pages/Early";
 import { Footer } from "./components/Footer";
+import { MobileNav } from "./components/MobileNav";
 import { useRevealAll } from "./lib/revealAll";
 
 export function App() {
@@ -67,6 +68,7 @@ function Shell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {!bare && <Footer />}
+      {!bare && <MobileNav />}
     </>
   );
 }
