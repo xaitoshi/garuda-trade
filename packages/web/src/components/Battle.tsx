@@ -22,14 +22,19 @@ function SegBar({ pct, lost, side, hitId }: { pct: number; lost: number; side: "
 interface Hit { id: number; side: "k" | "b"; amount: number; from: number }
 
 /**
- * Knight vs Phoenix, as a fighting-game VS card. Knight HP is the daily loss buffer; the Phoenix's HP is the distance to
+ * Knight vs Phoenix, as a fighting-game VS card. Knight HP is the buffer to the nearer floor (daily loss or max drawdown); the Phoenix's HP is the distance to
  * the profit target (closed balance only). A closed win knocks a chunk off the Phoenix, a closed loss hits the knight.
  * Below 25% the Phoenix is enraged.
  */
 export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string }) {
   const k = knightView(c);
   const r = c.risk;
-  const kHp = 100 - Math.max(0, Math.min(1, r.dailyUsedPct)) * 100;
+  // the knight dies at whichever floor is nearer: the daily loss line or the max drawdown line (equity based)
+  const dailyHp = 100 - Math.max(0, Math.min(1, r.dailyUsedPct)) * 100;
+  const ddHp = 100 - Math.max(0, Math.min(1, r.drawdownUsedPct)) * 100;
+  const ddBinds = r.drawdownRemaining < r.dailyRemaining;
+  const kHp = Math.min(dailyHp, ddHp);
+  const kLeft = Math.max(0, ddBinds ? r.drawdownRemaining : r.dailyRemaining);
   const hasBoss = r.targetProgressPct !== null;
   const bHp = hasBoss ? Math.max(0, 100 - r.targetProgressPct! * 100) : 0;
   const toGo = hasBoss ? Math.max(0, r.targetEquity! - r.balance) : 0;
@@ -64,7 +69,7 @@ export function BattleSlot({ c, symbol }: { c: ChallengeState; symbol: string })
         <div className="vs-info">
           <div className="vs-name" data-testid="knight-title">{k.title}</div>
           <SegBar pct={kHp} lost={hit?.side === "k" ? hit.from : kHp} side="k" hitId={hit?.id ?? 0} />
-          <div className="vs-num"><b>{usd(Math.max(0, r.dailyRemaining), 0)}</b><span>daily buffer</span></div>
+          <div className="vs-num"><b>{usd(kLeft, 0)}</b><span>{ddBinds ? "to max drawdown" : "daily buffer"}</span></div>
         </div>
         {hit?.side === "k" && <span key={hit.id} className="vs-dmg k">-{usd(hit.amount, hit.amount < 100 ? 2 : 0)}</span>}
       </div>
