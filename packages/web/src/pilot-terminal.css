@@ -223,3 +223,4 @@
   :root main.pg-terminal .cc .ph{padding:10px}
 }
 :root .mkt-search input:focus,:root .mkt-search input:focus-visible{outline:none;box-shadow:none}
+:root main .upnl-pct{display:block;margin-top:2px;font-size:11px;opacity:.8;font-weight:500}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, errorText } from "../lib/api";
 import type { ChallengeState, Order } from "../lib/types";
-import { clock, num, px, usd, usdSigned } from "../lib/format";
+import { clock, num, pctSigned, px, usd, usdSigned } from "../lib/format";
 
 type Tab = "positions" | "orders" | "history" | "balances";
 
@@ -98,6 +98,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
                     <td>{px(breach)}</td>
                     <td className={p.unrealizedPnl >= 0 ? "up" : "dn"}>
                       <b>{usdSigned(p.unrealizedPnl, 2)}</b>
+                      {p.entryPrice * p.size > 0 && <small className="upnl-pct">{pctSigned(p.unrealizedPnl / (p.entryPrice * p.size), 2)}</small>}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <button className="chip" disabled={!live || busy === p.symbol} onClick={() => void close(p.symbol, p.side, p.size)} data-testid={`close-${p.symbol}`}>
