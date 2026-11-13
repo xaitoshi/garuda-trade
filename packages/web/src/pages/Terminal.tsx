@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, errorText, isTransient } from "../lib/api";
 import { POLL } from "../lib/config";
@@ -10,7 +10,8 @@ import { knightView } from "../lib/knight";
 import { CANDLE_TF, TF_MS, TF_BARS } from "../lib/timeframes";
 import type { ChallengeState } from "../lib/types";
 import { Gate, Notice } from "../components/Gate";
-import { BattleSlot, HudTiles } from "../components/Hud";
+import { HudTiles } from "../components/Hud";
+import { BattleSlot } from "../components/Battle";
 import { LevelUpCelebration } from "../components/LevelUp";
 import { PriceChart, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
@@ -109,9 +110,27 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const [err, setErr] = useState<string | null>(null);
 
   const market = usePoll(() => api.market(symbol, 14), POLL.marketMs, symbol);
-  const candles = usePoll(() => api.candles(symbol, tf, 120), POLL.chartMs, `${symbol}:${tf}`);
+  // history grows as the user scrolls back: 200 bars first, then more, up to the API's cap
+  const [depth, setDepth] = useState({ key: "", bars: 200, done: false });
+  const histKey = `${symbol}:${tf}`;
+  const bars = depth.key === histKey ? depth.bars : 200;
+  const candles = usePoll(() => api.candles(symbol, tf, bars), POLL.chartMs, `${histKey}:${bars}`);
+  const lastCandles = useRef<typeof candles.data>(undefined);
+  if (candles.data) lastCandles.current = candles.data;
+  const shown = candles.data ?? (depth.key === histKey ? lastCandles.current : undefined);
+  useEffect(() => {
+    if (candles.data && depth.key === histKey && candles.data.candles.length < bars - 5) setDepth((d) => ({ ...d, done: true }));
+  }, [candles.data, bars, depth.key, histKey]);
+  const needMore = () => {
+    if (candles.loading) return;
+    setDepth((d) => {
+      const cur = d.key === histKey ? d : { key: histKey, bars: 200, done: false };
+      if (cur.done || cur.bars >= 1000) return cur;
+      return { key: histKey, bars: Math.min(1000, cur.bars + 300), done: false };
+    });
+  };
   const m = market.data;
-  const live = useMemo(() => (candles.data && m ? applyTick(candles.data.candles, TF_MS[tf], m.mark, m.fetchedAt) : (candles.data?.candles ?? [])), [candles.data, m, tf]);
+  const live = useMemo(() => (shown && m ? applyTick(shown.candles, TF_MS[tf], m.mark, m.fetchedAt) : (shown?.candles ?? [])), [shown, m, tf]);
 
   const pos = c.positions.find((p) => p.symbol === symbol);
   const marks = useMemo<PriceMark[]>(() => {
@@ -221,7 +240,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
                   )}
                 </div>
                 <div className="chart">
-                  <PriceChart candles={live} marks={marks} resetKey={`${symbol}:${tf}`} />
+                  <PriceChart candles={live} marks={marks} resetKey={histKey} onNeedMore={needMore} />
                 </div>
               </>
             )}

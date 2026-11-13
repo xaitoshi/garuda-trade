@@ -401,7 +401,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     const symbol = marketSymbol(req.params.symbol);
     const tf = (req.query.tf ?? "1h") as CandleTimeframe;
     if (!(CANDLE_TIMEFRAMES as readonly string[]).includes(tf)) throw new ServiceError(400, "invalid_timeframe", `tf must be one of ${CANDLE_TIMEFRAMES.join(", ")}`);
-    const limit = Math.min(500, Math.max(10, Number(req.query.limit ?? 120) || 120));
+    const limit = Math.min(1000, Math.max(10, Number(req.query.limit ?? 120) || 120));
     if (!svc.market.candles) return { symbol, timeframe: tf, source: "none", candles: [] };
     try {
       const r = await svc.market.candles(symbol, tf, limit);

@@ -104,7 +104,7 @@
   :root main.pg-terminal .cc{order:1;display:flex;flex-direction:column;gap:10px;background:transparent;border:0;padding:0;overflow:visible}
   :root main.pg-terminal [data-testid=positions-panel]{order:2}
   :root main.pg-terminal .cc>:is(.cc-strip,.cc-body){border:1px solid var(--edge);border-radius:var(--r-panel);background:var(--neutral-panel);overflow:hidden}
-  :root main.pg-terminal .slot{order:3}
+  :root main.pg-terminal :is(.slot,.vs){order:3}
   :root main.pg-terminal .hudrow{order:4}
   :root main.pg-terminal .ptf{order:5}
   :root main.pg-terminal .logp{order:6}
@@ -222,3 +222,4 @@
   :root main.pg-terminal .mkt-favs{padding:0 10px}
   :root main.pg-terminal .cc .ph{padding:10px}
 }
+:root .mkt-search input:focus,:root .mkt-search input:focus-visible{outline:none;box-shadow:none}

@@ -19,14 +19,19 @@ export function useRevealAll() {
     const main = document.querySelector("main");
     if (!main) return;
     const seen = new WeakSet<Element>();
+    // only what arrives while the page is opening rises in; later updates (a new position row, a refreshed panel)
+    // just appear, so live data never makes the page jump
+    const opened = performance.now();
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
     }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
     const scan = () => {
       const fresh = [...main.querySelectorAll<HTMLElement>(SELECTOR)].filter((el) => !seen.has(el));
       const order = new Map<Element | null, number>();
+      const late = performance.now() - opened > 1500;
       for (const el of fresh) {
         seen.add(el);
+        if (late) continue;
         const n = order.get(el.parentElement) ?? 0;
         order.set(el.parentElement, n + 1);
         el.style.setProperty("--ri", String(Math.min(n, 8)));
