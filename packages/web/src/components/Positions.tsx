@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, errorText } from "../lib/api";
 import type { ChallengeState, Order } from "../lib/types";
+import { TokenIcon } from "./MarketPicker";
 import { clock, num, pctSigned, px, usd, usdSigned } from "../lib/format";
 
 type Tab = "positions" | "orders" | "history" | "balances";
@@ -89,7 +90,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
                 return (
                   <tr key={p.symbol}>
                     <td>
-                      <b>{p.symbol}-PERP</b> {p.leverageCap && <span className="tag">{p.leverageCap}x cap</span>}
+                      <span className="pos-mkt"><TokenIcon symbol={p.symbol} size={22} /><b>{p.symbol}-PERP</b>{p.leverageCap && <span className="tag">{p.leverageCap}x cap</span>}</span>
                     </td>
                     <td className={p.side === "long" ? "up" : "dn"}>{p.side === "long" ? "Long" : "Short"}</td>
                     <td>{num(p.size, 4)}</td>
@@ -111,7 +112,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               {c.openOrders.map((o) => (
                 <tr className="sub" key={o.id}>
                   <td>
-                    {o.symbol}-PERP <span className="tag">{tag(o)}</span>
+                    <span className="pos-mkt"><TokenIcon symbol={o.symbol} size={20} />{o.symbol}-PERP <span className="tag">{tag(o)}</span></span>
                   </td>
                   <td>{o.side === "buy" ? "Buy" : "Sell"}</td>
                   <td>{num(o.remaining, 4)}</td>
@@ -148,7 +149,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               )}
               {c.openOrders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.symbol}-PERP</td>
+                  <td><span className="pos-mkt"><TokenIcon symbol={o.symbol} size={20} />{o.symbol}-PERP</span></td>
                   <td>{o.side === "buy" ? "Buy" : "Sell"}</td>
                   <td>{o.type}</td>
                   <td>{num(o.remaining, 4)}</td>
@@ -188,7 +189,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               {[...c.recentFills].reverse().map((f) => (
                 <tr key={f.id}>
                   <td className="mono">{clock(f.ts)}</td>
-                  <td>{f.symbol}-PERP {f.forced && <span className="tag dn">Forced</span>}</td>
+                  <td><span className="pos-mkt"><TokenIcon symbol={f.symbol} size={20} />{f.symbol}-PERP {f.forced && <span className="tag dn">Forced</span>}</span></td>
                   <td className={f.side === "buy" ? "up" : "dn"}>{f.side === "buy" ? "Buy" : "Sell"}</td>
                   <td>{num(f.size, 4)}</td>
                   <td>{px(f.price)}</td>

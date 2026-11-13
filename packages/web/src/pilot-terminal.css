@@ -225,3 +225,5 @@
 :root .mkt-search input:focus,:root .mkt-search input:focus-visible{outline:none;box-shadow:none}
 :root main .upnl-pct{display:block;margin-top:2px;font-size:11px;opacity:.8;font-weight:500}
 @media(min-width:821px){:root main.pg-terminal .btm + .ptf{margin-top:16px}}
+:root main .pos-mkt{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+:root main .pos-mkt .tok{flex:none}
