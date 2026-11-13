@@ -249,3 +249,33 @@
 :root main .chart-err{margin:6px 12px 0;padding:8px 10px;border-radius:8px;background:#ff5f6d1a;color:#ff8a94;font-size:12px}
 :root main .bk-row.pick{cursor:pointer}
 :root main .bk-row.pick:hover{background:#ffffff08}
+
+/* close-position dialog (PilotBot style) */
+:root .close-modal{width:min(420px,calc(100vw - 24px));--ca:var(--negative,#ff5f6d)}
+:root .close-modal.close-buy{--ca:var(--positive,#3ddc97)}
+:root .close-modal .mkt-head h2{display:flex;align-items:center;gap:10px}
+:root .close-body{display:grid;gap:12px;margin:0;padding:16px 18px;border:0;min-width:0}
+:root .close-tabs{display:grid;grid-template-columns:1fr 1fr;width:100%}
+:root .close-sum{display:grid;gap:10px;margin:0;font-size:13px}
+:root .close-sum>div{display:flex;justify-content:space-between;gap:12px}
+:root .close-sum dt{color:#8b8e98}
+:root .close-sum dd{margin:0;font-variant-numeric:tabular-nums;color:#f1f1f4}
+:root .close-sum small{font-size:10px}
+:root .close-side{color:var(--ca)!important}
+:root .close-in{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #ffffff12;border-radius:12px;background:var(--neutral-raised,#18191c)}
+:root .close-in:focus-within{border-color:#ffffff38}
+:root .close-in input{flex:1;min-width:0;border:0;background:none;outline:none;color:#f4f4f5;font-size:16px;padding:4px}
+:root .close-in button{min-height:30px;padding:4px 10px;border:0;border-radius:999px;background:#ffffff0a;color:#a5a9b4;font-size:12px;cursor:pointer}
+:root .close-in button:hover{color:#fff}
+:root .close-unit{color:#8b8e98;font-size:12px;padding-right:4px}
+:root .close-pcts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+:root .close-pcts button{display:grid;place-items:center;text-align:center;min-height:34px;border:1px solid #ffffff12;border-radius:999px;background:transparent;color:#a5a9b4;font-size:12px;cursor:pointer}
+:root .close-pcts button.on{border-color:var(--ca);color:var(--ca)}
+:root .close-opts{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#8b8e98}
+:root .close-opts label{display:flex;align-items:center;gap:7px}
+:root .close-opts b{color:#c9cbd2;font-weight:500;margin-left:4px}
+:root .close-tot{padding-top:12px;border-top:1px solid #ffffff10}
+:root .close-note{margin:0;font-size:12px;color:#8b8e98}
+:root .close-foot{display:flex;gap:10px;padding:12px 18px 16px}
+:root .close-foot .btn{flex:1;min-height:42px;border-radius:999px}
+:root main .pos-acts{display:inline-flex;gap:6px;justify-content:flex-end}

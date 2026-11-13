@@ -2,6 +2,8 @@ import { useState } from "react";
 import { api, errorText } from "../lib/api";
 import type { ChallengeState, Order } from "../lib/types";
 import { TokenIcon } from "./MarketPicker";
+import { ClosePosition } from "./ClosePosition";
+import { useSession } from "../lib/session";
 import { clock, num, pctSigned, px, usd, usdSigned } from "../lib/format";
 
 type Tab = "positions" | "orders" | "history" | "balances";
@@ -11,20 +13,10 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const live = c.status === "active" && c.lifecycle === "active";
+  const { rules } = useSession();
+  const [closing, setClosing] = useState<{ symbol: string; type: "market" | "limit" } | null>(null);
+  const closingPos = closing ? c.positions.find((x) => x.symbol === closing.symbol) : undefined;
 
-  async function close(symbol: string, side: "long" | "short", size: number) {
-    setBusy(symbol);
-    setErr(null);
-    try {
-      const res = await api.placeOrder(c.id, { symbol, side: side === "long" ? "sell" : "buy", size, type: "market", reduceOnly: true });
-      onState(res.state);
-      if (!res.accepted) setErr(res.reason ?? "Close rejected");
-    } catch (e) {
-      setErr(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  }
   async function cancel(o: Order) {
     setBusy(o.id);
     setErr(null);
@@ -49,6 +41,17 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
 
   return (
     <div className="panel" data-testid="positions-panel">
+      {closing && closingPos && (
+        <ClosePosition
+          key={closing.symbol + closing.type}
+          c={c}
+          p={closingPos}
+          initial={closing.type}
+          fees={{ maker: rules?.fees.makerFeeRate ?? 0.00005, taker: rules?.fees.takerFeeRate ?? 0.00035 }}
+          onClose={() => setClosing(null)}
+          onDone={(st) => (st ? onState(st) : void reload())}
+        />
+      )}
       <div className="tb">
         <button className={tab === "positions" ? "on" : ""} onClick={() => setTab("positions")}>
           Positions<em>{c.positions.length}</em>
@@ -102,9 +105,10 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
                       {p.entryPrice * p.size > 0 && <small className="upnl-pct">{pctSigned(p.unrealizedPnl / (p.entryPrice * p.size), 2)}</small>}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <button className="chip" disabled={!live || busy === p.symbol} onClick={() => void close(p.symbol, p.side, p.size)} data-testid={`close-${p.symbol}`}>
-                        {busy === p.symbol ? "..." : "Close"}
-                      </button>
+                      <span className="pos-acts">
+                        <button className="chip" disabled={!live} onClick={() => setClosing({ symbol: p.symbol, type: "limit" })} data-testid={`limit-close-${p.symbol}`}>Limit</button>
+                        <button className="chip" disabled={!live} onClick={() => setClosing({ symbol: p.symbol, type: "market" })} data-testid={`close-${p.symbol}`}>Market</button>
+                      </span>
                     </td>
                   </tr>
                 );
