@@ -96,6 +96,8 @@ function TerminalView({ id }: { id: string }) {
 function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: ChallengeState) => void; reload: () => Promise<void> }) {
   const { rules } = useSession();
   const [symbol, setSymbol] = useState("SOL");
+  // phones: the order ticket is a bottom sheet opened from the Trade bar
+  const [sheet, setSheet] = useState(false);
   const [picking, setPicking] = useState(false);
   const [tf, setTf] = useState<(typeof CANDLE_TF)[number]>("1h");
   const [reviving, setReviving] = useState(false);
@@ -199,7 +201,19 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
           </div>
           {m && !m.tradable && <div className="banner" style={{ margin: 12 }}>{m.tradableReason ?? "Market closed"}</div>}
         </div>
-        <OrderTicket c={c} m={m} symbol={symbol} rules={rules} onState={onState} />
+        <div className={`tk-wrap${sheet ? " open" : ""}`}>
+          <div className="tk-backdrop" onClick={() => setSheet(false)} />
+          <div className="tk-sheet">
+            <div className="tk-sheet-hd">
+              <b>Trade {symbol}</b>
+              <button type="button" aria-label="Close" onClick={() => setSheet(false)}>×</button>
+            </div>
+            <OrderTicket c={c} m={m} symbol={symbol} rules={rules} onState={(s) => { onState(s); setSheet(false); }} />
+          </div>
+        </div>
+      </div>
+      <div className="t-tradebar">
+        <button type="button" className="btn btn-fire" onClick={() => setSheet(true)} data-testid="mobile-trade">Trade {symbol}</button>
       </div>
       <div className="btm">
         <PositionsPanel c={c} onState={onState} reload={reload} />
