@@ -350,3 +350,22 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
   :root main .filters .seg2::-webkit-scrollbar{display:none}
   :root main .filters .seg2 button{flex:0 0 auto;padding-left:14px;padding-right:14px}
 }
+/* phones: the podium as three compact rows, #1 first */
+@media(max-width:820px){
+  :root main.pg-leaderboard .pod{gap:10px}
+  :root main.pg-leaderboard .pod .pc:nth-child(2){order:-1}
+  :root main.pg-leaderboard .pod .pc{display:grid;grid-template-columns:28px 64px 1fr auto;grid-template-areas:"rk img hn rt" "rk img sub rt";align-items:center;column-gap:12px;text-align:left;padding:12px 16px !important}
+  :root main.pg-leaderboard .pod .pc .rk{position:static;grid-area:rk}
+  :root main.pg-leaderboard .pod .pc .rk b{font-size:22px}
+  :root main.pg-leaderboard .pod .pc > div:nth-child(2){grid-area:img}
+  :root main.pg-leaderboard .pod .pc > div:nth-child(2) > *{width:64px !important;height:64px !important}
+  :root main.pg-leaderboard .pod .pc .hn{grid-area:hn;margin:0;font-size:16px;align-self:end;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  :root main.pg-leaderboard .pod .pc .sub{grid-area:sub;margin:0;align-self:start}
+  :root main.pg-leaderboard .pod .pc .rt{grid-area:rt;margin:0;font-size:24px}
+}
+@media(max-width:820px){
+  :root main.pg-leaderboard .lb :is(th,td):is(:nth-child(3),:nth-child(5),:nth-child(6),:nth-child(7)){display:none}
+  :root main.pg-leaderboard .lb .tbl{min-width:0;width:100%}
+  :root main.pg-leaderboard .lb :is(th,td){padding-left:12px;padding-right:12px}
+  :root main.pg-leaderboard .lb :is(th,td):first-child{width:44px !important}
+}
