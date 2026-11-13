@@ -13,6 +13,7 @@ import { BossImg, KnightImg } from "../components/Art";
 import { BreachChart } from "../components/BreachChart";
 import { Gate, Notice } from "../components/Gate";
 import { useState } from "react";
+import { PageSkeleton } from "../components/Skeleton";
 
 export function Revive() {
   const { id = "" } = useParams();
@@ -50,7 +51,7 @@ function ReviveView({ id }: { id: string }) {
       </Notice>
     );
   }
-  if (!c) return <main><div className="panel gate"><p className="mute">Loading...</p></div></main>;
+  if (!c) return <PageSkeleton kind="cards" />;
 
   const k = knightView(c);
   const spec = rules?.tiers[c.tier];

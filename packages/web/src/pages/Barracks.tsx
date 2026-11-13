@@ -7,6 +7,7 @@ import { LEVELS, artState, knightView, type KnightLevel } from "../lib/knight";
 import { dayLabel, pctSigned, usd } from "../lib/format";
 import { Gate } from "../components/Gate";
 import { KnightImg } from "../components/Art";
+import { PageSkeleton } from "../components/Skeleton";
 
 export function Barracks() {
   return (
@@ -26,7 +27,7 @@ function BarracksView() {
   const shown = cards.filter((k) => matches(k, filter));
   const sel = cards.find((k) => k.c.id === id || k.key === id) ?? shown[0] ?? cards[0];
 
-  if (list.loading) return <main className="pg-barracks"><div className="panel gate"><p className="mute">Loading your knights...</p></div></main>;
+  if (list.loading) return <PageSkeleton kind="cards" />;
   if (cards.length === 0) {
     return (
       <main className="pg-barracks">

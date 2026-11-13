@@ -14,6 +14,7 @@ import { HudTiles } from "../components/Hud";
 import { BattleSlot } from "../components/Battle";
 import { LevelUpCelebration } from "../components/LevelUp";
 import { PriceChart, type ChartOrder, type PriceMark } from "../components/Chart";
+import { ChartLoader } from "../components/ChartLoader";
 import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
 import { MarketFavorites, MarketStats } from "../components/MarketFavorites";
@@ -22,6 +23,7 @@ import { PositionsPanel } from "../components/Positions";
 import { CombatLog } from "../components/CombatLog";
 import { PathToFundedPanel } from "../components/PathToFunded";
 import { Ascension } from "./Ascension";
+import { PageSkeleton } from "../components/Skeleton";
 
 
 export function Terminal() {
@@ -37,7 +39,7 @@ function Pick() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  if (list.loading) return <main><div className="panel gate"><p className="mute">Loading your accounts...</p></div></main>;
+  if (list.loading) return <PageSkeleton kind="terminal" />;
   const all = list.data ?? [];
   const live = all.filter((c) => c.status === "active" && c.lifecycle === "active").sort((a, b) => b.lastActivityAt - a.lastActivityAt);
   const target = live[0] ?? [...all].sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0];
@@ -89,7 +91,7 @@ function TerminalView({ id }: { id: string }) {
   }
   if (!c) {
     const waiting = slow || (st.error !== undefined && isTransient(st.error));
-    return <main><div className="panel gate"><p className="mute" data-testid="challenge-loading">{waiting ? "Market data is slow, retrying..." : "Loading challenge..."}</p></div></main>;
+    return <PageSkeleton kind="terminal" note={waiting ? "Market data is slow, retrying..." : undefined} />;
   }
   if (c.status === "wounded") return <Navigate replace to={`/revive/${c.id}`} />;
   if (c.status === "passed") return <Ascension c={c} onState={st.set} />;
@@ -296,6 +298,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
                 </div>
                 {orderErr && <div className="chart-err" role="alert">{orderErr}</div>}
                 <div className="chart">
+                  <ChartLoader loading={!got} />
                   <PriceChart candles={live} marks={marks} resetKey={histKey} onNeedMore={needMore} orders={chartOrders} onCancelOrder={(id) => void cancelOrder(id)} onMoveOrder={(id, p) => void moveOrder(id, p)} fmt={px} />
                 </div>
               </>

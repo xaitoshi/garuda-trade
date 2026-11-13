@@ -8,6 +8,7 @@ import { pct, shortAddr, usd, usdSigned } from "../lib/format";
 import { explorerTxUrl, notEligibleText, openPayout, payoutStatusText, totalPaid } from "../lib/payout";
 import { Gate } from "../components/Gate";
 import { KnightImg } from "../components/Art";
+import { Sk, SkRows } from "../components/Skeleton";
 
 export function Payouts() {
   return (
@@ -28,6 +29,10 @@ function PayoutsView() {
   const history = usePoll(() => api.payouts(), 5_000, "payouts-history");
   const q = quote.data;
   const all = history.data ?? [];
+  // first load: placeholders, never "you have no funded account" or $0 before the answer is in
+  const pending = list.data === undefined && list.loading;
+  const quotePending = Boolean(funded) && q === undefined && quote.loading;
+  const histPending = history.data === undefined && history.loading;
   const live = funded ? openPayout(all, funded.id) : undefined;
   const split = q?.split ?? rules?.payouts?.split ?? rules?.common.profitSplit ?? 0.8;
   const min = q?.minUsd ?? rules?.payouts?.minUsd ?? rules?.common.minPayoutUsd ?? 20;
@@ -76,9 +81,15 @@ function PayoutsView() {
         <div className="panel acct">
           <div className="ph" style={{ padding: "0 0 12px", border: 0 }}>
             <b>Funded account</b>
-            {funded ? <span className="st funded">Funded</span> : <span className="st dormant">None</span>}
+            {pending ? <Sk w={64} h={22} r={999} /> : funded ? <span className="st funded">Funded</span> : <span className="st dormant">None</span>}
           </div>
-          {funded ? (
+          {pending ? (
+            <div className="sk-acct">
+              <Sk w={150} h={150} r={999} style={{ alignSelf: "center" }} />
+              <Sk w="50%" h={18} style={{ alignSelf: "center" }} />
+              <SkRows n={4} />
+            </div>
+          ) : funded ? (
             <>
               <div className="kn"><KnightImg level={knightView(funded).level} state={artState(funded)} size={170} /></div>
               <div style={{ textAlign: "center", margin: "6px 0 16px" }}>
@@ -105,7 +116,7 @@ function PayoutsView() {
         </div>
         <div className="panel pay">
           <div className="lbl">{live ? "Payout in progress" : "Available to withdraw"}</div>
-          <div className="big" data-testid="owed">{live ? usd(live.amountUsd) : q ? usd(q.traderShare) : "$0"}<span>USDC</span></div>
+          {pending || quotePending ? <div className="big"><Sk w={150} h={44} /></div> : <div className="big" data-testid="owed">{live ? usd(live.amountUsd) : q ? usd(q.traderShare) : "$0"}<span>USDC</span></div>}
           <div className="split"><i style={{ width: `${split * 100}%` }} /><i style={{ width: `${(1 - split) * 100}%` }} /></div>
           <div className="sl"><span><b className="fire">{pct(split, 0)}</b> You</span><span>Garuda <b>{pct(1 - split, 0)}</b></span></div>
           <div className="brk">
@@ -138,7 +149,7 @@ function PayoutsView() {
         </div>
         <div className="panel tre">
           <div className="lbl">Your payouts</div>
-          <div className="v" data-testid="paid-total">{usd(totalPaid(all), 2)}</div>
+          {histPending ? <div className="v"><Sk w={120} h={36} /></div> : <div className="v" data-testid="paid-total">{usd(totalPaid(all), 2)}</div>}
           <div className="sl" style={{ marginBottom: 18 }}><span>Total paid to you</span><span>USDC (devnet)</span></div>
           <div className="kr"><span>Paid</span><b>{all.filter((p) => p.status === "paid").length}</b></div>
           <div className="kr"><span>In progress</span><b>{all.filter((p) => p.status !== "paid" && p.status !== "rejected").length}</b></div>
@@ -152,7 +163,8 @@ function PayoutsView() {
           <table className="tbl" data-testid="payout-history">
             <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Transaction</th><th className="r">Account</th></tr></thead>
             <tbody>
-              {all.length === 0 && <tr><td colSpan={5} className="mute" style={{ textAlign: "center", padding: 28 }}>No payouts yet.</td></tr>}
+              {histPending && [0, 1, 2].map((i) => <tr key={i}><td colSpan={5}><Sk h={16} /></td></tr>)}
+              {!histPending && all.length === 0 && <tr><td colSpan={5} className="mute" style={{ textAlign: "center", padding: 28 }}>No payouts yet.</td></tr>}
               {all.map((p) => {
                 const s = payoutStatusText(p);
                 return (

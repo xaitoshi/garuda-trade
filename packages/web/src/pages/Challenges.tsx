@@ -10,6 +10,7 @@ import { pct, shortAddr, usd } from "../lib/format";
 import type { Rules, TierId, TierSpec } from "../lib/types";
 import { Check, KnightImg, Lock, Logo, Spark } from "../components/Art";
 import { WalletButton } from "../components/TopBar";
+import { PageSkeleton } from "../components/Skeleton";
 
 const TINT: Record<string, string> = { demo: "188,182,184", squire: "217,211,212", knight: "143,133,255", paladin: "90,190,255", ascended: "255,150,30" };
 const PAID: TierId[] = ["squire", "knight", "paladin", "ascended"];
@@ -37,7 +38,7 @@ export function Challenges() {
     if (sel && payRef.current) payRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [sel]);
 
-  if (!rules) return <main><div className="panel gate"><p className="mute">{health ? "Loading rules..." : "Connecting to the Garuda API..."}</p></div></main>;
+  if (!rules) return <PageSkeleton kind="cards" />;
   const tiers = rules.tiers;
   const common = rules.common;
   const chosen = sel && sel !== "demo" ? tiers[sel] : undefined;

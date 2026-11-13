@@ -308,3 +308,14 @@
   :root main.pg-terminal .tk-sheet .inp input:focus,:root main.pg-terminal .tk-sheet .inp input:focus-visible{outline:none}
   :root main.pg-terminal .pos-tbl td.mute{grid-column:1/-1}
 }
+:root main.pg-terminal .cc .chart{position:relative}
+:root .chart-loader{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:var(--neutral-panel);animation:cl-in .2s ease both;transition:opacity .22s ease}
+:root .chart-loader.out{opacity:0}
+:root .chart-loader img{width:34px;height:auto;opacity:.95}
+@keyframes cl-in{from{opacity:0}}
+:root main.pg-terminal .cc .ph{flex-wrap:nowrap}
+:root main.pg-terminal .cc .ph .mkt-stats{flex:1 1 auto}
+:root main.pg-terminal .cc .px{flex:none}
+:root main.pg-terminal .cc .px b{font-family:Inter,sans-serif;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+@media (min-width:821px){:root main.pg-terminal .cc .ph-l{display:flex;flex-wrap:nowrap;align-items:center;min-width:0;flex:1 1 auto}:root main.pg-terminal .cc .ph-l .mkt-stats{min-width:0}:root main.pg-terminal .cc .ph .tf-d{flex:none}}
+:root main.pg-terminal .cc .ph-l .mkt-btn{flex:none}:root main.pg-terminal .cc .ph-l .mkt-name{white-space:nowrap}
