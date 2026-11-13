@@ -55,13 +55,16 @@ const orderBody = z
     symbol: z.string().min(1).max(20),
     side: z.enum(["buy", "sell"]),
     size: z.number().positive().finite(),
-    type: z.enum(["market", "limit"]),
+    type: z.enum(["market", "limit", "stop"]),
     limitPrice: z.number().positive().finite().optional(),
+    triggerPrice: z.number().positive().finite().optional(),
+    stopLoss: z.number().positive().finite().optional(),
     reduceOnly: z.boolean().optional(),
     postOnly: z.boolean().optional(),
     takeProfit: z.number().positive().finite().optional(),
   })
-  .refine((b) => b.type !== "limit" || b.limitPrice !== undefined, { message: "limitPrice is required for limit orders", path: ["limitPrice"] });
+  .refine((b) => b.type !== "limit" || b.limitPrice !== undefined, { message: "limitPrice is required for limit orders", path: ["limitPrice"] })
+  .refine((b) => b.type !== "stop" || b.triggerPrice !== undefined, { message: "triggerPrice is required for stop orders", path: ["triggerPrice"] });
 
 const payoutStatusEnum = z.enum(["pending_approval", "approved", "sending", "submitted", "paid", "rejected", "failed"]);
 const rejectPayoutBody = z.object({ reason: z.string().trim().min(1).max(500) });

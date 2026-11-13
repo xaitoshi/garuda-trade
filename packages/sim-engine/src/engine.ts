@@ -93,6 +93,7 @@ export class SimEngine {
       size: req.size,
       remaining: req.size,
       limitPrice: req.limitPrice,
+      triggerPrice: req.type === "stop" ? req.triggerPrice : undefined,
       reduceOnly: req.reduceOnly ?? false,
       postOnly: req.postOnly ?? false,
       status: "open",
@@ -112,9 +113,25 @@ export class SimEngine {
     if (!(req.size > 0) || !Number.isFinite(req.size)) return reject("invalid_size");
     if (req.type === "limit" && !(req.limitPrice! > 0)) return reject("invalid_limit_price");
     if (req.type === "market" && req.postOnly) return reject("post_only_market");
+    if (req.type === "stop" && !(req.triggerPrice! > 0)) return reject("invalid_trigger_price");
+    if (req.type === "stop" && req.postOnly) return reject("post_only_stop");
 
     const m = mid(book);
     if (m !== undefined) account.setMark(req.symbol, m);
+
+    // A stop rests until the mark reaches its trigger. One that would trigger at once is refused: that is a market order.
+    if (req.type === "stop") {
+      if (m === undefined) return reject("no_liquidity");
+      if (req.side === "buy" ? m >= req.triggerPrice! : m <= req.triggerPrice!) return reject("stop_would_trigger");
+      if (order.reduceOnly) {
+        const pos = account.positionSize(order.symbol);
+        const reducible = req.side === "buy" ? Math.max(0, -pos) : Math.max(0, pos);
+        if (reducible <= EPS) return reject("reduce_only_no_position");
+        order.remaining = Math.min(order.remaining, reducible);
+      }
+      order.updatedAt = now;
+      return { order, fills: [] };
+    }
 
     // reduce-only: clamp to the opposite-direction position.
     if (order.reduceOnly) {
@@ -180,6 +197,23 @@ export class SimEngine {
     if (m !== undefined) account.setMark(book.symbol, m);
     const out: Fill[] = [];
     const used = this.usedOf(account, book);
+    // With no position left, reduce-only orders have nothing to reduce: a TP that filled takes its SL with it.
+    if (Math.abs(account.positionSize(book.symbol)) <= EPS) {
+      for (const o of account.openOrders(book.symbol)) {
+        if (!o.reduceOnly) continue;
+        o.status = "cancelled";
+        o.rejectReason = "reduce_only_no_position";
+        o.remaining = 0;
+        o.updatedAt = now;
+      }
+    }
+    if (m !== undefined) {
+      for (const order of account.openOrders(book.symbol)) {
+        if (order.type !== "stop" || order.triggerPrice === undefined) continue;
+        const hit = order.side === "buy" ? m >= order.triggerPrice : m <= order.triggerPrice;
+        if (hit) out.push(...this.triggerStop(account, order, book, used, now, gate));
+      }
+    }
     for (const order of account.openOrders(book.symbol)) {
       if (order.type !== "limit" || order.limitPrice === undefined) continue;
       const lp = order.limitPrice;
@@ -331,6 +365,43 @@ export class SimEngine {
 
   // ---------------------------------------------------------------- internals
 
+  /** A triggered stop: a market order for what is left, walking the book net of what this account already took. */
+  private triggerStop(account: SimAccount, order: Order, book: L2Book, used: Map<number, number>, now: number, gate?: RestingFillGate): Fill[] {
+    let cap = order.remaining;
+    if (order.reduceOnly) {
+      const pos = account.positionSize(order.symbol);
+      cap = Math.min(cap, order.side === "buy" ? Math.max(0, -pos) : Math.max(0, pos));
+    }
+    let trimmedReason: string | undefined;
+    if (gate && !order.reduceOnly && cap > EPS) {
+      const ref = order.side === "buy" ? book.asks[0]?.[0] : book.bids[0]?.[0];
+      if (ref !== undefined) {
+        const g = gate(order, cap, ref);
+        if (g.size < cap - EPS) trimmedReason = g.reason ?? "gate";
+        cap = Math.max(0, Math.min(cap, g.size));
+      }
+    }
+    const fills: Fill[] = [];
+    let left = cap;
+    for (const [price, size] of order.side === "buy" ? book.asks : book.bids) {
+      if (left <= EPS) break;
+      const take = Math.min(left, Math.max(0, size - (used.get(price) ?? 0)));
+      if (take <= EPS) continue;
+      fills.push(this.applyFill(account, order, take, this.applyLatency(price, order.side), "taker", now, false));
+      used.set(price, (used.get(price) ?? 0) + take);
+      left -= take;
+    }
+    const filled = cap - left;
+    order.remaining = 0; // a triggered stop never rests again: what the book could not take is dropped
+    order.updatedAt = now;
+    if (filled >= order.size - EPS) order.status = "filled";
+    else {
+      order.status = fills.length ? "partially_filled" : "cancelled";
+      order.rejectReason = trimmedReason ?? (cap <= EPS ? "reduce_only_no_position" : "no_liquidity");
+    }
+    return fills;
+  }
+
   private applyLatency(price: number, side: Side): number {
     if (this.latencyBps === 0) return price;
     const f = this.latencyBps / 10_000;
@@ -340,7 +411,7 @@ export class SimEngine {
   private settleOrderStatus(
     order: Order,
     anyFill: boolean,
-    type: "market" | "limit",
+    type: "market" | "limit" | "stop",
     remaining: number,
     now: number,
   ): void {

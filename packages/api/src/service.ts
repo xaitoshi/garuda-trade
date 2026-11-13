@@ -189,12 +189,16 @@ export interface PlaceOrderInput {
   symbol: string;
   side: "buy" | "sell";
   size: number;
-  type: "market" | "limit";
+  type: "market" | "limit" | "stop";
   limitPrice?: number;
+  /** Stop orders: the mark price that triggers them. */
+  triggerPrice?: number;
   reduceOnly?: boolean;
   postOnly?: boolean;
   /** Take-profit for this entry: placed as a reduce-only limit for whatever fills, now or later. */
   takeProfit?: number;
+  /** Stop-loss for this entry: placed as a reduce-only stop for whatever fills, now or later. */
+  stopLoss?: number;
 }
 
 export interface PlaceOrderResult {
@@ -844,14 +848,16 @@ export class ChallengeService {
   }
 
   /**
-   * Entry orders that carry a take-profit: for each new fill, place a reduce-only limit at the TP for the filled size.
-   * Runs for immediate fills (placeOrder) and for resting-order fills (refresh and the streaming path).
+   * Entry orders that carry a take-profit and/or a stop-loss: for each new fill, place a reduce-only limit at the TP
+   * and a reduce-only stop at the SL for the filled size. Runs for immediate fills (placeOrder) and for resting-order
+   * fills (refresh and the streaming path). When either one closes the position the other is cancelled (the engine
+   * drops reduce-only orders on a flat book).
    */
   private attachTakeProfits(ch: Challenge, fills: Fill[]): void {
     const bySide = new Map<string, number>();
     for (const f of fills) {
       const o = ch.account.orders.get(f.orderId);
-      if (!o || o.takeProfit === undefined || o.reduceOnly || f.forced) continue;
+      if (!o || (o.takeProfit === undefined && o.stopLoss === undefined) || o.reduceOnly || f.forced) continue;
       bySide.set(o.id, (bySide.get(o.id) ?? 0) + f.size);
     }
     for (const [orderId, size] of bySide) {
@@ -859,8 +865,12 @@ export class ChallengeService {
       const book = ch.books.get(o.symbol);
       if (!book) continue;
       const ts = fills.find((f) => f.orderId === orderId)!.ts;
-      const tp = this.engine.submit(ch.account, { symbol: o.symbol, side: o.side === "buy" ? "sell" : "buy", size, type: "limit", limitPrice: o.takeProfit, reduceOnly: true }, book, ts);
-      if (tp.fills.length) this.logFills(ch, tp.fills);
+      const exit = o.side === "buy" ? "sell" : "buy";
+      if (o.takeProfit !== undefined) {
+        const tp = this.engine.submit(ch.account, { symbol: o.symbol, side: exit, size, type: "limit", limitPrice: o.takeProfit, reduceOnly: true }, book, ts);
+        if (tp.fills.length) this.logFills(ch, tp.fills);
+      }
+      if (o.stopLoss !== undefined) this.engine.submit(ch.account, { symbol: o.symbol, side: exit, size, type: "stop", triggerPrice: o.stopLoss, reduceOnly: true }, book, ts);
     }
   }
 
@@ -1011,18 +1021,23 @@ export class ChallengeService {
       size: input.size,
       type: input.type,
       limitPrice: input.limitPrice,
+      triggerPrice: input.triggerPrice,
       reduceOnly,
       postOnly: input.postOnly,
     };
+    const entryRef = input.type === "limit" ? input.limitPrice! : input.type === "stop" ? input.triggerPrice! : snap.markPrice;
     if (input.takeProfit !== undefined && !reduceOnly) {
-      const ref = input.type === "limit" ? input.limitPrice! : snap.markPrice;
-      if (input.side === "buy" ? input.takeProfit <= ref : input.takeProfit >= ref) return this.reject(ch, "take_profit_wrong_side");
+      if (input.side === "buy" ? input.takeProfit <= entryRef : input.takeProfit >= entryRef) return this.reject(ch, "take_profit_wrong_side");
+    }
+    if (input.stopLoss !== undefined && !reduceOnly) {
+      if (input.side === "buy" ? input.stopLoss >= entryRef : input.stopLoss <= entryRef) return this.reject(ch, "stop_loss_wrong_side");
     }
     const res = this.engine.submit(ch.account, req, snap.book, t);
     if (res.order.status === "rejected") return this.reject(ch, res.order.rejectReason ?? "rejected");
-    if (input.takeProfit !== undefined && !reduceOnly) {
-      res.order.takeProfit = input.takeProfit;
-      // what filled straight away gets its TP now; later fills get theirs as they happen (attachTakeProfits)
+    if ((input.takeProfit !== undefined || input.stopLoss !== undefined) && !reduceOnly) {
+      if (input.takeProfit !== undefined) res.order.takeProfit = input.takeProfit;
+      if (input.stopLoss !== undefined) res.order.stopLoss = input.stopLoss;
+      // what filled straight away gets its TP / SL now; later fills get theirs as they happen (attachTakeProfits)
       this.attachTakeProfits(ch, res.fills);
     }
 

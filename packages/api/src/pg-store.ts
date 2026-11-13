@@ -321,10 +321,10 @@ async function upsertChallenge(q: Queryable, r: Record<string, unknown>, now: nu
 
 async function upsertOrder(q: Queryable, challengeId: string, o: Order) {
   await q.query(
-    `INSERT INTO orders (challenge_id, id, symbol, side, type, size, remaining, limit_price, reduce_only, post_only, status, reject_reason, created_at, updated_at, take_profit)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `INSERT INTO orders (challenge_id, id, symbol, side, type, size, remaining, limit_price, reduce_only, post_only, status, reject_reason, created_at, updated_at, take_profit, trigger_price, stop_loss)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      ON CONFLICT (challenge_id, id) DO UPDATE SET remaining = EXCLUDED.remaining, status = EXCLUDED.status, reject_reason = EXCLUDED.reject_reason, updated_at = EXCLUDED.updated_at`,
-    [challengeId, o.id, o.symbol, o.side, o.type, o.size, o.remaining, o.limitPrice ?? null, o.reduceOnly, o.postOnly, o.status, o.rejectReason ?? null, o.createdAt, o.updatedAt, o.takeProfit ?? null],
+    [challengeId, o.id, o.symbol, o.side, o.type, o.size, o.remaining, o.limitPrice ?? null, o.reduceOnly, o.postOnly, o.status, o.rejectReason ?? null, o.createdAt, o.updatedAt, o.takeProfit ?? null, o.triggerPrice ?? null, o.stopLoss ?? null],
   );
 }
 
@@ -364,6 +364,8 @@ const rowToOrder = (r: Row): Order => ({
   createdAt: num(r.created_at),
   updatedAt: num(r.updated_at),
   ...(r.take_profit != null ? { takeProfit: num(r.take_profit) } : {}),
+  ...(r.trigger_price != null ? { triggerPrice: num(r.trigger_price) } : {}),
+  ...(r.stop_loss != null ? { stopLoss: num(r.stop_loss) } : {}),
 });
 
 const rowToFill = (r: Row): Fill => ({

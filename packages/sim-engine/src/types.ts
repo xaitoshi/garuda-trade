@@ -1,5 +1,6 @@
 export type Side = "buy" | "sell";
-export type OrderType = "market" | "limit";
+/** "stop" = stop-market: rests until the mark touches `triggerPrice` (buy: at or above, sell: at or below), then fills as a market order. */
+export type OrderType = "market" | "limit" | "stop";
 export type Liquidity = "taker" | "maker";
 
 /** [price, size] in quote / base units, as returned by the Phoenix L2 orderbook. */
@@ -51,6 +52,10 @@ export interface Order {
   updatedAt: number;
   /** Take-profit attached to an entry: on each fill the service places a reduce-only limit here for the filled size. */
   takeProfit?: number;
+  /** Stop orders: the mark price that triggers them. */
+  triggerPrice?: number;
+  /** Stop-loss attached to an entry: on each fill the service places a reduce-only stop here for the filled size. */
+  stopLoss?: number;
 }
 
 export interface Fill {
@@ -92,6 +97,7 @@ export interface OrderRequest {
   size: number;
   type: OrderType;
   limitPrice?: number;
+  triggerPrice?: number;
   reduceOnly?: boolean;
   postOnly?: boolean;
 }
