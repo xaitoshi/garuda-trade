@@ -74,7 +74,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
       {err && <div className="dn note" style={{ padding: "8px 18px" }}>{err}</div>}
       <div className="tbl-scroll">
         {tab === "positions" && (
-          <table>
+          <table className="pos-tbl">
             <thead>
               <tr>
                 <th>Market</th>
@@ -96,20 +96,20 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               {c.positions.map((p) => {
                 const breach = Math.max(0, p.markPrice - (p.side === "long" ? 1 : -1) * (c.risk.bufferRemaining / p.size));
                 return (
-                  <tr key={p.symbol}>
-                    <td>
+                  <tr key={p.symbol} className="pos-row">
+                    <td className="c-mkt">
                       <span className="pos-mkt"><TokenIcon symbol={p.symbol} size={22} /><b>{p.symbol}-PERP</b>{p.leverageCap && <span className="tag">{p.leverageCap}x cap</span>}</span>
                     </td>
-                    <td className={p.side === "long" ? "up" : "dn"}>{p.side === "long" ? "Long" : "Short"}</td>
-                    <td>{num(p.size, 4)}</td>
-                    <td>{px(p.entryPrice)}</td>
-                    <td>{px(p.markPrice)}</td>
-                    <td>{px(breach)}</td>
-                    <td className={p.unrealizedPnl >= 0 ? "up" : "dn"}>
+                    <td data-label="Side" className={p.side === "long" ? "up" : "dn"}>{p.side === "long" ? "Long" : "Short"}</td>
+                    <td data-label="Size">{num(p.size, 4)}</td>
+                    <td data-label="Entry">{px(p.entryPrice)}</td>
+                    <td data-label="Mark">{px(p.markPrice)}</td>
+                    <td data-label="Breach">{px(breach)}</td>
+                    <td data-label="uPnL" className={p.unrealizedPnl >= 0 ? "up" : "dn"}>
                       <b>{usdSigned(p.unrealizedPnl, 2)}</b>
                       {p.entryPrice * p.size > 0 && <small className="upnl-pct">{pctSigned(p.unrealizedPnl / (p.entryPrice * p.size), 2)}</small>}
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="c-acts" style={{ textAlign: "right" }}>
                       <span className="pos-acts">
                         {(() => {
                           const pr = protectionOf(c, p);
@@ -128,14 +128,14 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
               })}
               {c.openOrders.map((o) => (
                 <tr className="sub" key={o.id}>
-                  <td>
+                  <td className="c-mkt">
                     <span className="pos-mkt"><TokenIcon symbol={o.symbol} size={20} />{o.symbol}-PERP <span className="tag">{tag(o)}</span></span>
                   </td>
-                  <td>{o.side === "buy" ? "Buy" : "Sell"}</td>
-                  <td>{num(o.remaining, 4)}</td>
-                  <td>{o.limitPrice ? px(o.limitPrice) : o.triggerPrice ? `at ${px(o.triggerPrice)}` : "-"}</td>
-                  <td colSpan={3}>{o.reduceOnly ? "Reduce-only" : "Limit"}</td>
-                  <td style={{ textAlign: "right" }}>
+                  <td data-label="Side">{o.side === "buy" ? "Buy" : "Sell"}</td>
+                  <td data-label="Size">{num(o.remaining, 4)}</td>
+                  <td data-label={o.type === "stop" ? "Trigger" : "Price"}>{o.limitPrice ? px(o.limitPrice) : o.triggerPrice ? `at ${px(o.triggerPrice)}` : "-"}</td>
+                  <td colSpan={3} className="c-type">{o.reduceOnly ? "Reduce-only" : o.type === "stop" ? "Stop" : "Limit"}</td>
+                  <td className="c-cancel" style={{ textAlign: "right" }}>
                     <button className="linkbtn" disabled={busy === o.id} onClick={() => void cancel(o)}>
                       Cancel
                     </button>
