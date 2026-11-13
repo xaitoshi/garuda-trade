@@ -17,17 +17,32 @@ let onUnauthorized: (() => void) | undefined;
 export const setApiToken = (t: string | undefined) => void (token = t);
 export const setUnauthorizedHandler = (fn: (() => void) | undefined) => void (onUnauthorized = fn);
 
-async function call<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string>; auth?: boolean; okStatuses?: number[] } = {}): Promise<T> {
+/** A read that takes longer than this is abandoned, so a stalled API shows as slow instead of loading forever. */
+export const READ_TIMEOUT_MS = 10_000;
+
+/** Worth retrying quietly: nothing came back (timeout, network) or the API failed on its side (5xx). 4xx are real answers. */
+export const isTransient = (e: unknown): boolean => e instanceof ApiError && (e.status === 0 || e.status >= 500);
+
+async function call<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string>; auth?: boolean; okStatuses?: number[]; timeoutMs?: number } = {}): Promise<T> {
   const headers: Record<string, string> = { ...init.headers };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (init.auth !== false && token) headers.authorization = `Bearer ${token}`;
+  const method = init.method ?? "GET";
+  // Reads time out; writes (orders, payments) are left to finish so a slow answer is never mistaken for a failed write.
+  const timeoutMs = init.timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : undefined);
+  const ctl = timeoutMs ? new AbortController() : undefined;
+  const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : undefined;
   let res: Response;
+  let text: string;
   try {
-    res = await fetch(`${API_URL}${path}`, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
+    res = await fetch(`${API_URL}${path}`, { method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), signal: ctl?.signal });
+    text = await res.text();
   } catch {
+    if (ctl?.signal.aborted) throw new ApiError(0, "timeout", `The Garuda API did not answer within ${Math.round(timeoutMs! / 1000)}s`);
     throw new ApiError(0, "network", "Cannot reach the Garuda API");
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  const text = await res.text();
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : undefined;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, errorText } from "../lib/api";
+import { api, ApiError, errorText, isTransient } from "../lib/api";
 import { POLL } from "../lib/config";
 import { usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
@@ -66,16 +66,28 @@ function Pick() {
   );
 }
 
+/** No challenge state after this long: say the data is slow (polling keeps retrying) instead of a bare loader. */
+const SLOW_MS = 10_000;
+
 function TerminalView({ id }: { id: string }) {
   const st = usePoll(() => api.challenge(id), POLL.stateMs, id);
   const c = st.data;
-  if (st.error instanceof ApiError && !c) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    const t = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(t);
+  }, [id]);
+  if (st.error instanceof ApiError && !c && !isTransient(st.error)) {
     const gone = st.error.status === 404 || st.error.status === 403;
     return <Notice title={gone ? "Challenge not found" : "Cannot load this challenge"} note={gone ? "It does not exist, or it belongs to another wallet." : st.error.message}>
       <Link className="btn btn-ghost" to="/barracks">Back to Barracks</Link>
     </Notice>;
   }
-  if (!c) return <main><div className="panel gate"><p className="mute">Loading challenge...</p></div></main>;
+  if (!c) {
+    const waiting = slow || (st.error !== undefined && isTransient(st.error));
+    return <main><div className="panel gate"><p className="mute" data-testid="challenge-loading">{waiting ? "Market data is slow, retrying..." : "Loading challenge..."}</p></div></main>;
+  }
   if (c.status === "wounded") return <Navigate replace to={`/revive/${c.id}`} />;
   if (c.status === "passed") return <Ascension c={c} onState={st.set} />;
   return <Battle c={c} onState={st.set} reload={st.reload} />;

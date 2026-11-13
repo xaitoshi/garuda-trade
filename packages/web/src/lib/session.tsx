@@ -237,7 +237,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       privyLogin: privy.login,
       paySigner,
       health: health.data,
-      offline: Boolean(health.error) && !health.data,
+      // A health check that only timed out means a slow API, not a missing one: keep the app up while polling retries.
+      offline: Boolean(health.error) && !(health.error instanceof ApiError && health.error.code === "timeout") && !health.data,
       rules: rules.data,
     }),
     [stored, anyAddress, adapterConnected, address, viaPrivy, signingIn, error, signIn, signOut, health.data, health.error, rules.data, open, privy, adapterWallet, paySigner],
