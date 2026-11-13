@@ -29,6 +29,7 @@ export interface Order {
   postOnly: boolean;
   status: string;
   createdAt: number;
+  takeProfit?: number;
 }
 
 export interface CombatEntry {

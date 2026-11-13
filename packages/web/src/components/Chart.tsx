@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import type { Candle } from "../lib/types";
 import { sma } from "../lib/trade";
@@ -10,6 +10,14 @@ export interface PriceMark {
   dashed?: boolean;
 }
 
+/** A resting order drawn on the chart as a tag that can be dragged to a new price or cancelled. */
+export interface ChartOrder {
+  id: string;
+  price: number;
+  label: string;
+  kind: "buy" | "sell" | "tp";
+}
+
 const GREEN = "#3ce362";
 const RED = "#ff4953";
 const t = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
@@ -18,7 +26,17 @@ const t = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
  * `onNeedMore` is called when the user scrolls close to the oldest bar; when the parent then supplies a longer history
  * (older bars prepended) the view stays where it was instead of jumping.
  */
-export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore }: { candles: Candle[]; marks: PriceMark[]; resetKey: string; height?: number; onNeedMore?: () => void }) {
+export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore, orders = [], onCancelOrder, onMoveOrder, fmt = (p: number) => p.toFixed(2) }: {
+  candles: Candle[];
+  marks: PriceMark[];
+  resetKey: string;
+  height?: number;
+  onNeedMore?: () => void;
+  orders?: ChartOrder[];
+  onCancelOrder?: (id: string) => void;
+  onMoveOrder?: (id: string, price: number) => void;
+  fmt?: (p: number) => string;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const cs = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -29,6 +47,64 @@ export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore 
   const first = useRef<number | null>(null);
   const more = useRef(onNeedMore);
   more.current = onNeedMore;
+  // order tags: positioned every frame from the series' price scale, so they follow scrolling and zooming
+  const tags = useRef(new Map<string, HTMLDivElement>());
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const drag = useRef<{ id: string; pointer: number; startY: number; price: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState<{ id: string; price: number } | null>(null);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const s = cs.current;
+      if (s) {
+        for (const o of ordersRef.current) {
+          const el = tags.current.get(o.id);
+          if (!el) continue;
+          const p = drag.current?.id === o.id ? drag.current.price : o.price;
+          const y = s.priceToCoordinate(p);
+          el.style.visibility = y === null ? "hidden" : "visible";
+          if (y !== null) el.style.transform = `translateY(${Math.round(y)}px)`;
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const pointerPrice = (clientY: number) => {
+    const r = host.current?.getBoundingClientRect();
+    const s = cs.current;
+    if (!r || !s) return null;
+    const p = s.coordinateToPrice(clientY - r.top);
+    return p === null ? null : Number(Number(p).toPrecision(6));
+  };
+  const startDrag = (e: React.PointerEvent, o: ChartOrder) => {
+    if (!onMoveOrder || (e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { id: o.id, pointer: e.pointerId, startY: e.clientY, price: o.price, moved: false };
+    chart.current?.applyOptions({ handleScroll: false, handleScale: false });
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return;
+    if (!d.moved && Math.abs(e.clientY - d.startY) < 3) return;
+    const p = pointerPrice(e.clientY);
+    if (p === null || !(p > 0)) return;
+    d.moved = true;
+    d.price = p;
+    setDragging({ id: d.id, price: p });
+  };
+  const endDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return;
+    drag.current = null;
+    chart.current?.applyOptions({ handleScroll: true, handleScale: { mouseWheel: true } });
+    setDragging(null);
+    const o = ordersRef.current.find((x) => x.id === d.id);
+    if (d.moved && o && d.price !== o.price) onMoveOrder?.(d.id, d.price);
+  };
 
   useEffect(() => {
     if (!host.current) return;
@@ -97,5 +173,37 @@ export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore 
       .map((m) => s.createPriceLine({ price: m.price, color: m.color, lineWidth: 1, lineStyle: m.dashed === false ? LineStyle.Solid : LineStyle.Dashed, axisLabelVisible: true, title: m.title }));
   }, [marks, candles.length]);
 
-  return <div ref={host} className="chart-host" style={{ height }} data-testid="price-chart" />;
+  return (
+    <div className="chart-wrap" style={{ position: "relative", height }}>
+      <div ref={host} className="chart-host" style={{ height }} data-testid="price-chart" />
+      {orders.length > 0 && (
+        <div className="chart-orders">
+          {orders.map((o) => (
+            <div
+              key={o.id}
+              ref={(el) => void (el ? tags.current.set(o.id, el) : tags.current.delete(o.id))}
+              className={`co ${o.kind}${dragging?.id === o.id ? " dragging" : ""}${onMoveOrder ? " movable" : ""}`}
+              onPointerDown={(e) => startDrag(e, o)}
+              onPointerMove={moveDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+              title={onMoveOrder ? "Drag to move the order" : undefined}
+              data-testid="chart-order"
+            >
+              <span className="co-tag">
+                {onMoveOrder && <i className="co-grip" aria-hidden />}
+                <span>{o.label}</span>
+                <b>{fmt(dragging?.id === o.id ? dragging.price : o.price)}</b>
+                {onCancelOrder && (
+                  <button type="button" aria-label={`Cancel ${o.label}`} onClick={() => onCancelOrder(o.id)}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+                  </button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

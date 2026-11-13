@@ -6,7 +6,7 @@ import type { ChallengeState, MarketView, Rules } from "../lib/types";
 
 type Tab = "market" | "limit" | "stop";
 
-export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeState; m: MarketView | undefined; symbol: string; rules: Rules | undefined; onState: (s: ChallengeState) => void }) {
+export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: ChallengeState; m: MarketView | undefined; symbol: string; rules: Rules | undefined; onState: (s: ChallengeState) => void; preset?: { price: number; n: number } }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [tab, setTab] = useState<Tab>("market");
   const [sizeStr, setSizeStr] = useState("");
@@ -19,6 +19,13 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
   const [levOpen, setLevOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // a price picked in the order book becomes a limit order at that price
+  useEffect(() => {
+    if (!preset) return;
+    setTab("limit");
+    setLimitStr(String(preset.price));
+  }, [preset]);
 
   useEffect(() => {
     if (!levOpen) return;

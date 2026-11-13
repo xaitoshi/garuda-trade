@@ -5,7 +5,7 @@ import { POLL } from "../lib/config";
 import { useMedia, usePoll } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { applyTick, breachPrice, changePct } from "../lib/trade";
-import { px, pctSigned } from "../lib/format";
+import { num, px, pctSigned } from "../lib/format";
 import { knightView } from "../lib/knight";
 import { CANDLE_TF, TF_MS, TF_BARS } from "../lib/timeframes";
 import type { ChallengeState } from "../lib/types";
@@ -13,7 +13,7 @@ import { Gate, Notice } from "../components/Gate";
 import { HudTiles } from "../components/Hud";
 import { BattleSlot } from "../components/Battle";
 import { LevelUpCelebration } from "../components/LevelUp";
-import { PriceChart, type PriceMark } from "../components/Chart";
+import { PriceChart, type ChartOrder, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
 import { MarketFavorites, MarketStats } from "../components/MarketFavorites";
@@ -139,13 +139,54 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
       out.push({ price: pos.entryPrice, color: "#eeeef3", title: `${pos.side.toUpperCase()} ${pos.size.toFixed(2)} ${symbol}` });
       out.push({ price: breachPrice(pos, c.risk), color: "#ff5f6d", title: "BREACH" });
     }
-    for (const o of c.openOrders) {
-      if (o.symbol !== symbol || !o.limitPrice) continue;
-      const tp = pos && o.reduceOnly && (pos.side === "long" ? o.limitPrice > pos.markPrice : o.limitPrice < pos.markPrice);
-      out.push({ price: o.limitPrice, color: tp ? "#3ddc97" : "#948f90", title: tp ? "TP" : "LMT" });
-    }
     return out;
-  }, [pos, c.openOrders, c.risk, symbol]);
+  }, [pos, c.risk, symbol]);
+
+  // resting orders as draggable tags on the chart (PilotBot style): drag to re-price, x to cancel
+  const chartOrders = useMemo<ChartOrder[]>(
+    () =>
+      c.openOrders
+        .filter((o) => o.symbol === symbol && o.limitPrice)
+        .map((o) => {
+          const tp = Boolean(pos && o.reduceOnly && (pos.side === "long" ? o.limitPrice! > pos.markPrice : o.limitPrice! < pos.markPrice));
+          return { id: o.id, price: o.limitPrice!, kind: tp ? "tp" : o.side, label: `${tp ? "TP" : o.side === "buy" ? "Buy" : "Sell"} ${num(o.remaining, 4)}` };
+        }),
+    [c.openOrders, pos, symbol],
+  );
+  const [orderErr, setOrderErr] = useState<string | null>(null);
+  const cancelOrder = async (id: string) => {
+    setOrderErr(null);
+    try {
+      await api.cancelOrder(c.id, id);
+      await reload();
+    } catch (e) {
+      setOrderErr(errorText(e));
+    }
+  };
+  // re-price = place the same order at the new price, then cancel the old one (so a rejected move keeps the order)
+  const moveOrder = async (id: string, price: number) => {
+    const o = c.openOrders.find((x) => x.id === id);
+    if (!o) return;
+    setOrderErr(null);
+    try {
+      const res = await api.placeOrder(c.id, { symbol: o.symbol, side: o.side, size: o.remaining, type: "limit", limitPrice: price, reduceOnly: o.reduceOnly || undefined, takeProfit: o.takeProfit });
+      if (!res.accepted) {
+        setOrderErr(`Could not move the order: ${(res.reason ?? "rejected").replace(/[_:]/g, " ")}`);
+        return;
+      }
+      await api.cancelOrder(c.id, id);
+      await reload();
+    } catch (e) {
+      setOrderErr(errorText(e));
+    }
+  };
+  const [preset, setPreset] = useState<{ price: number; n: number } | undefined>(undefined);
+  const pickPrice = (p: number) => {
+    // the price as the book shows it (the feed can carry more decimals than the market trades in)
+    const shownPx = Number(px(p).replace(/,/g, ""));
+    setPreset((x) => ({ price: shownPx, n: (x?.n ?? 0) + 1 }));
+    if (mobile) setSheet(true);
+  };
 
   const last = live[live.length - 1];
   const chg = m && live.length ? changePct(live, m.mark, TF_BARS[tf]) : undefined;
@@ -218,7 +259,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
               </div>
             )}
             {mobile && view !== "chart" ? (
-              <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} />
+              <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} onPrice={pickPrice} />
             ) : (
               <>
                 <div className="tf tf-m">
@@ -238,15 +279,16 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
                     </>
                   )}
                 </div>
+                {orderErr && <div className="chart-err" role="alert">{orderErr}</div>}
                 <div className="chart">
-                  <PriceChart candles={live} marks={marks} resetKey={histKey} onNeedMore={needMore} />
+                  <PriceChart candles={live} marks={marks} resetKey={histKey} onNeedMore={needMore} orders={chartOrders} onCancelOrder={(id) => void cancelOrder(id)} onMoveOrder={(id, p) => void moveOrder(id, p)} fmt={px} />
                 </div>
               </>
             )}
           </div>
           {m && !m.tradable && <div className="banner" style={{ margin: 12 }}>{m.tradableReason ?? "Market closed"}</div>}
         </div>
-        {!mobile && <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} />}
+        {!mobile && <BookPanel m={m} symbol={symbol} view={bookView} onView={setBookView} onPrice={pickPrice} />}
         <div className={`tk-wrap${sheet ? " open" : ""}`}>
           <div className="tk-backdrop" onClick={() => setSheet(false)} />
           <div className="tk-sheet">
@@ -254,7 +296,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
               <b>Trade {symbol}</b>
               <button type="button" aria-label="Close" onClick={() => setSheet(false)}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
             </div>
-            <OrderTicket c={c} m={m} symbol={symbol} rules={rules} onState={(s) => { onState(s); setSheet(false); }} />
+            <OrderTicket c={c} m={m} symbol={symbol} rules={rules} preset={preset} onState={(s) => { onState(s); setSheet(false); }} />
           </div>
         </div>
       </div>

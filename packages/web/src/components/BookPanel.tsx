@@ -13,7 +13,7 @@ const clock = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour12:
  * PilotBot's book panel: the order book (asks above the spread, bids below, cumulative depth bars) and the recent
  * trades tape.
  */
-export function BookPanel({ m, symbol, view, onView}: { m: MarketView | undefined; symbol: string; view: BookView; onView: (v: BookView) => void }) {
+export function BookPanel({ m, symbol, view, onView, onPrice }: { m: MarketView | undefined; symbol: string; view: BookView; onView: (v: BookView) => void; onPrice?: (p: number) => void }) {
   const tape = usePoll(() => api.trades(symbol, 40), POLL.marketMs, symbol, view === "trades");
   const asks = (m?.book.asks ?? []).slice(0, ROWS);
   const bids = (m?.book.bids ?? []).slice(0, ROWS);
@@ -22,7 +22,7 @@ export function BookPanel({ m, symbol, view, onView}: { m: MarketView | undefine
   const max = Math.max(a[a.length - 1]?.[2] ?? 0, b[b.length - 1]?.[2] ?? 0) || 1;
   const spread = m?.bestAsk !== undefined && m?.bestBid !== undefined ? m.bestAsk - m.bestBid : undefined;
   const row = (side: "ask" | "bid") => ([p, q, t]: readonly [number, number, number]) => (
-    <div key={`${side}${p}`} className={`bk-row ${side}`} style={{ ["--d" as string]: `${(t / max) * 100}%` }}>
+    <div key={`${side}${p}`} className={`bk-row ${side}${onPrice ? " pick" : ""}`} style={{ ["--d" as string]: `${(t / max) * 100}%` }} onClick={onPrice ? () => onPrice(p) : undefined} title={onPrice ? "Use this price for a limit order" : undefined}>
       <span>{px(p)}</span><span>{qty(q)}</span><span>{qty(t)}</span>
     </div>
   );
