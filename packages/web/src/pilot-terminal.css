@@ -231,21 +231,21 @@
 /* resting orders on the chart: a tag on the left, a dashed line across, drag to re-price, x to cancel */
 :root main .chart-wrap{width:100%;min-width:0}
 :root main .chart-orders{position:absolute;inset:0 64px 26px 0;pointer-events:none;overflow:hidden;z-index:3}
-:root main .co{position:absolute;left:0;right:0;top:0;height:0;--c:#c9cbd2}
-:root main .co.buy{--c:#3ddc97}
-:root main .co.sell{--c:#ff5f6d}
-:root main .co.tp{--c:#f69f45}
-:root main .co::before{content:"";position:absolute;left:0;right:0;top:0;border-top:1px dashed var(--c);opacity:.7}
-:root main .co-tag{position:absolute;left:8px;top:0;transform:translateY(-50%);display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 4px 0 8px;border-radius:6px;
+:root main .chart-orders .co{position:absolute;left:0;right:0;top:0;height:0;--c:#c9cbd2}
+:root main .chart-orders .co.buy{--c:#3ddc97}
+:root main .chart-orders .co.sell{--c:#ff5f6d}
+:root main .chart-orders .co.tp{--c:#f69f45}
+:root main .chart-orders .co::before{content:"";position:absolute;left:0;right:0;top:0;border-top:1px dashed var(--c);opacity:.7}
+:root main .chart-orders .co-tag{position:absolute;left:8px;top:0;transform:translateY(-50%);display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 4px 0 8px;border-radius:6px;
   background:#0d0e10;border:1px solid var(--c);color:var(--c);font-size:11px;font-weight:600;white-space:nowrap;pointer-events:auto;box-shadow:0 4px 14px #000a;user-select:none;touch-action:none}
-:root main .co-tag b{color:#f4f4f5;font-weight:600;font-variant-numeric:tabular-nums}
-:root main .co.movable .co-tag{cursor:ns-resize}
-:root main .co.dragging .co-tag{background:var(--c);color:#0b0b0c}
-:root main .co.dragging .co-tag b{color:#0b0b0c}
-:root main .co.dragging::before{opacity:1;border-top-style:solid}
-:root main .co-grip{width:6px;height:10px;opacity:.7;background:radial-gradient(currentColor 1px,transparent 1.3px) 0 0/3px 3px}
-:root main .co-tag button{display:grid;place-items:center;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
-:root main .co-tag button:hover{background:#ffffff18}
+:root main .chart-orders .co-tag b{color:#f4f4f5;font-weight:600;font-variant-numeric:tabular-nums}
+:root main .chart-orders .co.movable .co-tag{cursor:ns-resize}
+:root main .chart-orders .co.dragging .co-tag{background:var(--c);color:#0b0b0c}
+:root main .chart-orders .co.dragging .co-tag b{color:#0b0b0c}
+:root main .chart-orders .co.dragging::before{opacity:1;border-top-style:solid}
+:root main .chart-orders .co-grip{width:6px;height:10px;opacity:.7;background:radial-gradient(currentColor 1px,transparent 1.3px) 0 0/3px 3px}
+:root main .chart-orders .co-tag button{display:grid;place-items:center;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
+:root main .chart-orders .co-tag button:hover{background:#ffffff18}
 :root main .chart-err{margin:6px 12px 0;padding:8px 10px;border-radius:8px;background:#ff5f6d1a;color:#ff8a94;font-size:12px}
 :root main .bk-row.pick{cursor:pointer}
 :root main .bk-row.pick:hover{background:#ffffff08}
