@@ -146,8 +146,12 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const chartOrders = useMemo<ChartOrder[]>(
     () =>
       c.openOrders
-        .filter((o) => o.symbol === symbol && o.limitPrice)
-        .map((o) => {
+        .filter((o) => o.symbol === symbol && (o.limitPrice || o.triggerPrice))
+        .map((o): ChartOrder => {
+          if (o.type === "stop") {
+            const sl = o.reduceOnly;
+            return { id: o.id, price: o.triggerPrice!, kind: sl ? "sl" : "stop", label: `${sl ? "SL" : o.side === "buy" ? "Buy stop" : "Sell stop"} ${num(o.remaining, 4)}` };
+          }
           const tp = Boolean(pos && o.reduceOnly && (pos.side === "long" ? o.limitPrice! > pos.markPrice : o.limitPrice! < pos.markPrice));
           return { id: o.id, price: o.limitPrice!, kind: tp ? "tp" : o.side, label: `${tp ? "TP" : o.side === "buy" ? "Buy" : "Sell"} ${num(o.remaining, 4)}` };
         }),
@@ -169,7 +173,18 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
     if (!o) return;
     setOrderErr(null);
     try {
-      const res = await api.placeOrder(c.id, { symbol: o.symbol, side: o.side, size: o.remaining, type: "limit", limitPrice: price, reduceOnly: o.reduceOnly || undefined, takeProfit: o.takeProfit });
+      const stop = o.type === "stop";
+      const res = await api.placeOrder(c.id, {
+        symbol: o.symbol,
+        side: o.side,
+        size: o.remaining,
+        type: stop ? "stop" : "limit",
+        limitPrice: stop ? undefined : price,
+        triggerPrice: stop ? price : undefined,
+        reduceOnly: o.reduceOnly || undefined,
+        takeProfit: o.takeProfit,
+        stopLoss: o.stopLoss,
+      });
       if (!res.accepted) {
         setOrderErr(`Could not move the order: ${(res.reason ?? "rejected").replace(/[_:]/g, " ")}`);
         return;

@@ -21,10 +21,12 @@ export interface Order {
   id: string;
   symbol: string;
   side: "buy" | "sell";
-  type: "market" | "limit";
+  type: "market" | "limit" | "stop";
   size: number;
   remaining: number;
   limitPrice?: number;
+  triggerPrice?: number;
+  stopLoss?: number;
   reduceOnly: boolean;
   postOnly: boolean;
   status: string;

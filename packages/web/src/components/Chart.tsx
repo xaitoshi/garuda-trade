@@ -15,7 +15,7 @@ export interface ChartOrder {
   id: string;
   price: number;
   label: string;
-  kind: "buy" | "sell" | "tp";
+  kind: "buy" | "sell" | "tp" | "sl" | "stop";
 }
 
 const GREEN = "#3ce362";
@@ -119,7 +119,16 @@ export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore,
       handleScale: { mouseWheel: true },
       localization: { locale: "en-US" },
     });
-    cs.current = c.addSeries(CandlestickSeries, { upColor: GREEN, downColor: RED, borderUpColor: GREEN, borderDownColor: RED, wickUpColor: GREEN, wickDownColor: RED, priceLineColor: GREEN });
+    cs.current = c.addSeries(CandlestickSeries, {
+      upColor: GREEN, downColor: RED, borderUpColor: GREEN, borderDownColor: RED, wickUpColor: GREEN, wickDownColor: RED, priceLineColor: GREEN,
+      // keep resting orders (TP, SL, stops, limits) in view: the price scale stretches to include them
+      autoscaleInfoProvider: (base: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+        const r = base();
+        const ps = ordersRef.current.map((o) => o.price).filter((x) => x > 0);
+        if (!r || !ps.length) return r;
+        return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, ...ps), maxValue: Math.max(r.priceRange.maxValue, ...ps) } };
+      },
+    });
     vol.current = c.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     c.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     ma.current = c.addSeries(LineSeries, { color: "#ffffff55", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });

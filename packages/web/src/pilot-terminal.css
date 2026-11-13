@@ -279,3 +279,12 @@
 :root .close-foot{display:flex;gap:10px;padding:12px 18px 16px}
 :root .close-foot .btn{flex:1;min-height:42px;border-radius:999px}
 :root main .pos-acts{display:inline-flex;gap:6px;justify-content:flex-end}
+:root main .chart-orders .co.sl{--c:#ff5f6d}
+:root main .chart-orders .co.stop{--c:#bbb4fb}
+:root main .chart-orders .co.sl::before,:root main .chart-orders .co.stop::before{border-top-style:dotted}
+/* position TP / SL dialog */
+:root .prot-row{display:grid;gap:8px;padding-top:4px}
+:root .prot-hd{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:#c9cbd2}
+:root .prot-hd b{font-size:12px;font-weight:600}
+:root .prot-modal .close-pcts button:hover{color:#fff;border-color:#ffffff38}
+:root main .prot-chip.set{font-variant-numeric:tabular-nums}

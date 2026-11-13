@@ -14,6 +14,8 @@ export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: Chall
   const [lev, setLev] = useState(5);
   const [limitStr, setLimitStr] = useState("");
   const [tpStr, setTpStr] = useState("");
+  const [slStr, setSlStr] = useState("");
+  const [trigStr, setTrigStr] = useState("");
   const [reduceOnly, setReduceOnly] = useState(false);
   const [tpOn, setTpOn] = useState(false);
   const [levOpen, setLevOpen] = useState(false);
@@ -39,11 +41,12 @@ export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: Chall
   const mark = m?.mark ?? 0;
   const size = Number(sizeStr) || 0;
   const limit = Number(limitStr) || 0;
-  const entry = tab === "limit" && limit > 0 ? limit : mark;
+  const trigger = Number(trigStr) || 0;
+  const entry = tab === "limit" && limit > 0 ? limit : tab === "stop" && trigger > 0 ? trigger : mark;
   const notional = size * entry;
   const taker = rules?.fees.takerFeeRate ?? 0.00035;
   const maker = rules?.fees.makerFeeRate ?? 0.00005;
-  const fee = notional * (tab === "limit" ? maker : taker);
+  const fee = notional * (tab === "limit" ? maker : taker); // a triggered stop fills as a taker
   const slip = m && size > 0 && tab === "market" ? estSlippagePct(m, side, size) : 0;
   const long = side === "buy";
   const live = c.status === "active" && c.lifecycle === "active";
@@ -75,25 +78,42 @@ export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: Chall
   };
 
   const tp = Number(tpStr) || 0;
+  const sl = Number(slStr) || 0;
   const tpBad = tp > 0 && (long ? tp <= entry : tp >= entry);
+  const slBad = sl > 0 && (long ? sl >= entry : sl <= entry);
   const limitBad = tab === "limit" && !(limit > 0);
+  // a stop waits for the price to come to it: a buy stop above the mark, a sell stop below
+  const stopBad = tab === "stop" && (!(trigger > 0) || (long ? trigger <= mark : trigger >= mark));
   const sizeBad = !(size > 0);
-  const canSubmit = !busy && !dead && !untradable && !sizeBad && !limitBad && !tpBad && tab !== "stop" && Boolean(m);
+  const canSubmit = !busy && !dead && !untradable && !sizeBad && !limitBad && !stopBad && !tpBad && !slBad && Boolean(m);
 
   async function submit() {
     setBusy(true);
     setMsg(null);
     try {
       const withTp = tp > 0 && !tpBad && !reduceOnly;
-      const res = await api.placeOrder(c.id, { symbol, side, size: roundSize(size, mark), type: tab === "limit" ? "limit" : "market", limitPrice: tab === "limit" ? limit : undefined, reduceOnly: reduceOnly || undefined, takeProfit: withTp ? tp : undefined });
+      const withSl = sl > 0 && !slBad && !reduceOnly;
+      const res = await api.placeOrder(c.id, {
+        symbol,
+        side,
+        size: roundSize(size, mark),
+        type: tab,
+        limitPrice: tab === "limit" ? limit : undefined,
+        triggerPrice: tab === "stop" ? trigger : undefined,
+        reduceOnly: reduceOnly || undefined,
+        takeProfit: withTp ? tp : undefined,
+        stopLoss: withSl ? sl : undefined,
+      });
       if (!res.accepted) {
         setMsg({ ok: false, text: reasonText(res.reason) });
       } else {
-        let text = res.fills.length ? `Filled ${num(res.fills.reduce((a, f) => a + f.size, 0), 4)} ${symbol} @ ${px(res.avgPrice ?? mark)}` : "Limit order resting on the book";
-        // the server places the TP (a reduce-only limit) for whatever fills, now or when a resting entry fills later
-        if (withTp) text += res.fills.length ? ` · TP set at ${px(tp)}` : ` · TP ${px(tp)} placed when it fills`;
+        let text = res.fills.length ? `Filled ${num(res.fills.reduce((a, f) => a + f.size, 0), 4)} ${symbol} @ ${px(res.avgPrice ?? mark)}` : tab === "stop" ? `Stop set: triggers at ${px(trigger)}` : "Limit order resting on the book";
+        // the server places the TP (reduce-only limit) and SL (reduce-only stop) for whatever fills, now or later
+        const prot = [withTp && `TP ${px(tp)}`, withSl && `SL ${px(sl)}`].filter(Boolean).join(", ");
+        if (prot) text += res.fills.length ? ` · ${prot} set` : ` · ${prot} placed when it fills`;
         setMsg({ ok: true, text });
         setTpStr("");
+        setSlStr("");
       }
       onState(res.state);
     } catch (e) {
@@ -172,10 +192,17 @@ export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: Chall
             </b>
           </div>
         </div>
-        {tab === "stop" ? (
-          <p className="mute note">Stop orders are not in the simulator yet. Close a position by hand, or rely on the risk engine: it force-closes everything at the daily loss and drawdown limits.</p>
-        ) : (
+        {(
           <>
+            {tab === "stop" && (
+              <label className="inp">
+                <input inputMode="decimal" value={trigStr} placeholder={long ? "Trigger price (above mark)" : "Trigger price (below mark)"} onChange={(e) => setTrigStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="stop-trigger" aria-label="Stop trigger price" />
+                <button type="button" className="inp-btn" onClick={() => m && setTrigStr(String(m.mark))}>
+                  Mark
+                </button>
+              </label>
+            )}
+            {tab === "stop" && trigger > 0 && stopBad && <p className="note dn">A buy stop triggers above the mark, a sell stop below it.</p>}
             {tab === "limit" && (
               <label className="inp">
                 <input inputMode="decimal" value={limitStr} placeholder="Price" onChange={(e) => setLimitStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="limit-price" aria-label="Limit price" />
@@ -232,13 +259,14 @@ export function OrderTicket({ c, m, symbol, rules, onState, preset }: { c: Chall
                   <input inputMode="decimal" value={tpStr} placeholder="TP price" onChange={(e) => setTpStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="tp" aria-label="Take profit price" />
                   <span>$</span>
                 </label>
-                <label className="inp off" title="Stop-loss orders are not supported by the simulator yet">
-                  <input disabled placeholder="SL soon" aria-label="Stop loss price" />
+                <label className="inp">
+                  <input inputMode="decimal" value={slStr} placeholder="SL price" onChange={(e) => setSlStr(e.target.value.replace(/[^0-9.]/g, ""))} data-testid="sl" aria-label="Stop loss price" />
                   <span>$</span>
                 </label>
               </div>
             )}
             {tpBad && <div className="dn note">Take profit must be {long ? "above" : "below"} your entry.</div>}
+            {slBad && <div className="dn note">Stop loss must be {long ? "below" : "above"} your entry.</div>}
           </>
         )}
         <button type="button" className="btn btn-fire tk-submit" disabled={!canSubmit} onClick={() => void submit()} data-testid="submit-order">
@@ -298,6 +326,8 @@ const REASONS: Record<string, string> = {
 const reasonText = (r?: string): string => {
   if (!r) return "Order rejected";
   if (r === "take_profit_wrong_side") return "Take-profit must be above the entry for a long, below it for a short.";
+  if (r === "stop_loss_wrong_side") return "Stop-loss must be below the entry for a long, above it for a short.";
+  if (r === "stop_would_trigger") return "That stop would trigger right away: use a market order.";
   if (r.startsWith("market_closed")) return "This market is closed right now.";
   return REASONS[r] ?? r.replace(/[_:]/g, " ");
 };

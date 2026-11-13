@@ -3,6 +3,7 @@ import { api, errorText } from "../lib/api";
 import type { ChallengeState, Order } from "../lib/types";
 import { TokenIcon } from "./MarketPicker";
 import { ClosePosition } from "./ClosePosition";
+import { ProtectPosition, protectionOf } from "./ProtectPosition";
 import { useSession } from "../lib/session";
 import { clock, num, pctSigned, px, usd, usdSigned } from "../lib/format";
 
@@ -16,6 +17,8 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
   const { rules } = useSession();
   const [closing, setClosing] = useState<{ symbol: string; type: "market" | "limit" } | null>(null);
   const closingPos = closing ? c.positions.find((x) => x.symbol === closing.symbol) : undefined;
+  const [protecting, setProtecting] = useState<string | null>(null);
+  const protectPos = protecting ? c.positions.find((x) => x.symbol === protecting) : undefined;
 
   async function cancel(o: Order) {
     setBusy(o.id);
@@ -32,6 +35,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
 
   const tag = (o: Order): string => {
     const p = c.positions.find((x) => x.symbol === o.symbol);
+    if (o.type === "stop") return o.reduceOnly ? "SL" : "STOP";
     if (o.reduceOnly && p && o.limitPrice) {
       const closes = (p.side === "long") === (o.side === "sell");
       if (closes) return (p.side === "long" ? o.limitPrice > p.markPrice : o.limitPrice < p.markPrice) ? "TP" : "SL";
@@ -52,6 +56,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
           onDone={(st) => (st ? onState(st) : void reload())}
         />
       )}
+      {protectPos && <ProtectPosition key={protectPos.symbol} c={c} p={protectPos} onClose={() => setProtecting(null)} onDone={reload} />}
       <div className="tb">
         <button className={tab === "positions" ? "on" : ""} onClick={() => setTab("positions")}>
           Positions<em>{c.positions.length}</em>
@@ -106,6 +111,14 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <span className="pos-acts">
+                        {(() => {
+                          const pr = protectionOf(c, p);
+                          return (
+                            <button className={`chip prot-chip${pr.tp || pr.sl ? " set" : ""}`} disabled={!live} onClick={() => setProtecting(p.symbol)} data-testid={`tpsl-${p.symbol}`} title="Take profit / stop loss">
+                              {pr.tp || pr.sl ? <>{pr.tp ? <span className="up">{px(pr.tp.limitPrice!)}</span> : "–"} / {pr.sl ? <span className="dn">{px(pr.sl.triggerPrice!)}</span> : "–"}</> : "TP/SL"}
+                            </button>
+                          );
+                        })()}
                         <button className="chip" disabled={!live} onClick={() => setClosing({ symbol: p.symbol, type: "limit" })} data-testid={`limit-close-${p.symbol}`}>Limit</button>
                         <button className="chip" disabled={!live} onClick={() => setClosing({ symbol: p.symbol, type: "market" })} data-testid={`close-${p.symbol}`}>Market</button>
                       </span>
@@ -120,7 +133,7 @@ export function PositionsPanel({ c, onState, reload }: { c: ChallengeState; onSt
                   </td>
                   <td>{o.side === "buy" ? "Buy" : "Sell"}</td>
                   <td>{num(o.remaining, 4)}</td>
-                  <td>{o.limitPrice ? px(o.limitPrice) : "-"}</td>
+                  <td>{o.limitPrice ? px(o.limitPrice) : o.triggerPrice ? `at ${px(o.triggerPrice)}` : "-"}</td>
                   <td colSpan={3}>{o.reduceOnly ? "Reduce-only" : "Limit"}</td>
                   <td style={{ textAlign: "right" }}>
                     <button className="linkbtn" disabled={busy === o.id} onClick={() => void cancel(o)}>
