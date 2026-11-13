@@ -15,6 +15,7 @@ import { LevelUpCelebration } from "../components/LevelUp";
 import { PriceChart, type PriceMark } from "../components/Chart";
 import { OrderTicket } from "../components/OrderTicket";
 import { MarketButton, MarketPicker } from "../components/MarketPicker";
+import { MarketFavorites, MarketStats } from "../components/MarketFavorites";
 import { PositionsPanel } from "../components/Positions";
 import { CombatLog } from "../components/CombatLog";
 import { PathToFundedPanel } from "../components/PathToFunded";
@@ -165,6 +166,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
       <PathToFundedPanel c={c} />
       <div className="t-grid">
         <div className="panel cc">
+          <MarketFavorites symbol={symbol} markets={(rules?.markets ?? []).map((x) => x.symbol)} onPick={setSymbol} />
           <div className="ph">
             <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
               <MarketButton symbol={symbol} maxLeverage={m?.maxLeverage ?? rules?.markets.find((x) => x.symbol === symbol)?.maxLeverage} onOpen={() => setPicking(true)} />
@@ -173,6 +175,7 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
                 <b data-testid="mark">{m ? px(m.mark) : "..."}</b>
                 {chg !== undefined && <span className={`${chg >= 0 ? "up" : "dn"} mono`} style={{ fontSize: 12 }}>{pctSigned(chg, 2)}</span>}
               </div>
+              <MarketStats m={m} />
             </div>
             <div className="tf">
               {CANDLE_TF.map((t) => (
