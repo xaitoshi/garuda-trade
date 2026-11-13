@@ -58,6 +58,22 @@ export class SimEngine {
   private readonly latencyBps: number;
   private readonly makerFillRatio: number;
   private readonly forceHaircutBps: number;
+  /**
+   * Liquidity an account already took from a book snapshot, per price level. One snapshot's depth can be used once:
+   * splitting a big order into many small ones, or several resting orders on one side, cannot each fill against the
+   * full untouched book. A new snapshot (a new L2Book object) starts fresh.
+   */
+  private readonly taken = new WeakMap<SimAccount, Map<string, { book: L2Book; used: Map<number, number> }>>();
+
+  private usedOf(account: SimAccount, book: L2Book): Map<number, number> {
+    let bySym = this.taken.get(account);
+    if (!bySym) this.taken.set(account, (bySym = new Map()));
+    const cur = bySym.get(book.symbol);
+    if (cur && cur.book === book) return cur.used;
+    const used = new Map<number, number>();
+    bySym.set(book.symbol, { book, used });
+    return used;
+  }
 
   constructor(opts: EngineOptions = {}) {
     this.fees = opts.fees ?? PHOENIX_FEES;
@@ -118,13 +134,14 @@ export class SimEngine {
       if (best !== undefined && crosses(best)) return reject("post_only_would_cross");
     }
 
-    // Walk the book.
+    // Walk the book (net of liquidity this account already took from this snapshot).
+    const used = this.usedOf(account, book);
     const fills: Fill[] = [];
     let remaining = order.remaining;
     for (const [price, size] of levels) {
       if (remaining <= EPS) break;
       if (!crosses(price)) break;
-      const take = Math.min(remaining, size);
+      const take = Math.min(remaining, Math.max(0, size - (used.get(price) ?? 0)));
       if (take <= EPS) continue;
       const slipped = this.applyLatency(price, req.side);
       // A limit order never fills worse than its limit even with the latency penalty.
@@ -135,6 +152,7 @@ export class SimEngine {
             : Math.max(slipped, req.limitPrice!)
           : slipped;
       fills.push(this.applyFill(account, order, take, px, "taker", now, false));
+      used.set(price, (used.get(price) ?? 0) + take);
       remaining -= take;
     }
     order.remaining = remaining;
@@ -161,6 +179,7 @@ export class SimEngine {
     const m = mid(book);
     if (m !== undefined) account.setMark(book.symbol, m);
     const out: Fill[] = [];
+    const used = this.usedOf(account, book);
     for (const order of account.openOrders(book.symbol)) {
       if (order.type !== "limit" || order.limitPrice === undefined) continue;
       const lp = order.limitPrice;
@@ -169,7 +188,7 @@ export class SimEngine {
       for (const [price, size] of levels) {
         const ok = order.side === "buy" ? price <= lp + EPS : price >= lp - EPS;
         if (!ok) break;
-        avail += size;
+        avail += Math.max(0, size - (used.get(price) ?? 0));
       }
       if (avail <= EPS) continue;
 
@@ -197,6 +216,16 @@ export class SimEngine {
       if (take > EPS) {
         out.push(this.applyFill(account, order, take, lp, "maker", now, false));
         order.remaining -= take;
+        // consume the crossed levels, best first, so the next resting order sees what is left
+        let left = take / (this.makerFillRatio || 1);
+        for (const [price, size] of levels) {
+          if (left <= EPS) break;
+          if (order.side === "buy" ? price > lp + EPS : price < lp - EPS) break;
+          const free = Math.max(0, size - (used.get(price) ?? 0));
+          const t = Math.min(free, left);
+          if (t > 0) used.set(price, (used.get(price) ?? 0) + t);
+          left -= t;
+        }
       }
       if (trimmedReason) {
         // Fill-time rule hit: whatever the gate refused is cancelled, the order does not keep resting.
@@ -242,9 +271,12 @@ export class SimEngine {
     return payment;
   }
 
-  /** Start the funding clock for a symbol (called when a position is first opened). */
+  /**
+   * Start the funding clock for a symbol (called whenever a position opens from flat). Always restarts it: a clock left
+   * over from an earlier position would bill the new position for the hours the book was flat.
+   */
   startFundingClock(account: SimAccount, symbol: string, now: number): void {
-    if (!account.fundingAccruedTo.has(symbol)) account.fundingAccruedTo.set(symbol, now);
+    account.fundingAccruedTo.set(symbol, now);
   }
 
   // --------------------------------------------------------------- close-out

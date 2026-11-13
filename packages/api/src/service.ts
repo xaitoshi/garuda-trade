@@ -70,6 +70,28 @@ import {
 export type { Challenge, ChallengeStore } from "./store.js";
 export { InMemoryChallengeStore } from "./store.js";
 
+/**
+ * Average price an order of `size` would get walking `levels` (best first). A limit order only takes levels at or
+ * better than its limit; whatever cannot fill now is priced at the limit (it rests there). A market order prices any
+ * unfillable rest at the last level it reached. Undefined when the side is empty and there is no limit.
+ */
+function estimateFillPrice(levels: readonly (readonly [number, number])[], size: number, side: "buy" | "sell", limit?: number): number | undefined {
+  let left = size;
+  let cost = 0;
+  let last: number | undefined;
+  for (const [p, q] of levels) {
+    if (left <= 0) break;
+    if (limit !== undefined && (side === "buy" ? p > limit : p < limit)) break;
+    const t = Math.min(left, q);
+    cost += t * p;
+    left -= t;
+    last = p;
+  }
+  const restPx = limit ?? last;
+  if (restPx === undefined) return undefined;
+  return (cost + left * restPx) / size;
+}
+
 export class ServiceError extends Error {
   constructor(
     readonly status: number,
@@ -856,6 +878,8 @@ export class ChallengeService {
     if (events.some((e) => e.type === "pass")) {
       combat.push({ ts: t, kind: "dawn", text: `${ch.knight} may now claim a funded account: verify identity, then a risk review of about one business day` });
       ch.combatLog.push(combat[combat.length - 1]!);
+      // the challenge is over: resting orders can never fill now, so they are cancelled rather than left hanging
+      for (const o of ch.account.openOrders()) this.engine.cancel(ch.account, o.id, t);
     }
     if (events.some((e) => e.type === "breach")) {
       const forced = this.engine.closeAll(ch.account, ch.books, t);
@@ -944,8 +968,13 @@ export class ChallengeService {
       if (depth < CIRCUIT_BREAKER.minSideDepthUsd) return this.reject(ch, "circuit_breaker:depth");
     }
 
+    // Check the leverage against equity right AFTER the fill: a taker order walks the book (slippage from the mark)
+    // and pays the taker fee, both of which come out of equity.
+    const fillPx = estimateFillPrice(input.side === "buy" ? snap.book.asks : snap.book.bids, input.size, input.side, input.type === "limit" ? input.limitPrice : undefined) ?? snap.markPrice;
+    const sgn = input.side === "buy" ? 1 : -1;
+    const equityAfter = ch.account.equity() - sgn * (fillPx - snap.markPrice) * input.size - input.size * fillPx * this.engine.fees.takerFeeRate;
     const lev = checkOrderLeverage({
-      equity: ch.account.equity(),
+      equity: reduceOnly ? ch.account.equity() : equityAfter,
       positions: this.legs(ch),
       order: { symbol, side: input.side, size: input.size, markPrice: snap.markPrice, reduceOnly },
     });
@@ -1309,7 +1338,7 @@ export class ChallengeService {
   private applySweep(ch: Challenge, payoutId: string, sweepUsd: number, t: number): boolean {
     const applied = ch.account.applyAdjustment({ id: `payout_sweep:${payoutId}`, kind: "payout_sweep", amount: -sweepUsd, ref: payoutId, ts: t });
     if (!applied) return false;
-    ch.risk.rebaseAfterPayout(ch.account.balance, ch.account.equity(), t);
+    ch.risk.rebaseAfterPayout(ch.account.balance, ch.account.equity(), t, sweepUsd);
     ch.combatLog.push({ ts: t, kind: "tribute", text: `${ch.knight} pays tribute: ${usd(sweepUsd)} of profit swept, balance back to ${usd(ch.account.startingBalance)}` });
     return true;
   }
@@ -1337,9 +1366,10 @@ export class ChallengeService {
     return this.mutate(ch, async () => {
       if (!ch.account.hasAdjustment(`payout_sweep:${payoutId}`)) return false;
       const t = this.now();
+      const sweptAt = ch.account.adjustments.find((a) => a.id === `payout_sweep:${payoutId}`)?.ts ?? t;
       const applied = ch.account.applyAdjustment({ id: `payout_reversal:${payoutId}`, kind: "payout_reversal", amount: sweepUsd, ref: payoutId, ts: t });
       if (!applied) return false;
-      ch.risk.syncFinal(ch.account.balance, ch.account.equity(), t);
+      ch.risk.restoreAfterReversal(ch.account.balance, ch.account.equity(), t, sweepUsd, sweptAt);
       ch.combatLog.push({ ts: t, kind: "tribute", text: `${ch.knight}'s payout is declined: ${usd(sweepUsd)} returns to the balance` });
       return true;
     });
@@ -1390,7 +1420,7 @@ export class ChallengeService {
    * would push the wallet's live funded accounts over the $300,000 aggregate cap is held until there is room.
    */
   private async maybeLevelUp(ch: Challenge, t: number): Promise<boolean> {
-    if (ch.stage !== "funded" || !isScalingTier(ch.tier) || ch.risk.status !== "active" || ch.lifecycle === TERMINAL_LIFECYCLE) return false;
+    if (ch.stage !== "funded" || !isScalingTier(ch.tier) || ch.risk.status !== "active" || ch.lifecycle === TERMINAL_LIFECYCLE || ch.lifecycle === "dormant") return false;
     if (ch.account.positions.size > 0) return false;
     const sc = (ch.scaling ??= defaultScaling(ch.createdAt));
     const p = this.levelProgressOf(ch);

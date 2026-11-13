@@ -139,7 +139,8 @@ export class RiskMonitor {
   }
 
   get dailyFloor(): number {
-    return this.s.startOfDayBalance - this.dailyLossLimit;
+    // whole cents, like the drawdown floor and the target: fees leave fractions of a cent in the balance
+    return cents(this.s.startOfDayBalance - this.dailyLossLimit);
   }
 
   get effectiveFloor(): number {
@@ -255,12 +256,16 @@ export class RiskMonitor {
 
   /**
    * A payout swept profit out of the balance (rulebook section 11: the balance resets to the starting balance). The
-   * sweep is not a trading loss, so the daily-loss baseline must not treat it as one: start-of-day balance drops to the
-   * post-payout balance when that is lower. The static drawdown floor never moves. Call after the day has rolled
-   * (evaluate first), on a flat book.
+   * sweep is not a trading loss, and it must not change today's allowance either way:
+   * - a loss already taken today stays counted: the baseline drops by the swept amount, not to the post-payout balance
+   *   (that would forgive the loss);
+   * - profit made today and then paid out is gone, so it is no longer a cushion: the baseline is never below the
+   *   post-payout balance (otherwise the trader could lose the paid-out profit again, out of the firm's money).
+   * So: max(start of day - sweep, post-payout balance). The static drawdown floor never moves. On a flat book.
    */
-  rebaseAfterPayout(balance: number, equity: number, now: number): void {
-    this.s.startOfDayBalance = Math.min(this.s.startOfDayBalance, balance);
+  rebaseAfterPayout(balance: number, equity: number, now: number, sweepUsd: number): void {
+    this.rollDayQuiet(now);
+    this.s.startOfDayBalance = cents(Math.max(this.s.startOfDayBalance - sweepUsd, balance));
     this.s.warned = { daily_loss: 0, max_drawdown: 0 };
     this.record(balance, equity, now);
   }
@@ -272,10 +277,30 @@ export class RiskMonitor {
    * Warnings re-arm. Call on a flat book.
    */
   rescale(newSize: number, balance: number, equity: number, now: number): void {
+    this.rollDayQuiet(now);
+    // the level-up adds the size step to the balance; the baseline moves by the same step, so a loss already taken
+    // today still counts (resetting it to the balance would forgive it)
+    const step = newSize - this.limits.startingBalance;
     this.limits = { ...this.limits, startingBalance: newSize };
-    this.s.startOfDayBalance = balance;
+    this.s.startOfDayBalance = cents(this.s.startOfDayBalance + step);
     this.s.warned = { daily_loss: 0, max_drawdown: 0 };
     this.record(balance, equity, now);
+  }
+
+  /**
+   * A payout was declined and its sweep returned to the balance. When the sweep happened today the baseline moved down
+   * with it, so it moves back up by the same amount (on a day that was up this can end slightly above the original
+   * baseline: stricter, never looser); a sweep from an earlier day is already part of today's baseline.
+   */
+  restoreAfterReversal(balance: number, equity: number, now: number, sweepUsd: number, sweptAt: number): void {
+    this.rollDayQuiet(now);
+    if (utcDayKey(sweptAt) === this.s.dayKey) this.s.startOfDayBalance = cents(this.s.startOfDayBalance + sweepUsd);
+    this.record(balance, equity, now);
+  }
+
+  /** Roll the day if needed without emitting events (used by ledger adjustments that land on a new day). */
+  private rollDayQuiet(ts: number): void {
+    this.rollDay(ts, []);
   }
 
   /** Record the latest balance/equity without evaluating rules (used after forced close-outs). Works in any state. */
