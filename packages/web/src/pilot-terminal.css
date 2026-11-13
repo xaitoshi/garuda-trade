@@ -211,3 +211,14 @@
 :root .mkt-tools .mkt-search{width:100%;min-width:0;box-sizing:border-box;flex:1 1 auto}
 @media(max-width:820px){:root .mkt-tools .mkt-search{flex:none;height:46px}:root .mkt-groups{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:100%}:root .mkt-groups button{font-size:14px;padding:10px 6px 13px}}
 @media(max-width:820px){:root .mkt-row{white-space:nowrap}:root .mkt-row b{white-space:nowrap}:root .mkt-table td,:root .mkt-table th{padding-left:6px;padding-right:6px}}
+/* phones: PilotBot spacing - 6px side gutters, 8px corners on terminal cards */
+@media(max-width:820px){
+  :root main.pg-terminal{padding:8px 6px 0;gap:6px}
+  :root main.pg-terminal .cc{gap:6px}
+  :root main.pg-terminal :is(.panel,.hud,.cc>.cc-strip,.cc>.cc-body){border-radius:8px}
+  :root main.pg-terminal .tk-wrap.open .tk-sheet{border-radius:12px 12px 0 0}
+  :root .t-tradebar{left:max(6px,env(safe-area-inset-left));right:max(6px,env(safe-area-inset-right))}
+  :root .t-tradebar .btn{border-radius:8px}
+  :root main.pg-terminal .mkt-favs{padding:0 10px}
+  :root main.pg-terminal .cc .ph{padding:10px}
+}
