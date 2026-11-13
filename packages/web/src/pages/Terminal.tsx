@@ -219,10 +219,6 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
                       <span>C {px(last.close)}</span>
                     </>
                   )}
-                  <span className="src" title={m ? `Book source: ${m.source}` : ""}>
-                    {candles.data ? (candles.data.source === "synthetic" ? "synthetic candles" : "live candles") : ""}
-                    {m && ` · book ${m.source}`}
-                  </span>
                 </div>
                 <div className="chart">
                   <PriceChart candles={live} marks={marks} resetKey={`${symbol}:${tf}`} />
