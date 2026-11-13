@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, errorText, isTransient } from "../lib/api";
 import { POLL } from "../lib/config";
@@ -114,15 +114,15 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
   const [depth, setDepth] = useState({ key: "", bars: 200, done: false });
   const histKey = `${symbol}:${tf}`;
   const bars = depth.key === histKey ? depth.bars : 200;
-  const candles = usePoll(() => api.candles(symbol, tf, bars), POLL.chartMs, `${histKey}:${bars}`);
-  const lastCandles = useRef<typeof candles.data>(undefined);
-  if (candles.data) lastCandles.current = candles.data;
-  const shown = candles.data ?? (depth.key === histKey ? lastCandles.current : undefined);
+  // each answer remembers what it was asked for, so a stale answer is never mistaken for "no more history"
+  const candles = usePoll(async () => ({ key: histKey, bars, r: await api.candles(symbol, tf, bars) }), POLL.chartMs, `${histKey}:${bars}`);
+  const got = candles.data?.key === histKey ? candles.data : undefined;
+  const shown = got?.r;
   useEffect(() => {
-    if (candles.data && depth.key === histKey && candles.data.candles.length < bars - 5) setDepth((d) => ({ ...d, done: true }));
-  }, [candles.data, bars, depth.key, histKey]);
+    if (got && got.bars === bars && depth.key === histKey && got.r.candles.length < bars - 5) setDepth((d) => ({ ...d, done: true }));
+  }, [got, bars, depth.key, histKey]);
   const needMore = () => {
-    if (candles.loading) return;
+    if (!got || got.bars !== bars) return; // the last request is still on its way
     setDepth((d) => {
       const cur = d.key === histKey ? d : { key: histKey, bars: 200, done: false };
       if (cur.done || cur.bars >= 1000) return cur;
@@ -186,7 +186,6 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
         <BattleSlot c={c} symbol={symbol} />
         <HudTiles c={c} />
       </div>
-      <PathToFundedPanel c={c} />
       <div className="t-grid">
         <div className="panel cc" data-view={view}>
           <div className="cc-strip">
@@ -266,6 +265,8 @@ function Battle({ c, onState, reload }: { c: ChallengeState; onState: (s: Challe
         <PositionsPanel c={c} onState={onState} reload={reload} />
         <CombatLog entries={c.combatLog} />
       </div>
+      {/* the pass checklist sits below the trading area: it is reference, not something to watch while trading */}
+      <PathToFundedPanel c={c} />
     </main>
   );
 }

@@ -64,8 +64,9 @@ export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore 
     if (!cs.current || !vol.current || !ma.current || candles.length === 0) return;
     // older bars were prepended: shift the view by as many bars so it does not jump
     const ts = chart.current?.timeScale();
-    const view = ts?.getVisibleLogicalRange();
-    const added = fitted.current === resetKey && first.current !== null ? candles.findIndex((k) => k.time === first.current) : 0;
+    // keep the same stretch of time on screen when older bars arrive
+    const grew = fitted.current === resetKey && first.current !== null && candles[0]!.time < first.current;
+    const view = grew ? ts?.getVisibleRange() : null;
     first.current = candles[0]!.time;
     cs.current.setData(candles.map((k) => ({ time: t(k.time), open: k.open, high: k.high, low: k.low, close: k.close })));
     vol.current.setData(candles.map((k) => ({ time: t(k.time), value: k.volume, color: k.close >= k.open ? "rgba(60,227,98,.28)" : "rgba(255,73,83,.28)" })));
@@ -76,9 +77,15 @@ export function PriceChart({ candles, marks, resetKey, height = 440, onNeedMore 
       if (n > 130) ts?.setVisibleLogicalRange({ from: n - 120, to: n + 2 });
       else ts?.fitContent();
       fitted.current = resetKey;
-    } else if (added > 0 && view) {
-      ts?.setVisibleLogicalRange({ from: view.from + added, to: view.to + added });
+    } else if (view) {
+      ts?.setVisibleRange(view);
     }
+    // still parked at the oldest bar (the user scrolled past it while this batch loaded): ask for the next one
+    const t0 = setTimeout(() => {
+      const r = chart.current?.timeScale().getVisibleLogicalRange();
+      if (r && r.from < 10) more.current?.();
+    }, 50);
+    return () => clearTimeout(t0);
   }, [candles, resetKey]);
 
   useEffect(() => {
