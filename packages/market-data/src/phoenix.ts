@@ -54,6 +54,10 @@ export class PhoenixSdkProvider implements MarketDataProvider {
     this.client = createPhoenixClient({
       apiUrl: opts.apiUrl ?? process.env.PHOENIX_API_URL ?? "https://perp-api.phoenix.trade",
       rpcUrl: opts.rpcUrl ?? process.env.PHOENIX_RPC_URL ?? "https://api.mainnet-beta.solana.com",
+      // fail fast instead of hanging a chart for a minute: the caching layer serves the last good value meanwhile
+      timeout: 8_000,
+      rateLimitRetry: { maxRetries: 1, maxTotalWaitMs: 2_000 },
+      rateLimitCooldown: { maxDelayMs: 5_000 },
     });
     this.ttl = opts.marketsTtlMs ?? 60_000;
     this.maxLevels = opts.maxLevels ?? 100;

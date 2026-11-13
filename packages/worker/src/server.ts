@@ -36,7 +36,7 @@ import { DEFAULT_ART_DIR, HttpRpc, MetaplexCoreKnights, SolanaTreasuryPayout, So
 import { EarlyRpc, MAINNET_USDC_MINT, MetaplexEarlyMinter, assertEarlyCluster, keypairFromSecret, verifyUsdcPayment, type EarlyCluster } from "@garuda/chain";
 import { openDb } from "@garuda/db";
 import { payoutPolicyFromEnv } from "@garuda/risk-engine";
-import { PhoenixSdkProvider, PollingFeed, ReplayProvider, loadRecordedMarkets, type MarketDataProvider } from "@garuda/market-data";
+import { CachedProvider, PhoenixSdkProvider, PollingFeed, ReplayProvider, loadRecordedMarkets, type MarketDataProvider } from "@garuda/market-data";
 import { InMemoryRoutingStore, PgRoutingStore, createRouterFromEnv, type PhoenixRouter, type RoutingStore } from "@garuda/router";
 import { RiskWorker } from "./worker.js";
 
@@ -59,6 +59,8 @@ if (!(await market.ping())) {
   console.warn("[garuda] Phoenix unreachable, falling back to RECORDED books (replay). Prices will not move.");
   market = new ReplayProvider(loadRecordedMarkets());
 }
+// one shared, de-duplicated upstream for the worker and every HTTP caller (Phoenix rate-limits per IP)
+market = new CachedProvider(market);
 
 let store: ChallengeStore = new InMemoryChallengeStore();
 let authStore: AuthStore = new InMemoryAuthStore();
