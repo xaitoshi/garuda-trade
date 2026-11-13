@@ -369,3 +369,16 @@ svg text,svg text.mono,svg text.ax{font-family:Inter,sans-serif}
   :root main.pg-leaderboard .lb :is(th,td){padding-left:12px;padding-right:12px}
   :root main.pg-leaderboard .lb :is(th,td):first-child{width:44px !important}
 }
+/* barracks on phones: the four counts as a 2x2 block, filters scroll sideways, one card per row */
+@media(max-width:820px){
+  :root main.pg-barracks .hd{flex-direction:column;align-items:stretch;gap:18px}
+  :root main.pg-barracks .sum{display:grid;grid-template-columns:1fr 1fr;row-gap:16px;width:100%}
+  :root main.pg-barracks .sum div{padding:4px 16px;min-width:0}
+  :root main.pg-barracks .sum div:nth-child(odd){background-image:none;padding-left:0}
+  :root main.pg-barracks .sum b{font-size:34px}
+  :root main.pg-barracks .sum span{font-size:12px;margin-top:6px}
+  :root main.pg-barracks .flt{overflow-x:auto;scrollbar-width:none;max-width:100%}
+  :root main.pg-barracks .flt::-webkit-scrollbar{display:none}
+  :root main.pg-barracks .flt .chip{flex:none}
+  :root main.pg-barracks .grid{grid-template-columns:1fr}
+}
