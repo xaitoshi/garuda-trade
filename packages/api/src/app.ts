@@ -59,6 +59,7 @@ const orderBody = z
     limitPrice: z.number().positive().finite().optional(),
     reduceOnly: z.boolean().optional(),
     postOnly: z.boolean().optional(),
+    takeProfit: z.number().positive().finite().optional(),
   })
   .refine((b) => b.type !== "limit" || b.limitPrice !== undefined, { message: "limitPrice is required for limit orders", path: ["limitPrice"] });
 

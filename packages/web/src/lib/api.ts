@@ -76,7 +76,7 @@ export const api = {
   createFunded: (tier: TierId, knightAsset?: string, wallet?: string) => post<ChallengeState>("/challenges", { tier, stage: "funded", knightAsset, wallet }),
   /** Path to Funded: claim the funded account on a passed challenge (then identity check and risk review). */
   claimFunded: (id: string) => post<ChallengeState>(`/challenges/${id}/claim`),
-  placeOrder: (id: string, o: { symbol: string; side: "buy" | "sell"; size: number; type: "market" | "limit"; limitPrice?: number; reduceOnly?: boolean }) =>
+  placeOrder: (id: string, o: { symbol: string; side: "buy" | "sell"; size: number; type: "market" | "limit"; limitPrice?: number; reduceOnly?: boolean; takeProfit?: number }) =>
     post<PlaceOrderResult>(`/challenges/${id}/orders`, o, undefined, [422]),
   reactivate: (id: string) => post<ChallengeState>(`/challenges/${id}/reactivate`),
   cancelOrder: (id: string, orderId: string) => call<unknown>(`/challenges/${id}/orders/${orderId}`, { method: "DELETE" }),

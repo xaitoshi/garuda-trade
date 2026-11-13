@@ -193,6 +193,8 @@ export interface PlaceOrderInput {
   limitPrice?: number;
   reduceOnly?: boolean;
   postOnly?: boolean;
+  /** Take-profit for this entry: placed as a reduce-only limit for whatever fills, now or later. */
+  takeProfit?: number;
 }
 
 export interface PlaceOrderResult {
@@ -773,6 +775,7 @@ export class ChallengeService {
       newFills.push(...this.applySnapshot(ch, snap, t));
     }
     this.logFills(ch, newFills);
+    this.attachTakeProfits(ch, newFills);
     this.evaluateRisk(ch, t);
     await this.maybeLevelUp(ch, t);
     return snaps;
@@ -838,6 +841,27 @@ export class ChallengeService {
       size: p.size,
       markPrice: ch.account.markOf(p.symbol) ?? p.entryPrice,
     }));
+  }
+
+  /**
+   * Entry orders that carry a take-profit: for each new fill, place a reduce-only limit at the TP for the filled size.
+   * Runs for immediate fills (placeOrder) and for resting-order fills (refresh and the streaming path).
+   */
+  private attachTakeProfits(ch: Challenge, fills: Fill[]): void {
+    const bySide = new Map<string, number>();
+    for (const f of fills) {
+      const o = ch.account.orders.get(f.orderId);
+      if (!o || o.takeProfit === undefined || o.reduceOnly || f.forced) continue;
+      bySide.set(o.id, (bySide.get(o.id) ?? 0) + f.size);
+    }
+    for (const [orderId, size] of bySide) {
+      const o = ch.account.orders.get(orderId)!;
+      const book = ch.books.get(o.symbol);
+      if (!book) continue;
+      const ts = fills.find((f) => f.orderId === orderId)!.ts;
+      const tp = this.engine.submit(ch.account, { symbol: o.symbol, side: o.side === "buy" ? "sell" : "buy", size, type: "limit", limitPrice: o.takeProfit, reduceOnly: true }, book, ts);
+      if (tp.fills.length) this.logFills(ch, tp.fills);
+    }
   }
 
   private logFills(ch: Challenge, fills: Fill[]): CombatLogEntry[] {
@@ -911,6 +935,7 @@ export class ChallengeService {
           const t = this.now();
           const fills = this.applySnapshot(ch, snap, t);
           this.logFills(ch, fills);
+          this.attachTakeProfits(ch, fills);
           const risk = this.evaluateRisk(ch, t);
           await this.maybeLevelUp(ch, t);
           out.push({ challengeId: id, events: risk.events, fills, status: ch.risk.status });
@@ -989,8 +1014,17 @@ export class ChallengeService {
       reduceOnly,
       postOnly: input.postOnly,
     };
+    if (input.takeProfit !== undefined && !reduceOnly) {
+      const ref = input.type === "limit" ? input.limitPrice! : snap.markPrice;
+      if (input.side === "buy" ? input.takeProfit <= ref : input.takeProfit >= ref) return this.reject(ch, "take_profit_wrong_side");
+    }
     const res = this.engine.submit(ch.account, req, snap.book, t);
     if (res.order.status === "rejected") return this.reject(ch, res.order.rejectReason ?? "rejected");
+    if (input.takeProfit !== undefined && !reduceOnly) {
+      res.order.takeProfit = input.takeProfit;
+      // what filled straight away gets its TP now; later fills get theirs as they happen (attachTakeProfits)
+      this.attachTakeProfits(ch, res.fills);
+    }
 
     const combat = this.logFills(ch, res.fills);
     const risk = this.evaluateRisk(ch, t);

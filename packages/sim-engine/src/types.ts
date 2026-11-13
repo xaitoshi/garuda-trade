@@ -49,6 +49,8 @@ export interface Order {
   rejectReason?: string;
   createdAt: number;
   updatedAt: number;
+  /** Take-profit attached to an entry: on each fill the service places a reduce-only limit here for the filled size. */
+  takeProfit?: number;
 }
 
 export interface Fill {

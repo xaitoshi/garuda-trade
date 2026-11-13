@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, errorText } from "../lib/api";
-import { breachPrice, estSlippagePct, roundSize, sizeForPct } from "../lib/trade";
+import { estSlippagePct, roundSize, sizeForPct, walkBook } from "../lib/trade";
 import { num, px, usd } from "../lib/format";
 import type { ChallengeState, MarketView, Rules } from "../lib/types";
 
@@ -43,11 +43,20 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
   const dead = !live;
   const untradable = m ? !m.tradable : false;
 
+  // Where the account would breach after this order: the buffer to the nearer floor, less the fee and the cost of
+  // filling away from the mark, spread over the NET position in this market (what is already held plus this order).
   const breach = useMemo(() => {
-    if (!(size > 0) || !(entry > 0)) return undefined;
-    const buffer = c.risk.bufferRemaining - fee;
-    return breachPrice({ symbol, side: long ? "long" : "short", size, entryPrice: entry, markPrice: entry, notional, unrealizedPnl: 0 }, { bufferRemaining: buffer });
-  }, [size, entry, c.risk.bufferRemaining, fee, long, notional, symbol]);
+    if (!(size > 0) || !(mark > 0)) return undefined;
+    const held = c.positions.find((p) => p.symbol === symbol);
+    const heldSigned = held ? (held.side === "long" ? held.size : -held.size) : 0;
+    let q = long ? size : -size;
+    if (reduceOnly) q = Math.sign(q) * Math.min(Math.abs(q), Math.sign(q) === -Math.sign(heldSigned) ? Math.abs(heldSigned) : 0);
+    const exec = tab === "market" && m ? walkBook(long ? m.book.asks : m.book.bids, size).avg || mark : entry;
+    const buffer = c.risk.bufferRemaining - fee - q * (exec - mark);
+    const net = heldSigned + q;
+    if (Math.abs(net) < 1e-12) return undefined;
+    return Math.max(0, mark - buffer / net);
+  }, [size, mark, c.positions, c.risk.bufferRemaining, symbol, long, reduceOnly, tab, m, entry, fee]);
 
   const setSizeByPct = (p: number) => {
     setPct(p);
@@ -68,23 +77,18 @@ export function OrderTicket({ c, m, symbol, rules, onState }: { c: ChallengeStat
     setBusy(true);
     setMsg(null);
     try {
-      const res = await api.placeOrder(c.id, { symbol, side, size: roundSize(size, mark), type: tab === "limit" ? "limit" : "market", limitPrice: tab === "limit" ? limit : undefined, reduceOnly: reduceOnly || undefined });
-      let state = res.state;
+      const withTp = tp > 0 && !tpBad && !reduceOnly;
+      const res = await api.placeOrder(c.id, { symbol, side, size: roundSize(size, mark), type: tab === "limit" ? "limit" : "market", limitPrice: tab === "limit" ? limit : undefined, reduceOnly: reduceOnly || undefined, takeProfit: withTp ? tp : undefined });
       if (!res.accepted) {
         setMsg({ ok: false, text: reasonText(res.reason) });
       } else {
         let text = res.fills.length ? `Filled ${num(res.fills.reduce((a, f) => a + f.size, 0), 4)} ${symbol} @ ${px(res.avgPrice ?? mark)}` : "Limit order resting on the book";
-        if (tp > 0 && !tpBad && (res.fills.length > 0 || res.order)) {
-          // Take-profit = a reduce-only limit on the other side. (Stop-loss orders are not in the engine yet.)
-          const filled = res.fills.reduce((a, f) => a + f.size, 0) || size;
-          const t = await api.placeOrder(c.id, { symbol, side: long ? "sell" : "buy", size: roundSize(filled, mark), type: "limit", limitPrice: tp, reduceOnly: true });
-          state = t.state;
-          text += t.accepted ? ` · TP set at ${px(tp)}` : ` · TP rejected: ${reasonText(t.reason)}`;
-        }
+        // the server places the TP (a reduce-only limit) for whatever fills, now or when a resting entry fills later
+        if (withTp) text += res.fills.length ? ` · TP set at ${px(tp)}` : ` · TP ${px(tp)} placed when it fills`;
         setMsg({ ok: true, text });
         setTpStr("");
       }
-      onState(state);
+      onState(res.state);
     } catch (e) {
       setMsg({ ok: false, text: errorText(e) });
     } finally {
@@ -286,6 +290,7 @@ const REASONS: Record<string, string> = {
 };
 const reasonText = (r?: string): string => {
   if (!r) return "Order rejected";
+  if (r === "take_profit_wrong_side") return "Take-profit must be above the entry for a long, below it for a short.";
   if (r.startsWith("market_closed")) return "This market is closed right now.";
   return REASONS[r] ?? r.replace(/[_:]/g, " ");
 };
