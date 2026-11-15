@@ -1,4 +1,5 @@
-import { createPhoenixClient } from "@ellipsis-labs/rise";
+import { createRequire } from "node:module";
+import { createPhoenixClient, createPhoenixWsClient, toWebSocketUrl } from "@ellipsis-labs/rise";
 import type { L2Book, Level } from "@garuda/sim-engine";
 import { TIMEFRAME_MS, type Candle, type CandleTimeframe, type MarketDataProvider, type MarketInfo, type MarketSnapshot, type MarketTrade } from "./types.js";
 
@@ -10,7 +11,35 @@ export interface PhoenixProviderOptions {
   /** Max book levels kept per side. */
   maxLevels?: number;
   now?: () => number;
+  /**
+   * Stream books and marks over Phoenix's WebSocket (one connection) instead of polling REST. Default on outside tests.
+   * Phoenix rate-limits REST per IP, and on a shared server other apps eat that quota: polling then fails with 429.
+   */
+  stream?: boolean;
 }
+
+/** Live state for one market, kept current by the WebSocket. */
+interface LiveMarket {
+  bids?: Level[];
+  asks?: Level[];
+  bookAt: number;
+  slot?: number;
+  mark?: number;
+  markAt: number;
+  usedAt: number;
+  abort: AbortController;
+  ready: Promise<void>;
+}
+
+/**
+ * The socket only sends when something changes, so a quiet market can go a while without a message. A book older than
+ * this is no longer trusted and the REST path answers instead; a mark that old falls back to the book mid.
+ */
+const LIVE_STALE_MS = 30_000;
+/** Markets nobody asked about for this long are unsubscribed. */
+const LIVE_IDLE_MS = 10 * 60_000;
+/** Funding moves slowly: one REST call per market per this period. */
+const FUNDING_TTL_MS = 60_000;
 
 interface RawMarket {
   symbol: string;
@@ -49,10 +78,18 @@ export class PhoenixSdkProvider implements MarketDataProvider {
   private readonly ttl: number;
   private readonly maxLevels: number;
   private readonly now: () => number;
+  private readonly apiUrl: string;
+  private readonly stream: boolean;
+  private ws?: ReturnType<typeof createPhoenixWsClient>;
+  private readonly live = new Map<string, LiveMarket>();
+  private readonly funding = new Map<string, { at: number; rate: number; p?: Promise<number> }>();
+  private sweeper?: ReturnType<typeof setInterval>;
 
   constructor(opts: PhoenixProviderOptions = {}) {
+    this.apiUrl = opts.apiUrl ?? process.env.PHOENIX_API_URL ?? "https://perp-api.phoenix.trade";
+    this.stream = opts.stream ?? (process.env.VITEST === undefined && process.env.PHOENIX_STREAM !== "off");
     this.client = createPhoenixClient({
-      apiUrl: opts.apiUrl ?? process.env.PHOENIX_API_URL ?? "https://perp-api.phoenix.trade",
+      apiUrl: this.apiUrl,
       rpcUrl: opts.rpcUrl ?? process.env.PHOENIX_RPC_URL ?? "https://api.mainnet-beta.solana.com",
       // fail fast instead of hanging a chart for a minute: the caching layer serves the last good value meanwhile
       timeout: 8_000,
@@ -84,8 +121,127 @@ export class PhoenixSdkProvider implements MarketDataProvider {
     return { tradable: true };
   }
 
+  /** Opens the WebSocket on first use. Node 20 has no global WebSocket: the `ws` package stands in. */
+  private wsClient(): ReturnType<typeof createPhoenixWsClient> {
+    if (!this.ws) {
+      const g = globalThis as { WebSocket?: unknown };
+      if (!g.WebSocket) g.WebSocket = createRequire(import.meta.url)("ws");
+      this.ws = createPhoenixWsClient({ url: toWebSocketUrl(this.apiUrl) });
+      this.sweeper = setInterval(() => this.sweep(), 60_000);
+      this.sweeper.unref?.();
+    }
+    return this.ws;
+  }
+
+  /** Subscribe to a market's book and mark (once), resolving when the first of each arrived or after 4s. */
+  private watch(symbol: string): LiveMarket {
+    const hit = this.live.get(symbol);
+    if (hit) {
+      hit.usedAt = this.now();
+      return hit;
+    }
+    const ws = this.wsClient();
+    const abort = new AbortController();
+    let gotBook!: () => void;
+    let gotMark!: () => void;
+    const bookP = new Promise<void>((ok) => (gotBook = ok));
+    const markP = new Promise<void>((ok) => (gotMark = ok));
+    const lm: LiveMarket = {
+      bookAt: 0,
+      markAt: 0,
+      usedAt: this.now(),
+      abort,
+      ready: Promise.race([Promise.all([bookP, markP]).then(() => undefined), new Promise<void>((ok) => setTimeout(ok, 4_000))]),
+    };
+    this.live.set(symbol, lm);
+    const levels = (xs: unknown): Level[] => (xs as [number, number][]).slice(0, this.maxLevels).map(([p, q]) => [Number(p), Number(q)] as const);
+    const drop = () => {
+      // the stream ended (closed or failed): forget it so the next request subscribes again
+      if (this.live.get(symbol) === lm) this.live.delete(symbol);
+    };
+    void (async () => {
+      for await (const m of ws.l2Book(symbol, abort.signal) as AsyncIterable<{ bids: unknown; asks: unknown; slot: bigint }>) {
+        lm.bids = levels(m.bids);
+        lm.asks = levels(m.asks);
+        lm.slot = Number(m.slot) || undefined;
+        lm.bookAt = this.now();
+        gotBook();
+      }
+    })().catch(() => {}).finally(drop);
+    void (async () => {
+      for await (const m of ws.markPrice(symbol, abort.signal) as AsyncIterable<{ markPrice: number }>) {
+        lm.mark = Number(m.markPrice);
+        lm.markAt = this.now();
+        gotMark();
+      }
+    })().catch(() => {}).finally(drop);
+    return lm;
+  }
+
+  private sweep(): void {
+    const t = this.now();
+    for (const [sym, lm] of this.live) {
+      if (t - lm.usedAt > LIVE_IDLE_MS) {
+        lm.abort.abort();
+        this.live.delete(sym);
+      }
+    }
+  }
+
+  /** Hourly funding as a fraction, from REST at most once a minute per market (it barely moves). */
+  private async fundingRate(symbol: string): Promise<number> {
+    const t = this.now();
+    const f = this.funding.get(symbol);
+    if (f && t - f.at < FUNDING_TTL_MS) return f.rate;
+    if (f?.p) return f.rate;
+    const entry = f ?? { at: 0, rate: 0 };
+    entry.p = (async () => {
+      const stats = (await this.client.api.markets().getLatestMarketStats(symbol)) as unknown as { current_funding_rate?: number };
+      // percent per hour on the wire (verified against annualized_funding_rate): convert to a fraction
+      return Number(stats.current_funding_rate ?? 0) / 100;
+    })();
+    this.funding.set(symbol, entry);
+    try {
+      entry.rate = await entry.p;
+      entry.at = this.now();
+    } catch {
+      // keep the last rate (0 before the first answer) rather than failing the whole snapshot over funding
+      entry.at = this.now() - FUNDING_TTL_MS + 10_000;
+    } finally {
+      entry.p = undefined;
+    }
+    return entry.rate;
+  }
+
   async snapshot(symbolIn: string): Promise<MarketSnapshot> {
     const symbol = normalizeSymbol(symbolIn);
+    if (this.stream) {
+      const lm = this.watch(symbol);
+      if (!lm.bookAt) await lm.ready;
+      const t = this.now();
+      if (lm.bids?.length && lm.asks?.length && t - lm.bookAt < LIVE_STALE_MS) {
+        const mid = (lm.bids[0]![0] + lm.asks[0]![0]) / 2;
+        const mark = lm.mark !== undefined && t - lm.markAt < LIVE_STALE_MS ? lm.mark : mid;
+        const [markets, fundingRateHourly] = await Promise.all([this.markets().catch(() => this.marketsCache?.byKey ?? new Map<string, RawMarket>()), this.fundingRate(symbol)]);
+        const st = PhoenixSdkProvider.tradableState(markets.get(symbol));
+        return {
+          symbol,
+          book: { symbol, bids: lm.bids, asks: lm.asks, ts: lm.bookAt },
+          markPrice: mark,
+          fundingRateHourly,
+          tradable: st.tradable,
+          tradableReason: st.reason,
+          fetchedAt: lm.bookAt,
+          source: "phoenix-live",
+          slot: lm.slot,
+        };
+      }
+      // no fresh stream data yet (or the socket is down): fall through to REST
+    }
+    return this.restSnapshot(symbol);
+  }
+
+  private async restSnapshot(symbol: string): Promise<MarketSnapshot> {
     const [ob, stats, markets] = await Promise.all([
       this.client.api.orderbook().getOrderbook(symbol),
       this.client.api.markets().getLatestMarketStats(symbol),
@@ -165,15 +321,24 @@ export class PhoenixSdkProvider implements MarketDataProvider {
   }
 
   async ping(): Promise<boolean> {
-    try {
-      const ob = await this.client.api.orderbook().getOrderbook("SOL");
-      return Array.isArray(ob.bids) && ob.bids.length > 0;
-    } catch {
-      return false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const ob = await this.client.api.orderbook().getOrderbook("SOL");
+        return Array.isArray(ob.bids) && ob.bids.length > 0;
+      } catch (e) {
+        // rate-limited means reachable: never fall back to recorded prices over a 429 (a shared IP hits it often)
+        if (/429|rate.?limit/i.test(String((e as Error)?.message ?? e))) return true;
+      }
     }
+    return false;
   }
 
   async close(): Promise<void> {
+    if (this.sweeper) clearInterval(this.sweeper);
+    for (const lm of this.live.values()) lm.abort.abort();
+    this.live.clear();
+    this.ws?.close();
+    this.ws = undefined;
     await (this.client as unknown as { dispose?: () => Promise<void> | void }).dispose?.();
   }
 }

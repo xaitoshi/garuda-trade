@@ -42,7 +42,7 @@ export class CachedProvider implements MarketDataProvider {
       snapshotStaleMs: opts.snapshotStaleMs ?? 3_000,
       candlesTtlMs: opts.candlesTtlMs ?? 15_000,
       candlesStaleMs: opts.candlesStaleMs ?? 5 * 60_000,
-      tradesTtlMs: opts.tradesTtlMs ?? 2_000,
+      tradesTtlMs: opts.tradesTtlMs ?? 5_000,
       tradesStaleMs: opts.tradesStaleMs ?? 30_000,
     };
     this.now = opts.now ?? Date.now;
