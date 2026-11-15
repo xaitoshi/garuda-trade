@@ -278,7 +278,8 @@ const shutdown = async () => {
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
 
-await app.listen({ port, host: "0.0.0.0" });
+// HOST=127.0.0.1 behind a local reverse proxy (our own server); the default suits containers (Railway)
+await app.listen({ port, host: env.HOST ?? "0.0.0.0" });
 console.log(
   `[garuda] listening on :${port} | market ${market.name} | storage ${storage} | auth ${authOff ? "OFF (dev only)" : privy ? "Privy (email + wallets) and wallet signature" : "wallet signature"} | worker ${env.GARUDA_WORKER === "off" ? "off" : `polling every ${env.GARUDA_POLL_MS ?? 1000}ms`} | payouts ${payouts ? `${payoutExecutor!.name} split ${payoutPolicy.split} auto<=$${payoutPolicy.autoMaxUsd}${adminToken ? " admin on" : " admin OFF"}` : "off"} | chain ${chainOn ? "solana DEVNET (knights + USDC)" : "off"} | early ${earlyLabel} | routing ${router?.healthLabel() ?? "disabled"}${router?.modeReason && router.mode === "disabled" && router.config.enabled ? ` (${router.modeReason})` : ""} | SIMULATED accounts`,
 );
