@@ -14,7 +14,10 @@ echo "deploying $(git log --oneline -1)"
 
 # 1. web app: built here with the production settings (same-origin /api, wallet sign-in)
 OUT="$(mktemp -d)"
-(cd packages/web && VITE_API_URL=/api node node_modules/vite/bin/vite.js build --outDir "$OUT" --emptyOutDir >/dev/null)
+# VITE_API_URL stays unset: the app defaults to same-origin /api. (Setting it to "/api" from Git Bash on Windows
+# gets rewritten into C:/Program Files/Git/api by MSYS path conversion.)
+(cd packages/web && env -u VITE_API_URL node node_modules/vite/bin/vite.js build --outDir "$OUT" --emptyOutDir >/dev/null)
+if grep -rq "Program Files" "$OUT/assets"; then echo "build has a Windows path baked in, aborting" >&2; exit 1; fi
 tar czf - -C "$OUT" . | "${SSH[@]}" 'set -e; rm -rf /var/www/garuda.markets.new; mkdir -p /var/www/garuda.markets.new
   tar xzf - -C /var/www/garuda.markets.new; chown -R www-data:www-data /var/www/garuda.markets.new
   rm -rf /var/www/garuda.markets.old; mv /var/www/garuda.markets /var/www/garuda.markets.old; mv /var/www/garuda.markets.new /var/www/garuda.markets'
