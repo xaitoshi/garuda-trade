@@ -36,6 +36,8 @@ interface LiveMarket {
  * this is no longer trusted and the REST path answers instead; a mark that old falls back to the book mid.
  */
 const LIVE_STALE_MS = 30_000;
+/** A message on any stream within this window means the socket is up. */
+const SOCKET_ALIVE_MS = 3_000;
 /** Markets nobody asked about for this long are unsubscribed. */
 const LIVE_IDLE_MS = 10 * 60_000;
 /** Funding moves slowly: one REST call per market per this period. */
@@ -84,6 +86,8 @@ export class PhoenixSdkProvider implements MarketDataProvider {
   private readonly live = new Map<string, LiveMarket>();
   private readonly funding = new Map<string, { at: number; rate: number; p?: Promise<number> }>();
   private sweeper?: ReturnType<typeof setInterval>;
+  /** Last message on any stream: the socket is alive (and quiet books are simply unchanged) while this is recent. */
+  private lastMsgAt = 0;
 
   constructor(opts: PhoenixProviderOptions = {}) {
     this.apiUrl = opts.apiUrl ?? process.env.PHOENIX_API_URL ?? "https://perp-api.phoenix.trade";
@@ -165,6 +169,7 @@ export class PhoenixSdkProvider implements MarketDataProvider {
         lm.asks = levels(m.asks);
         lm.slot = Number(m.slot) || undefined;
         lm.bookAt = this.now();
+        this.lastMsgAt = lm.bookAt;
         gotBook();
       }
     })().catch(() => {}).finally(drop);
@@ -172,6 +177,7 @@ export class PhoenixSdkProvider implements MarketDataProvider {
       for await (const m of ws.markPrice(symbol, abort.signal) as AsyncIterable<{ markPrice: number }>) {
         lm.mark = Number(m.markPrice);
         lm.markAt = this.now();
+        this.lastMsgAt = lm.markAt;
         gotMark();
       }
     })().catch(() => {}).finally(drop);
@@ -219,7 +225,9 @@ export class PhoenixSdkProvider implements MarketDataProvider {
       const lm = this.watch(symbol);
       if (!lm.bookAt) await lm.ready;
       const t = this.now();
-      if (lm.bids?.length && lm.asks?.length && t - lm.bookAt < LIVE_STALE_MS) {
+      // the socket only sends changes: while it is alive (any message lately) a quiet book is simply unchanged, so it is
+      // current now; if the socket has gone quiet, REST answers instead
+      if (lm.bids?.length && lm.asks?.length && t - lm.bookAt < LIVE_STALE_MS && t - this.lastMsgAt < SOCKET_ALIVE_MS) {
         const mid = (lm.bids[0]![0] + lm.asks[0]![0]) / 2;
         const mark = lm.mark !== undefined && t - lm.markAt < LIVE_STALE_MS ? lm.mark : mid;
         const [markets, fundingRateHourly] = await Promise.all([this.markets().catch(() => this.marketsCache?.byKey ?? new Map<string, RawMarket>()), this.fundingRate(symbol)]);
@@ -231,7 +239,7 @@ export class PhoenixSdkProvider implements MarketDataProvider {
           fundingRateHourly,
           tradable: st.tradable,
           tradableReason: st.reason,
-          fetchedAt: lm.bookAt,
+          fetchedAt: t,
           source: "phoenix-live",
           slot: lm.slot,
         };
