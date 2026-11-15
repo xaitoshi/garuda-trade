@@ -183,6 +183,9 @@ const service = new ChallengeService({
   payoutPolicy,
   requireWalletForDemo: !authOff,
   ...(knights ? { knights, requirePayment: true, payments: new PaymentRequiredProvider() } : {}),
+  // GARUDA_REQUIRE_PAYMENT=1: paid tiers and revives stay closed (402) even with the chain off, so a server whose
+  // chain is not set up yet never hands them out free. Demo accounts still open.
+  ...(!knights && env.GARUDA_REQUIRE_PAYMENT === "1" ? { requirePayment: true, payments: new PaymentRequiredProvider() } : {}),
 });
 try {
   router = await createRouterFromEnv(env, {
